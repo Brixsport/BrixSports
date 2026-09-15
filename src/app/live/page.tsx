@@ -48,23 +48,23 @@ export default function LiveCenter() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
+            <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
                 <div className="text-center">
                     <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-white/60">Loading live matches...</p>
+                    <p className="text-foreground/60">Loading live matches...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
+        <div className="min-h-screen bg-background text-foreground">
             {/* Header */}
-            <div className="border-b border-white/10 bg-[#0a0a0a] sticky top-0 z-40">
+            <div className="border-b border-border bg-card sticky top-0 z-40">
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <Link href="/" className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                            <Link href="/" className="p-2 hover:bg-muted rounded-lg transition-colors">
                                 <ArrowLeft size={20} />
                             </Link>
                             <div className="flex items-center gap-3">
@@ -76,7 +76,7 @@ export default function LiveCenter() {
                                         <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                                         LIVE CENTER
                                     </h1>
-                                    <p className="text-sm text-white/60">{liveMatches.length} matches live now</p>
+                                    <p className="text-sm text-foreground/60">{liveMatches.length} matches live now</p>
                                 </div>
                             </div>
                         </div>
@@ -92,7 +92,7 @@ export default function LiveCenter() {
             <div className="max-w-7xl mx-auto px-4 py-8">
                 {liveMatches.length > 0 ? (
                     <div className="space-y-4">
-                        <h2 className="text-sm font-bold uppercase tracking-wider text-white/60 mb-6">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground/60 mb-6">
                             Live Matches ({liveMatches.length})
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -104,10 +104,10 @@ export default function LiveCenter() {
                                     <motion.div
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className="p-6 rounded-xl cursor-pointer transition-all bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-white/10 group"
+                                        className="p-6 rounded-xl cursor-pointer transition-all bg-muted border border-border hover:border-primary/50 hover:bg-muted/80 group"
                                     >
                                         <div className="flex items-center justify-between mb-4">
-                                            <span className="text-xs text-white/60">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
+                                            <span className="text-xs text-foreground/60">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                                             <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
                                                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                                                 LIVE
@@ -127,7 +127,7 @@ export default function LiveCenter() {
                                                         {match.homeTeam?.name || 'Home Team'}
                                                     </span>
                                                 </div>
-                                                <span className={`text-2xl font-bold ml-4 ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
+                                                <span className={`text-2xl font-bold ml-4 ${match.homeScore > match.awayScore ? 'text-primary' : 'text-foreground/60'}`}>
                                                     {match.homeScore}
                                                 </span>
                                             </div>
@@ -144,12 +144,12 @@ export default function LiveCenter() {
                                                         {match.awayTeam?.name || 'Away Team'}
                                                     </span>
                                                 </div>
-                                                <span className={`text-2xl font-bold ml-4 ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
+                                                <span className={`text-2xl font-bold ml-4 ${match.awayScore > match.homeScore ? 'text-primary' : 'text-foreground/60'}`}>
                                                     {match.awayScore}
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-white/40">
+                                        <div className="mt-4 pt-4 border-t border-border flex items-center justify-between text-xs text-foreground/40">
                                             <div className="flex items-center gap-2">
                                                 <Users size={14} />
                                                 <span>{match.venue}</span>
@@ -166,10 +166,10 @@ export default function LiveCenter() {
                     </div>
                 ) : (
                     <div className="py-20 text-center">
-                        <Activity size={64} className="mx-auto text-white/10 mb-4" />
+                        <Activity size={64} className="mx-auto text-foreground/10 mb-4" />
                         <h2 className="text-2xl font-bold mb-2">No Live Matches</h2>
-                        <p className="text-white/40">Check back later for live action!</p>
-                        <Link href="/" className="inline-block mt-6 px-6 py-3 bg-primary text-black font-bold rounded-lg hover:bg-primary/90 transition-colors">
+                        <p className="text-foreground/40">Check back later for live action!</p>
+                        <Link href="/" className="inline-block mt-6 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-lg hover:bg-primary/90 transition-colors">
                             Back to Home
                         </Link>
                     </div>

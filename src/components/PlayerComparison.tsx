@@ -28,11 +28,11 @@ interface PlayerComparisonProps {
 
 export function PlayerComparison({ player1, player2, sport }: PlayerComparisonProps) {
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 space-y-6">
+        <div className="bg-muted border border-border rounded-[32px] p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-center gap-2">
                 <Trophy size={20} className="text-primary" />
-                <h2 className="text-sm font-black uppercase tracking-widest text-white/60">
+                <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60">
                     Player Comparison
                 </h2>
             </div>
@@ -44,7 +44,7 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
 
                 {/* VS */}
                 <div className="text-center">
-                    <div className="text-2xl md:text-4xl font-display italic text-white/20">VS</div>
+                    <div className="text-2xl md:text-4xl font-display italic text-foreground/20">VS</div>
                 </div>
 
                 {/* Player 2 */}
@@ -63,8 +63,8 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
             )}
 
             {/* Overall Rating */}
-            <div className="bg-white/5 rounded-2xl p-4">
-                <p className="text-xs text-white/40 font-bold mb-3 text-center">OVERALL RATING</p>
+            <div className="bg-muted rounded-2xl p-4">
+                <p className="text-xs text-foreground/40 font-bold mb-3 text-center">OVERALL RATING</p>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="text-center">
                         <div className="flex items-center justify-center gap-2 mb-1">
@@ -73,7 +73,7 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
                                 {player1.rating ? player1.rating.toFixed(1) : 'Not yet rated'}
                             </span>
                         </div>
-                        <p className="text-xs text-white/60">{player1.name}</p>
+                        <p className="text-xs text-foreground/60">{player1.name}</p>
                     </div>
                     <div className="text-center">
                         <div className="flex items-center justify-center gap-2 mb-1">
@@ -82,7 +82,7 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
                                 {player2.rating ? player2.rating.toFixed(1) : 'Not yet rated'}
                             </span>
                         </div>
-                        <p className="text-xs text-white/60">{player2.name}</p>
+                        <p className="text-xs text-foreground/60">{player2.name}</p>
                     </div>
                 </div>
             </div>
@@ -102,7 +102,7 @@ function PlayerHeader({ player, align }: { player: PlayerWithDetails; align: 'le
                 />
             </div>
             <p className="text-xs md:text-sm font-black uppercase tracking-tight truncate max-w-[100px] md:max-w-none mx-auto">{player.name}</p>
-            <p className="text-[10px] md:text-xs text-white/60 font-bold">{player.position}</p>
+            <p className="text-[10px] md:text-xs text-foreground/60 font-bold">{player.position}</p>
         </div>
     );
 }
@@ -259,13 +259,13 @@ function ComparisonBar({
         <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
                 <span className="font-bold">{value1}</span>
-                <div className="flex items-center gap-2 text-white/60">
+                <div className="flex items-center gap-2 text-foreground/60">
                     <Icon size={14} />
                     <span className="font-bold uppercase tracking-wider">{label}</span>
                 </div>
                 <span className="font-bold">{value2}</span>
             </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden flex">
+            <div className="h-2 bg-border rounded-full overflow-hidden flex">
                 <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${percentage1}%` }}
@@ -286,12 +286,12 @@ function ComparisonBar({
 // Empty state
 export function PlayerComparisonEmpty() {
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-12 text-center">
-            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Trophy size={32} className="text-white/20" />
+        <div className="bg-muted border border-border rounded-[32px] p-12 text-center">
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Trophy size={32} className="text-foreground/20" />
             </div>
-            <p className="text-sm font-bold text-white/60 mb-1">Select Players to Compare</p>
-            <p className="text-xs text-white/40">
+            <p className="text-sm font-bold text-foreground/60 mb-1">Select Players to Compare</p>
+            <p className="text-xs text-foreground/40">
                 Choose two players to see their head-to-head statistics
             </p>
         </div>

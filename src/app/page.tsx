@@ -398,30 +398,30 @@ export default function Home() {
         id="homepage-entity-graph"
       />
 
-      <div className="min-h-screen bg-[#050505] text-white">
+      <div className="min-h-screen bg-background text-foreground">
       {/* Top Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a] border-b border-white/5">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4">
           {/* Main Nav Bar */}
           <div className="h-14 flex items-center justify-between">
             <div className="flex items-center gap-6">
               <Link href="/" className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center font-display text-lg -skew-x-12 text-black">B</div>
+                <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center font-display text-lg -skew-x-12 text-primary-foreground">B</div>
                 <span className="font-display text-xl tracking-tight hidden sm:block">BRIXSPORT</span>
               </Link>
 
               {/* Desktop Links */}
               <div className="hidden md:flex items-center gap-1">
-                <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
+                <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
                   Teams
                 </Link>
                 <UpdateTooltip message="New: build and share your matchday starting XI">
-                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
+                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
                     Lineup Builder
                     <NewFeatureBadge className="absolute -top-1 -right-1" />
                   </Link>
                 </UpdateTooltip>
-                <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
+                <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
                   News
                 </Link>
               </div>
@@ -432,7 +432,7 @@ export default function Home() {
                 onClick={() => setIsSearchOpen(true)}
                 className="p-2 hover:bg-white/5 rounded-lg transition-colors"
               >
-                <Search size={18} className="text-white/60" />
+                <Search size={18} className="text-foreground/60" />
               </button>
               <button
                 onClick={(e) => {
@@ -441,7 +441,7 @@ export default function Home() {
                 }}
                 className="p-2 hover:bg-white/5 rounded-lg transition-colors relative"
               >
-                <Bell size={18} className="text-white/60" />
+                <Bell size={18} className="text-foreground/60" />
                 {notifications.length > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full"></span>
                 )}
@@ -449,13 +449,13 @@ export default function Home() {
               <div className="hidden sm:flex items-center gap-2">
                 {isAuthenticated && user ? (
                   <button
-                    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 transition-all text-xs font-bold uppercase tracking-wider"
+                    className="flex items-center gap-2 bg-muted hover:bg-white/10 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
                     onClick={() => router.push('/profile')}
                   >
                     {user.avatar ? (
                       <img src={user.avatar} alt={user.name} className="w-5 h-5 rounded-full object-cover" />
                     ) : (
-                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-black text-xs font-bold">
+                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
                         {user.name?.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -463,7 +463,7 @@ export default function Home() {
                   </button>
                 ) : (
                   <button
-                    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 transition-all text-xs font-bold uppercase tracking-wider"
+                    className="flex items-center gap-2 bg-muted hover:bg-white/10 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
                     onClick={() => router.push('/login')}
                   >
                     <User size={16} />
@@ -488,7 +488,7 @@ export default function Home() {
                 onClick={() => setActiveSport(sport)}
                 className={`px-4 py-2 text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeSport === sport
                   ? 'text-primary border-b-2 border-primary'
-                  : 'text-white/40 hover:text-white/60'
+                  : 'text-foreground/40 hover:text-foreground/60'
                   }`}
               >
                 {sport}
@@ -508,8 +508,8 @@ export default function Home() {
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab
-                  ? 'bg-primary text-black'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-foreground/60 hover:bg-white/10 hover:text-foreground'
                   }`}
               >
                 {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
@@ -519,7 +519,7 @@ export default function Home() {
           </div>
 
           {/* Date Filter - SofaScore Style */}
-          <div className="mb-6 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-3">
+          <div className="mb-6 bg-card border border-border rounded-lg px-4 py-3">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
               {/* Left side - Title */}
               <div className="flex items-center gap-3">
@@ -528,15 +528,15 @@ export default function Home() {
               </div>
 
               {/* Right side - Date Navigation */}
-              <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1 w-full sm:w-auto">
+              <div className="flex items-center gap-2 bg-muted rounded-lg p-1 w-full sm:w-auto">
                 <button
                   onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
                   className="p-2 hover:bg-white/10 rounded transition-colors"
                   aria-label="Previous day"
                 >
-                  <ChevronLeft size={18} className="text-white/60" />
+                  <ChevronLeft size={18} className="text-foreground/60" />
                 </button>
-                <div className="px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white min-w-[100px] sm:min-w-[120px] text-center">
+                <div className="px-3 sm:px-4 text-xs sm:text-sm font-semibold text-foreground min-w-[100px] sm:min-w-[120px] text-center">
                   {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
                 </div>
                 <button
@@ -544,7 +544,7 @@ export default function Home() {
                   className="p-2 hover:bg-white/10 rounded transition-colors"
                   aria-label="Next day"
                 >
-                  <ChevronRight size={18} className="text-white/60" />
+                  <ChevronRight size={18} className="text-foreground/60" />
                 </button>
               </div>
             </div>
@@ -575,12 +575,12 @@ export default function Home() {
                         <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                         LIVE CENTER
                       </h3>
-                      <p className="text-xs text-white/60">
+                      <p className="text-xs text-foreground/60">
                         {matches.filter(m => m.status === 'LIVE').length} matches live now
                       </p>
                     </div>
                   </div>
-                  <ChevronRight size={20} className="text-white/40 group-hover:text-primary transition-colors" />
+                  <ChevronRight size={20} className="text-foreground/40 group-hover:text-primary transition-colors" />
                 </div>
               </motion.div>
             </Link>
@@ -601,12 +601,12 @@ export default function Home() {
                 return (
                   <div key={date}>
                     {/* Date Header */}
-                    <div className="flex items-center gap-3 mb-3 sticky top-14 z-10 bg-[#050505]/95 backdrop-blur py-2 border-b border-white/5">
-                      <Calendar size={16} className="text-white/40" />
-                      <h2 className="text-sm font-bold uppercase tracking-wider text-white/60">{date}</h2>
+                    <div className="flex items-center gap-3 mb-3 sticky top-14 z-10 bg-background/95 backdrop-blur py-2 border-b border-border">
+                      <Calendar size={16} className="text-foreground/40" />
+                      <h2 className="text-sm font-bold uppercase tracking-wider text-foreground/60">{date}</h2>
                       {/* Show actual date for basketball rounds */}
                       {date.startsWith('Round') && dateMatches.length > 0 && (
-                        <span className="text-xs text-white/40">
+                        <span className="text-xs text-foreground/40">
                           {new Date(dateMatches[0].startTime).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -614,26 +614,26 @@ export default function Home() {
                           })}
                         </span>
                       )}
-                      <div className="flex-1 h-px bg-white/5"></div>
+                      <div className="flex-1 h-px bg-border"></div>
                     </div>
 
                     {/* Competitions */}
                     <div className="space-y-4">
                       {Object.entries(matchesByCompetition).map(([competitionName, compMatches]: [string, any]) => (
-                        <div key={competitionName} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                        <div key={competitionName} className="bg-muted border border-border rounded-xl overflow-hidden">
                           {/* Competition Header */}
-                          <div className="bg-white/5 px-4 py-2 flex items-center justify-between border-b border-white/5">
+                          <div className="bg-muted px-4 py-2 flex items-center justify-between border-b border-border">
                             <div className="flex items-center gap-2">
                               {/* Attempt to find competition logo or use icon */}
                               {/* Ideally we'd have a map or lookup for competition logos, for now use standard icon */}
-                              <div className="w-5 h-5 rounded bg-white/5 flex items-center justify-center">
-                                <Trophy size={12} className="text-white/40" />
+                              <div className="w-5 h-5 rounded bg-muted flex items-center justify-center">
+                                <Trophy size={12} className="text-foreground/40" />
                               </div>
-                              <h3 className="text-xs font-bold text-white/80 uppercase tracking-wider">
+                              <h3 className="text-xs font-bold text-foreground/80 uppercase tracking-wider">
                                 {competitionName}
                               </h3>
                             </div>
-                            <ChevronRight size={14} className="text-white/20" />
+                            <ChevronRight size={14} className="text-foreground/20" />
                           </div>
 
                           {/* Matches List */}
@@ -645,7 +645,7 @@ export default function Home() {
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 onClick={() => router.push(`/matches/${match.id}`)}
-                                className={`p-4 cursor-pointer hover:bg-white/5 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-white/5' : ''
+                                className={`p-4 cursor-pointer hover:bg-white/5 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-border' : ''
                                   }`}
                               >
                                 <div className="flex items-center justify-between">
@@ -654,7 +654,7 @@ export default function Home() {
                                     {/* Home Team */}
                                     <div className="flex items-center gap-3">
                                       {isValidImagePath(match.homeTeam?.logo) ? (
-                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-muted">
                                           <Image
                                             src={match.homeTeam!.logo}
                                             alt={match.homeTeam!.name}
@@ -663,15 +663,15 @@ export default function Home() {
                                           />
                                         </div>
                                       ) : (
-                                        <div className="w-6 h-6 bg-white/10 rounded flex items-center justify-center text-[10px] font-bold">
+                                        <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-[10px] font-bold">
                                           {match.homeTeam?.shortName || 'H'}
                                         </div>
                                       )}
-                                      <span className="font-medium text-sm text-white/90">
+                                      <span className="font-medium text-sm text-foreground/90">
                                         {match.homeTeam?.name || 'Home Team'}
                                       </span>
                                       {match.status !== 'UPCOMING' && (
-                                        <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
+                                        <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-foreground/60'}`}>
                                           {match.homeScore}
                                           {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
                                             <span className={`ml-1 text-xs font-normal ${match.shootoutHomeScore > match.shootoutAwayScore ? 'text-primary' : ''}`}>({match.shootoutHomeScore})</span>
@@ -683,7 +683,7 @@ export default function Home() {
                                     {/* Away Team */}
                                     <div className="flex items-center gap-3">
                                       {isValidImagePath(match.awayTeam?.logo) ? (
-                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-muted">
                                           <Image
                                             src={match.awayTeam!.logo}
                                             alt={match.awayTeam!.name}
@@ -692,15 +692,15 @@ export default function Home() {
                                           />
                                         </div>
                                       ) : (
-                                        <div className="w-6 h-6 bg-white/10 rounded flex items-center justify-center text-[10px] font-bold">
+                                        <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-[10px] font-bold">
                                           {match.awayTeam?.shortName || 'A'}
                                         </div>
                                       )}
-                                      <span className="font-medium text-sm text-white/90">
+                                      <span className="font-medium text-sm text-foreground/90">
                                         {match.awayTeam?.name || 'Away Team'}
                                       </span>
                                       {match.status !== 'UPCOMING' && (
-                                        <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
+                                        <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-foreground/60'}`}>
                                           {match.awayScore}
                                           {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
                                             <span className={`ml-1 text-xs font-normal ${match.shootoutAwayScore > match.shootoutHomeScore ? 'text-primary' : ''}`}>({match.shootoutAwayScore})</span>
@@ -721,14 +721,14 @@ export default function Home() {
                                     {match.status === 'LIVE' ? (
                                       <LiveMatchStatus matchId={match.id} sport={match.sport} fallbackPeriod={(match as any).currentPeriod ?? undefined} />
                                     ) : match.status === 'FINISHED' ? (
-                                      <span className="text-xs text-white/40 font-bold">FT</span>
+                                      <span className="text-xs text-foreground/40 font-bold">FT</span>
                                     ) : (
-                                      <span className="text-xs text-white/60">
+                                      <span className="text-xs text-foreground/60">
                                         {new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                       </span>
                                     )}
                                     {match.round && (
-                                      <span className="text-[9px] text-white/30 font-bold uppercase tracking-wider text-right leading-tight">{match.round}</span>
+                                      <span className="text-[9px] text-foreground/30 font-bold uppercase tracking-wider text-right leading-tight">{match.round}</span>
                                     )}
                                   </div>
                                 </div>
@@ -745,9 +745,9 @@ export default function Home() {
             </div>
           ) : (
             <div className="py-20 text-center">
-              <Trophy size={48} className="mx-auto text-white/10 mb-4" />
-              <p className="text-white/40 font-bold">No matches found</p>
-              <p className="text-white/20 text-sm mt-2">Try adjusting your filters</p>
+              <Trophy size={48} className="mx-auto text-foreground/10 mb-4" />
+              <p className="text-foreground/40 font-bold">No matches found</p>
+              <p className="text-foreground/20 text-sm mt-2">Try adjusting your filters</p>
             </div>
           )}
         </div>
@@ -830,21 +830,21 @@ export default function Home() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-0 z-40 bg-black pt-20 px-4 md:hidden"
+            className="fixed inset-0 z-40 bg-background pt-20 px-4 md:hidden"
           >
             <div className="flex flex-col gap-4 text-lg font-display uppercase">
-              <Link href="/teams" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>Teams</Link>
+              <Link href="/teams" className="text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Teams</Link>
 
               {/* Competition Links */}
               <div className="space-y-2">
-                <Link href="/competitions" className="text-white/60 hover:text-white transition-colors block" onClick={() => setIsMenuOpen(false)}>All Competitions</Link>
+                <Link href="/competitions" className="text-foreground/60 hover:text-foreground transition-colors block" onClick={() => setIsMenuOpen(false)}>All Competitions</Link>
                 {competitions.length > 0 && (
-                  <div className="pl-4 border-l border-white/10 space-y-2 py-1">
+                  <div className="pl-4 border-l border-border space-y-2 py-1">
                     {competitions.map((comp) => (
                       <Link
                         key={comp.id}
                         href={`/competitions/${comp.id}`}
-                        className="block text-sm text-white/40 hover:text-primary transition-colors truncate"
+                        className="block text-sm text-foreground/40 hover:text-primary transition-colors truncate"
                         onClick={() => setIsMenuOpen(false)}
                       >
                         {comp.name}
@@ -854,11 +854,11 @@ export default function Home() {
                 )}
               </div>
 
-              <Link href="/lineup-builder" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
+              <Link href="/lineup-builder" className="text-foreground/60 hover:text-foreground transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
                 Lineup Builder
                 <NewFeatureBadge />
               </Link>
-              <Link href="/news" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
+              <Link href="/news" className="text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
             </div>
           </motion.div>
         )}

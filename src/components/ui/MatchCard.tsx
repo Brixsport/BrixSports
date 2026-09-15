@@ -97,7 +97,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                 <motion.div
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="group bg-white/5 hover:bg-white/10 backdrop-blur-sm border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all cursor-pointer"
+                    className="group bg-muted hover:bg-white/10 backdrop-blur-sm border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all cursor-pointer"
                 >
                     {/* Competition Badge */}
                     {showCompetition && (
@@ -112,7 +112,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         {/* Home Team */}
                         <div className="flex items-center gap-3 flex-1">
                             <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} color={match.homeTeam.color} size="sm" />
-                            <span className="text-white font-medium truncate">{match.homeTeam.shortName}</span>
+                            <span className="text-foreground font-medium truncate">{match.homeTeam.shortName}</span>
                         </div>
 
                         {/* Score/Time */}
@@ -123,11 +123,11 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2">
-                                    <div className="text-2xl font-bold font-mono text-white">
+                                    <div className="text-2xl font-bold font-mono text-foreground">
                                         {match.homeScore}{hasShootoutResult && <span className={`text-sm ml-1 ${shootoutHomeWon ? 'text-blue-400' : ''}`}>({match.shootoutHomeScore})</span>}
                                     </div>
                                     <div className="text-gray-500">-</div>
-                                    <div className="text-2xl font-bold font-mono text-white">
+                                    <div className="text-2xl font-bold font-mono text-foreground">
                                         {match.awayScore}{hasShootoutResult && <span className={`text-sm ml-1 ${shootoutAwayWon ? 'text-blue-400' : ''}`}>({match.shootoutAwayScore})</span>}
                                     </div>
                                 </div>
@@ -144,7 +144,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
 
                         {/* Away Team */}
                         <div className="flex items-center gap-3 flex-1 justify-end">
-                            <span className="text-white font-medium truncate">{match.awayTeam.shortName}</span>
+                            <span className="text-foreground font-medium truncate">{match.awayTeam.shortName}</span>
                             <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} color={match.awayTeam.color} size="sm" />
                         </div>
                     </div>
@@ -189,11 +189,11 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                             <div className="flex items-center gap-4 flex-1">
                                 <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} color={match.homeTeam.color} size="md" />
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">{match.homeTeam.name}</h3>
+                                    <h3 className="text-xl font-bold text-foreground">{match.homeTeam.name}</h3>
                                     <p className="text-sm text-gray-400">Home</p>
                                 </div>
                             </div>
-                            <div className="text-4xl font-bold font-mono text-white">
+                            <div className="text-4xl font-bold font-mono text-foreground">
                                 {match.homeScore}{hasShootoutResult && <span className={`text-lg ml-1.5 ${shootoutHomeWon ? 'text-blue-400' : ''}`}>({match.shootoutHomeScore})</span>}
                             </div>
                         </div>
@@ -203,11 +203,11 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                             <div className="flex items-center gap-4 flex-1">
                                 <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} color={match.awayTeam.color} size="md" />
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">{match.awayTeam.name}</h3>
+                                    <h3 className="text-xl font-bold text-foreground">{match.awayTeam.name}</h3>
                                     <p className="text-sm text-gray-400">Away</p>
                                 </div>
                             </div>
-                            <div className="text-4xl font-bold font-mono text-white">
+                            <div className="text-4xl font-bold font-mono text-foreground">
                                 {match.awayScore}{hasShootoutResult && <span className={`text-lg ml-1.5 ${shootoutAwayWon ? 'text-blue-400' : ''}`}>({match.shootoutAwayScore})</span>}
                             </div>
                         </div>
@@ -242,7 +242,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
         <Link href={`/matches/${match.id}`}>
             <motion.div
                 whileHover={{ scale: 1.02 }}
-                className="group bg-white/5 hover:bg-white/10 backdrop-blur-sm border border-gray-700 hover:border-purple-500/50 rounded-2xl p-6 transition-all cursor-pointer"
+                className="group bg-muted hover:bg-white/10 backdrop-blur-sm border border-gray-700 hover:border-purple-500/50 rounded-2xl p-6 transition-all cursor-pointer"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
@@ -264,7 +264,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         <div className="flex justify-center mb-3">
                             <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} color={match.homeTeam.color} size="lg" />
                         </div>
-                        <h3 className="text-lg font-bold text-white mb-1">{match.homeTeam.name}</h3>
+                        <h3 className="text-lg font-bold text-foreground mb-1">{match.homeTeam.name}</h3>
                         <p className="text-sm text-gray-400">Home</p>
                     </div>
 
@@ -275,9 +275,9 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         ) : (
                             <>
                                 <div className="flex items-center gap-3">
-                                    <div className="text-5xl font-bold font-mono text-white">{match.homeScore}</div>
+                                    <div className="text-5xl font-bold font-mono text-foreground">{match.homeScore}</div>
                                     <div className="text-3xl text-gray-600">:</div>
-                                    <div className="text-5xl font-bold font-mono text-white">{match.awayScore}</div>
+                                    <div className="text-5xl font-bold font-mono text-foreground">{match.awayScore}</div>
                                 </div>
                                 {hasShootoutResult && (
                                     <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-1">
@@ -293,7 +293,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         <div className="flex justify-center mb-3">
                             <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} color={match.awayTeam.color} size="lg" />
                         </div>
-                        <h3 className="text-lg font-bold text-white mb-1">{match.awayTeam.name}</h3>
+                        <h3 className="text-lg font-bold text-foreground mb-1">{match.awayTeam.name}</h3>
                         <p className="text-sm text-gray-400">Away</p>
                     </div>
                 </div>

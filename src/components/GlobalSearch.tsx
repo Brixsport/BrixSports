@@ -155,7 +155,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
         <div ref={containerRef} className="relative w-full max-w-2xl">
             {/* Search Input */}
             <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40" />
                 <input
                     ref={inputRef}
                     type="text"
@@ -163,16 +163,16 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                     onChange={handleInputChange}
                     onFocus={() => setShowResults(true)}
                     placeholder={placeholder}
-                    className="w-full pl-12 pr-12 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-primary transition-colors"
+                    className="w-full pl-12 pr-12 py-3 bg-muted backdrop-blur-sm border border-border rounded-xl text-foreground placeholder:text-foreground/40 focus:outline-none focus:border-primary transition-colors"
                 />
                 {loading ? (
-                    <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40 animate-spin" />
+                    <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40 animate-spin" />
                 ) : query && (
                     <button
                         onClick={handleClear}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-lg transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded-lg transition-colors"
                     >
-                        <X className="w-4 h-4 text-white/60" />
+                        <X className="w-4 h-4 text-foreground/60" />
                     </button>
                 )}
             </div>
@@ -185,8 +185,8 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                             key={cat}
                             onClick={() => setSelectedCategory(cat as any)}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === cat
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                 }`}
                         >
                             {cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -202,19 +202,19 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="absolute top-full left-0 right-0 mt-2 bg-[#0a0a0a] backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl max-h-[500px] overflow-y-auto z-50"
+                        className="absolute top-full left-0 right-0 mt-2 bg-card backdrop-blur-xl border border-border rounded-xl shadow-2xl max-h-[500px] overflow-y-auto z-50"
                     >
                         {query.length < 2 && recentSearches.length > 0 ? (
                             /* Recent Searches */
                             <div className="p-4">
                                 <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2 text-sm font-semibold text-white/60">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground/60">
                                         <Clock className="w-4 h-4" />
                                         Recent Searches
                                     </div>
                                     <button
                                         onClick={clearRecentSearches}
-                                        className="text-xs text-white/40 hover:text-white/60 transition-colors"
+                                        className="text-xs text-foreground/40 hover:text-foreground/60 transition-colors"
                                     >
                                         Clear
                                     </button>
@@ -224,7 +224,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                         <button
                                             key={index}
                                             onClick={() => handleRecentSearch(search)}
-                                            className="w-full text-left px-3 py-2 hover:bg-white/5 rounded-lg transition-colors text-white/80"
+                                            className="w-full text-left px-3 py-2 hover:bg-muted rounded-lg transition-colors text-foreground/80"
                                         >
                                             {search}
                                         </button>
@@ -237,7 +237,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                 {/* Teams */}
                                 {(results.teams?.length || 0) > 0 && (selectedCategory === 'all' || selectedCategory === 'teams') && (
                                     <div>
-                                        <div className="flex items-center gap-2 text-sm font-semibold text-white/60 mb-2">
+                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground/60 mb-2">
                                             <Users className="w-4 h-4" />
                                             Teams ({results.teams?.length || 0})
                                         </div>
@@ -246,7 +246,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                 <button
                                                     key={team.id}
                                                     onClick={() => handleSelectResult('team', team.id, team.name)}
-                                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg transition-colors"
+                                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted rounded-lg transition-colors"
                                                 >
                                                     <div
                                                         className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -255,8 +255,8 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                         <TeamLogo logo={team.logo} name={team.name} size="sm" />
                                                     </div>
                                                     <div className="text-left">
-                                                        <div className="font-semibold text-white">{team.name}</div>
-                                                        <div className="text-xs text-white/60">{team.sport}</div>
+                                                        <div className="font-semibold text-foreground">{team.name}</div>
+                                                        <div className="text-xs text-foreground/60">{team.sport}</div>
                                                     </div>
                                                 </button>
                                             ))}
@@ -267,7 +267,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                 {/* Players */}
                                 {(results.players?.length || 0) > 0 && (selectedCategory === 'all' || selectedCategory === 'players') && (
                                     <div>
-                                        <div className="flex items-center gap-2 text-sm font-semibold text-white/60 mb-2">
+                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground/60 mb-2">
                                             <TrendingUp className="w-4 h-4" />
                                             Players ({results.players?.length || 0})
                                         </div>
@@ -276,14 +276,14 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                 <button
                                                     key={player.id}
                                                     onClick={() => handleSelectResult('player', player.id, player.name)}
-                                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg transition-colors"
+                                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted rounded-lg transition-colors"
                                                 >
                                                     <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                                                         <span className="text-sm font-bold">#{player.number}</span>
                                                     </div>
                                                     <div className="text-left flex-1">
-                                                        <div className="font-semibold text-white">{player.name}</div>
-                                                        <div className="text-xs text-white/60">
+                                                        <div className="font-semibold text-foreground">{player.name}</div>
+                                                        <div className="text-xs text-foreground/60">
                                                             {player.position} • {player.team?.name}
                                                         </div>
                                                     </div>
@@ -301,7 +301,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                 {/* Competitions */}
                                 {(results.competitions?.length || 0) > 0 && (selectedCategory === 'all' || selectedCategory === 'competitions') && (
                                     <div>
-                                        <div className="flex items-center gap-2 text-sm font-semibold text-white/60 mb-2">
+                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground/60 mb-2">
                                             <Trophy className="w-4 h-4" />
                                             Competitions ({results.competitions?.length || 0})
                                         </div>
@@ -310,14 +310,14 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                 <button
                                                     key={comp.id}
                                                     onClick={() => handleSelectResult('competition', comp.id, comp.name)}
-                                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg transition-colors"
+                                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted rounded-lg transition-colors"
                                                 >
                                                     {comp.logo && (
                                                         <img src={comp.logo} alt={comp.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                                                     )}
                                                     <div className="text-left">
-                                                        <div className="font-semibold text-white">{comp.name}</div>
-                                                        <div className="text-xs text-white/60">{comp.sport} • {comp.season}</div>
+                                                        <div className="font-semibold text-foreground">{comp.name}</div>
+                                                        <div className="text-xs text-foreground/60">{comp.sport} • {comp.season}</div>
                                                     </div>
                                                 </button>
                                             ))}
@@ -328,7 +328,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                 {/* Matches */}
                                 {(results.matches?.length || 0) > 0 && (selectedCategory === 'all' || selectedCategory === 'matches') && (
                                     <div>
-                                        <div className="flex items-center gap-2 text-sm font-semibold text-white/60 mb-2">
+                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground/60 mb-2">
                                             <Calendar className="w-4 h-4" />
                                             Matches ({results.matches?.length || 0})
                                         </div>
@@ -337,13 +337,13 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                 <button
                                                     key={match.id}
                                                     onClick={() => handleSelectResult('match', match.id, `${match.homeTeam?.name} vs ${match.awayTeam?.name}`)}
-                                                    className="w-full px-3 py-2 hover:bg-white/5 rounded-lg transition-colors"
+                                                    className="w-full px-3 py-2 hover:bg-muted rounded-lg transition-colors"
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-white font-semibold">{match.homeTeam?.shortName}</span>
-                                                            <span className="text-white/40">vs</span>
-                                                            <span className="text-white font-semibold">{match.awayTeam?.shortName}</span>
+                                                            <span className="text-foreground font-semibold">{match.homeTeam?.shortName}</span>
+                                                            <span className="text-foreground/40">vs</span>
+                                                            <span className="text-foreground font-semibold">{match.awayTeam?.shortName}</span>
                                                         </div>
                                                         {match.status !== 'UPCOMING' && (
                                                             <div className="text-sm font-bold text-primary">
@@ -351,7 +351,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="text-xs text-white/60 mt-1">
+                                                    <div className="text-xs text-foreground/60 mt-1">
                                                         {match.competition?.name} • {new Date(match.startTime).toLocaleDateString()}
                                                     </div>
                                                 </button>
@@ -363,9 +363,9 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                         ) : query.length >= 2 && !loading ? (
                             /* No Results */
                             <div className="p-8 text-center">
-                                <Search className="w-12 h-12 text-white/20 mx-auto mb-3" />
-                                <p className="text-white/60">No results found for "{query}"</p>
-                                <p className="text-sm text-white/40 mt-1">Try a different search term</p>
+                                <Search className="w-12 h-12 text-foreground/20 mx-auto mb-3" />
+                                <p className="text-foreground/60">No results found for "{query}"</p>
+                                <p className="text-sm text-foreground/40 mt-1">Try a different search term</p>
                             </div>
                         ) : null}
                     </motion.div>

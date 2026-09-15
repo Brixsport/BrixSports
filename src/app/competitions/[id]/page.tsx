@@ -268,13 +268,13 @@ function CompetitionHubContent() {
     <div className="overflow-x-auto">
       <table className="w-full text-left border-collapse min-w-[420px]">
         <thead>
-          <tr className="border-b border-white/10 bg-white/5">
-            <th className="sticky left-0 z-10 bg-[#0c0c0e] px-3 py-3 text-[9px] font-black uppercase tracking-widest text-white/40">Team</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">GD</th>
+          <tr className="border-b border-border bg-muted">
+            <th className="sticky left-0 z-10 bg-card px-3 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40">Team</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">P</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">W</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">GD</th>
             <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
           </tr>
         </thead>
@@ -283,14 +283,14 @@ function CompetitionHubContent() {
             <tr
               key={row.id}
               onClick={() => router.push(`/teams/${row.teamId}`)}
-              className="border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer"
+              className="border-b border-border/50 hover:bg-muted/50 transition-colors group cursor-pointer"
             >
-              <td className="sticky left-0 z-10 bg-[#0c0c0e] group-hover:bg-[#151517] px-3 py-2.5">
+              <td className="sticky left-0 z-10 bg-card group-hover:bg-muted px-3 py-2.5">
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-display italic w-4 shrink-0 text-right ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
+                  <span className={`text-sm font-display italic w-4 shrink-0 text-right ${idx < 3 ? 'text-primary' : 'text-foreground/20'}`}>
                     {idx + 1}
                   </span>
-                  <div className="w-8 h-8 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
+                  <div className="w-8 h-8 relative flex-shrink-0 bg-muted rounded-lg p-1 flex items-center justify-center">
                     <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
                   </div>
                   <div className="min-w-0">
@@ -298,11 +298,11 @@ function CompetitionHubContent() {
                   </div>
                 </div>
               </td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/80">{row.played}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/80">{row.played}</td>
               <td className="px-2 py-2.5 text-center text-xs font-bold text-primary">{row.won}</td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
               <td className="px-3 py-2.5 text-center">
                 <span className="bg-primary/10 text-primary px-2 py-1 rounded-lg font-display italic text-sm border border-primary/20">
                   {row.points}
@@ -317,7 +317,7 @@ function CompetitionHubContent() {
 
   if (loading && competitions.length === 0) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
       </div>
     );
@@ -325,10 +325,10 @@ function CompetitionHubContent() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-6">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
-          <p className="text-white/40 font-black uppercase tracking-widest text-sm mb-4">Competition not found</p>
+          <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
+          <p className="text-foreground/40 font-black uppercase tracking-widest text-sm mb-4">Competition not found</p>
           <button
             onClick={() => router.push('/competitions')}
             className="text-primary text-sm font-bold uppercase tracking-widest hover:underline"
@@ -341,9 +341,9 @@ function CompetitionHubContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
+    <div className="min-h-screen bg-background text-foreground p-4 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
-        <header className="space-y-4 border-b border-white/5 pb-8">
+        <header className="space-y-4 border-b border-border/50 pb-8">
           {/* Utility row: back -- star. Own row, present on every tab (Figma's
               own Standings-tab frame vs Stats-tab frame disagree on this --
               back+star share a row on Standings, star floats alone with no
@@ -354,7 +354,7 @@ function CompetitionHubContent() {
             <button
               onClick={() => router.back()}
               aria-label="Back"
-              className="shrink-0 p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+              className="shrink-0 p-2 -ml-2 rounded-full hover:bg-muted transition-colors text-foreground/60 hover:text-foreground"
             >
               <ArrowLeft size={20} />
             </button>
@@ -362,11 +362,11 @@ function CompetitionHubContent() {
               <button
                 onClick={() => toggleCompetition(selectedComp.id)}
                 aria-label={isFavoriteCompetition(selectedComp.id) ? 'Remove from favourites' : 'Add to favourites'}
-                className="shrink-0 p-2 -mr-2 rounded-full hover:bg-white/10 transition-colors"
+                className="shrink-0 p-2 -mr-2 rounded-full hover:bg-muted transition-colors"
               >
                 <Star
                   size={20}
-                  className={isFavoriteCompetition(selectedComp.id) ? 'text-primary fill-primary' : 'text-white/40'}
+                  className={isFavoriteCompetition(selectedComp.id) ? 'text-primary fill-primary' : 'text-foreground/40'}
                 />
               </button>
             )}
@@ -393,14 +393,14 @@ function CompetitionHubContent() {
                       const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
                       if (chosen) router.push(`/competitions/${chosen.id}`);
                     }}
-                    className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
+                    className="text-[10px] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
                   >
                     {selectedGroup.seasons.map((s) => (
                       <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
                     ))}
                   </select>
                 ) : (
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
                     {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
                   </span>
                 )}
@@ -418,31 +418,31 @@ function CompetitionHubContent() {
 
           {/* View Toggle -- flex-1 per tab so all 4 always fit the row width,
               no horizontal scroll (Figma shows all 4 fitting on one line). */}
-          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
+          <div className="flex bg-muted p-1 rounded-2xl border border-border">
             <button
               onClick={() => setView('standings')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <ListOrdered size={14} className="shrink-0" />
               <span className="truncate">Standings</span>
             </button>
             <button
               onClick={() => setView('matches')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <Calendar size={14} className="shrink-0" />
               <span className="truncate">Matches</span>
             </button>
             <button
               onClick={() => setView('brackets')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <LayoutGrid size={14} className="shrink-0" />
               <span className="truncate">Brackets</span>
             </button>
             <button
               onClick={() => setView('stats')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <BarChart3 size={14} className="shrink-0" />
               <span className="truncate">Stats</span>
@@ -458,14 +458,14 @@ function CompetitionHubContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className={standingsGroups.length > 1 ? 'space-y-8' : 'bg-white/5 border border-white/10 rounded-[40px] overflow-hidden'}
+              className={standingsGroups.length > 1 ? 'space-y-8' : 'bg-muted border border-border rounded-[40px] overflow-hidden'}
             >
               {standings.length > 0 ? (
                 standingsGroups.length > 1 ? (
                   standingsGroups.map(({ groupName, rows }) => (
                     <div key={groupName} className="space-y-3">
                       <h3 className="px-2 font-display text-lg italic uppercase tracking-widest text-primary">{groupName}</h3>
-                      <div className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
+                      <div className="bg-muted border border-border rounded-[32px] overflow-hidden">
                         {renderStandingsTable(rows)}
                       </div>
                     </div>
@@ -475,8 +475,8 @@ function CompetitionHubContent() {
                 )
               ) : (
                 <div className="p-24 text-center">
-                  <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                  <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No standings data available</p>
+                  <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
+                  <p className="text-foreground/20 font-black uppercase tracking-widest text-xs italic">No standings data available</p>
                 </div>
               )}
             </motion.div>
@@ -499,7 +499,7 @@ function CompetitionHubContent() {
               )}
 
               {selectedDate && (
-                <p className="text-xs text-white/50 text-center">
+                <p className="text-xs text-foreground/50 text-center">
                   Showing fixtures for{' '}
                   {selectedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}{' '}
                   <button
@@ -537,19 +537,19 @@ function CompetitionHubContent() {
                   return (
                     <div className="space-y-4">
                       {roundOrder.map((round) => (
-                        <div key={round} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-                          <div className="flex items-center gap-2 px-4 py-3 bg-white/5 border-b border-white/10">
+                        <div key={round} className="bg-muted border border-border rounded-2xl overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-3 bg-muted border-b border-border">
                             <LayoutGrid size={14} className="text-primary shrink-0" />
                             <span className="text-[10px] font-black uppercase tracking-widest truncate">
                               {round === 'Matches' ? (selectedComp?.name || 'Matches') : `${selectedComp?.name || ''} - ${round.replace(/_/g, ' ')}`}
                             </span>
                           </div>
-                          <div className="divide-y divide-white/5">
+                          <div className="divide-y divide-border/50">
                             {byRound.get(round)!.map((match) => (
                               <div
                                 key={match.id}
                                 onClick={() => router.push(`/matches/${match.id}`)}
-                                className="px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer"
+                                className="px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
                               >
                                 <div className="flex items-center gap-3">
                                   <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
@@ -565,7 +565,7 @@ function CompetitionHubContent() {
                                   <span className="flex-1 text-sm font-bold truncate text-right">{match.awayTeam?.name || 'Away'}</span>
                                   <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                                 </div>
-                                <div className="flex items-center justify-between text-[10px] text-white/30 mt-2 pl-11">
+                                <div className="flex items-center justify-between text-[10px] text-foreground/30 mt-2 pl-11">
                                   <span className="truncate">{match.venue}</span>
                                   <span className="shrink-0 pl-2">{new Date(match.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                                 </div>
@@ -578,9 +578,9 @@ function CompetitionHubContent() {
                   );
                 })()
               ) : (
-                <div className="p-24 text-center bg-white/5 border border-white/10 rounded-[40px]">
-                  <Calendar className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                  <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No matches scheduled</p>
+                <div className="p-24 text-center bg-muted border border-border rounded-[40px]">
+                  <Calendar className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
+                  <p className="text-foreground/20 font-black uppercase tracking-widest text-xs italic">No matches scheduled</p>
                 </div>
               )}
             </motion.div>
@@ -604,10 +604,10 @@ function CompetitionHubContent() {
                           </h3>
                           <div className="space-y-8">
                             {round.matches.map((match) => (
-                              <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:border-primary/30 transition-all">
+                              <div key={match.id} className="bg-muted border border-border rounded-3xl p-6 hover:border-primary/30 transition-all">
                                 <div className="flex justify-between items-center mb-4">
-                                  <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{match.title}</span>
-                                  <span className={`text-[8px] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : 'bg-white/10 text-white/40'}`}>
+                                  <span className="text-[8px] font-black uppercase tracking-widest text-foreground/30">{match.title}</span>
+                                  <span className={`text-[8px] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : 'bg-muted text-foreground/40'}`}>
                                     {match.status}
                                   </span>
                                 </div>
@@ -615,15 +615,15 @@ function CompetitionHubContent() {
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                       <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[10px] font-black uppercase text-white/60">{match.homeTeam?.name || 'TBD'}</span>
+                                      <span className="text-[10px] font-black uppercase text-foreground/60">{match.homeTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.homeScore ?? '-'}</span>
                                   </div>
-                                  <div className="h-px bg-white/5" />
+                                  <div className="h-px bg-border/50" />
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                       <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[10px] font-black uppercase text-white/60">{match.awayTeam?.name || 'TBD'}</span>
+                                      <span className="text-[10px] font-black uppercase text-foreground/60">{match.awayTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.awayScore ?? '-'}</span>
                                   </div>
@@ -637,10 +637,10 @@ function CompetitionHubContent() {
                   </div>
                 </div>
               ) : (
-                <div className="py-24 px-4 text-center bg-white/5 border border-white/10 rounded-[40px]">
-                  <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                  <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No bracket data available</p>
-                  <p className="text-white/10 text-[10px] mt-2 italic">Knockout stages have not started yet.</p>
+                <div className="py-24 px-4 text-center bg-muted border border-border rounded-[40px]">
+                  <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
+                  <p className="text-foreground/20 font-black uppercase tracking-widest text-xs italic">No bracket data available</p>
+                  <p className="text-foreground/10 text-[10px] mt-2 italic">Knockout stages have not started yet.</p>
                 </div>
               )}
             </motion.div>
@@ -657,8 +657,8 @@ function CompetitionHubContent() {
               {(STAT_CATEGORIES[selectedComp?.sport || ''] || []).map((cat) => {
                 const leaders = statsLeaders[cat.type] || [];
                 return (
-                  <div key={cat.type} className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+                  <div key={cat.type} className="bg-muted border border-border rounded-[32px] overflow-hidden">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-border">
                       <h3 className="text-sm font-black uppercase tracking-widest">{cat.label}</h3>
                       {leaders.length > 0 && (
                         <Link
@@ -670,12 +670,12 @@ function CompetitionHubContent() {
                       )}
                     </div>
                     {leaders.length > 0 ? (
-                      <div className="divide-y divide-white/5">
+                      <div className="divide-y divide-border/50">
                         {leaders.map((leader) => (
                           <div
                             key={leader.player.id}
                             onClick={() => router.push(`/players/${leader.player.id}`)}
-                            className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors cursor-pointer"
+                            className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
@@ -683,7 +683,7 @@ function CompetitionHubContent() {
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-bold truncate">{leader.player.name}</p>
-                                <p className="text-[10px] text-white/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
+                                <p className="text-[10px] text-foreground/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
                               </div>
                             </div>
                             <span className="text-lg font-display italic text-primary shrink-0">{leader.highlightedStat}</span>
@@ -691,7 +691,7 @@ function CompetitionHubContent() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[10px] text-white/20 font-black uppercase tracking-widest text-center py-8">No data yet</p>
+                      <p className="text-[10px] text-foreground/20 font-black uppercase tracking-widest text-center py-8">No data yet</p>
                     )}
                   </div>
                 );
@@ -708,7 +708,7 @@ function CompetitionHubContent() {
 export default function CompetitionHubPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
       </div>
     }>

@@ -32,8 +32,8 @@ const TAB_ICON: Record<Tab, ReactNode> = {
 
 function InfoRow({ label, value }: { label: string; value: ReactNode }) {
     return (
-        <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
-            <span className="text-white/60 text-sm">{label}</span>
+        <div className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
+            <span className="text-foreground/60 text-sm">{label}</span>
             <span className="font-semibold text-sm">{value}</span>
         </div>
     );
@@ -41,9 +41,9 @@ function InfoRow({ label, value }: { label: string; value: ReactNode }) {
 
 function StatTile({ value, label }: { value: ReactNode; label: string }) {
     return (
-        <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
+        <div className="text-center p-4 bg-muted rounded-xl border border-border">
             <div className="text-2xl font-bold">{value}</div>
-            <div className="text-xs text-white/60">{label}</div>
+            <div className="text-xs text-foreground/60">{label}</div>
         </div>
     );
 }
@@ -135,7 +135,7 @@ export default function PlayerDetailClient() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
         );
@@ -143,7 +143,7 @@ export default function PlayerDetailClient() {
 
     if (errorState === 'not-found') {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
+            <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold mb-2">Player not found</h2>
                     <button onClick={() => router.back()} className="text-primary hover:underline">
@@ -156,15 +156,15 @@ export default function PlayerDetailClient() {
 
     if (errorState === 'failed' || !data) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
+            <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold mb-2">Couldn't load this player</h2>
-                    <p className="text-white/60 mb-4">Something went wrong. Please try again.</p>
+                    <p className="text-foreground/60 mb-4">Something went wrong. Please try again.</p>
                     <div className="flex items-center justify-center gap-4">
                         <button onClick={fetchPlayerData} className="text-primary hover:underline">
                             Retry
                         </button>
-                        <button onClick={() => router.back()} className="text-white/60 hover:underline">
+                        <button onClick={() => router.back()} className="text-foreground/60 hover:underline">
                             Go back
                         </button>
                     </div>
@@ -178,14 +178,14 @@ export default function PlayerDetailClient() {
     const favorited = isFavoritePlayer(playerId);
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white pb-20">
+        <div className="min-h-screen bg-background text-foreground pb-20">
             {/* Header */}
             <div className="relative overflow-hidden bg-gradient-to-br from-primary/20 via-purple-500/10 to-transparent">
                 <div className="max-w-7xl mx-auto px-4 py-8">
                     <div className="flex items-center justify-between mb-6">
                         <button
                             onClick={() => router.back()}
-                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+                            className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
                         >
                             <ArrowLeft className="w-5 h-5" />
                             <span>Back</span>
@@ -193,9 +193,9 @@ export default function PlayerDetailClient() {
                         <button
                             onClick={() => togglePlayer(playerId)}
                             aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
-                            className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                            className="p-2 rounded-full hover:bg-muted/70 transition-colors"
                         >
-                            <Star className={`w-6 h-6 ${favorited ? 'text-yellow-500 fill-yellow-500' : 'text-white/60'}`} />
+                            <Star className={`w-6 h-6 ${favorited ? 'text-yellow-500 fill-yellow-500' : 'text-foreground/60'}`} />
                         </button>
                     </div>
 
@@ -210,7 +210,7 @@ export default function PlayerDetailClient() {
 
                         <div className="flex-1">
                             <h1 className="text-4xl font-bold mb-2">{player.name}</h1>
-                            <div className="flex flex-wrap gap-4 text-white/60">
+                            <div className="flex flex-wrap gap-4 text-foreground/60">
                                 <div className="flex items-center gap-2">
                                     <Trophy className="w-4 h-4" />
                                     <span>{player.position}</span>
@@ -239,8 +239,8 @@ export default function PlayerDetailClient() {
 
                     {/* Related Profiles (Multi-sport) */}
                     {player.relatedProfiles && player.relatedProfiles.length > 0 && (
-                        <div className="mb-6 p-4 bg-white/5 rounded-xl border border-white/10">
-                            <span className="text-xs text-white/50 uppercase font-bold tracking-wider mb-2 block">
+                        <div className="mb-6 p-4 bg-muted rounded-xl border border-border">
+                            <span className="text-xs text-foreground/50 uppercase font-bold tracking-wider mb-2 block">
                                 Multi-Sport Athlete
                             </span>
                             <div className="flex gap-2 flex-wrap">
@@ -248,21 +248,21 @@ export default function PlayerDetailClient() {
                                     <Link
                                         key={related.id}
                                         href={`/players/${related.id}`}
-                                        className="flex-1 min-w-[180px] flex items-center gap-3 px-3 py-2 bg-white/10 hover:bg-white/20 hover:border-primary/50 rounded-lg transition-all border border-white/5 group"
+                                        className="flex-1 min-w-[180px] flex items-center gap-3 px-3 py-2 bg-muted hover:bg-muted hover:border-primary/50 rounded-lg transition-all border border-border/50 group"
                                     >
                                         <span className="text-2xl group-hover:scale-110 transition-transform">
                                             {related.sport === 'Basketball' ? '🏀' : '⚽'}
                                         </span>
                                         <div className="flex flex-col">
-                                            <span className="text-sm font-bold text-white group-hover:text-primary transition-colors">
+                                            <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
                                                 {related.sport}
                                             </span>
-                                            <span className="text-xs text-white/60">
+                                            <span className="text-xs text-foreground/60">
                                                 {related.teamName}
                                             </span>
                                         </div>
                                         <div className="ml-auto">
-                                            <ArrowLeft className="w-4 h-4 text-white/40 group-hover:text-primary rotate-180 transition-colors" />
+                                            <ArrowLeft className="w-4 h-4 text-foreground/40 group-hover:text-primary rotate-180 transition-colors" />
                                         </div>
                                     </Link>
                                 ))}
@@ -273,14 +273,14 @@ export default function PlayerDetailClient() {
                     {/* Tabs -- sized to match the match-detail page's tab bar
                         (MatchDetailClient.tsx) so 3 tabs never need horizontal
                         scroll on a mobile viewport */}
-                    <div className="flex gap-1 border-b border-white/10 overflow-x-auto scrollbar-hide">
+                    <div className="flex gap-1 border-b border-border overflow-x-auto scrollbar-hide">
                         {TABS.map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap flex items-center gap-1 md:gap-2 ${activeTab === tab
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
                                 {TAB_ICON[tab]}
@@ -303,7 +303,7 @@ export default function PlayerDetailClient() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         <div className="lg:col-span-2 space-y-6">
                             {/* Basic Info */}
-                            <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                            <div className="p-6 bg-muted rounded-2xl border border-border">
                                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                                     <Target className="w-5 h-5 text-primary" />
                                     Basic Info
@@ -325,7 +325,7 @@ export default function PlayerDetailClient() {
                                         label="Rating"
                                         value={
                                             <span className="flex items-center gap-1">
-                                                <Star className={`w-4 h-4 ${stats.rating != null ? 'text-yellow-500 fill-yellow-500' : 'text-white/30'}`} />
+                                                <Star className={`w-4 h-4 ${stats.rating != null ? 'text-yellow-500 fill-yellow-500' : 'text-foreground/30'}`} />
                                                 {stats.rating != null && stats.rating.toFixed(1)}
                                             </span>
                                         }
@@ -334,7 +334,7 @@ export default function PlayerDetailClient() {
                             </div>
 
                             {/* Individual Stats */}
-                            <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                            <div className="p-6 bg-muted rounded-2xl border border-border">
                                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                                     <Activity className="w-5 h-5 text-primary" />
                                     Individual Stats
@@ -363,7 +363,7 @@ export default function PlayerDetailClient() {
                                 links out to the existing dedicated compare page instead */}
                             <Link
                                 href={`/players/compare?player1=${playerId}`}
-                                className="flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all group"
+                                className="flex items-center gap-4 p-4 bg-muted hover:bg-muted/70 rounded-2xl border border-border transition-all group"
                             >
                                 <PlayerAvatar image={player.image} name={player.name} size="sm" />
                                 <div className="flex-1 font-semibold">{player.name}</div>
@@ -384,17 +384,17 @@ export default function PlayerDetailClient() {
                                         <Link key={index} href={`/matches/${matchData.match?.id}`}>
                                             <motion.div
                                                 whileHover={{ scale: 1.02 }}
-                                                className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all cursor-pointer"
+                                                className="p-4 bg-muted hover:bg-muted/70 rounded-xl border border-border transition-all cursor-pointer"
                                             >
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-sm text-white/60">
+                                                    <div className="text-sm text-foreground/60">
                                                         {matchData.match && format(new Date(matchData.match.startTime), 'MMM d, yyyy')}
                                                     </div>
                                                     <div className="text-sm font-semibold">
                                                         {matchData.match?.homeScore} - {matchData.match?.awayScore}
                                                     </div>
                                                 </div>
-                                                <div className="text-xs text-white/40 mb-2">{matchData.match?.competition}</div>
+                                                <div className="text-xs text-foreground/40 mb-2">{matchData.match?.competition}</div>
                                                 {matchData.events.length > 0 && (
                                                     <div className="flex gap-2 flex-wrap">
                                                         {matchData.events.map((event: any, idx: number) => (
@@ -418,7 +418,7 @@ export default function PlayerDetailClient() {
                         <div className="space-y-6">
                             {/* Career History */}
                             {player.careerHistory?.length > 0 && (
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <div className="p-6 bg-muted rounded-2xl border border-border">
                                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                                         <History className="w-5 h-5" />
                                         Career History
@@ -430,11 +430,11 @@ export default function PlayerDetailClient() {
                                             return (
                                                 <div
                                                     key={idx}
-                                                    className="flex items-start justify-between gap-3 text-sm border-b border-white/5 last:border-0 pb-2 last:pb-0"
+                                                    className="flex items-start justify-between gap-3 text-sm border-b border-border/50 last:border-0 pb-2 last:pb-0"
                                                 >
                                                     <div>
                                                         <div className="font-medium">{h.teamName}</div>
-                                                        <div className="text-xs text-white/40">
+                                                        <div className="text-xs text-foreground/40">
                                                             {h.season}
                                                             {start ? ` · ${start} – ${end ?? 'present'}` : ''}
                                                         </div>
@@ -459,85 +459,85 @@ export default function PlayerDetailClient() {
                         {playerSport === 'Basketball' ? (
                             <>
                                 {/* Scoring Card */}
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <div className="p-6 bg-muted rounded-2xl border border-border">
                                     <div className="flex items-center gap-3 mb-4">
                                         <Target className="w-8 h-8 text-green-500" />
                                         <h3 className="font-bold text-lg">Scoring</h3>
                                     </div>
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Total Points</span>
+                                            <span className="text-foreground/60">Total Points</span>
                                             <span className="font-bold text-2xl text-green-500">{stats.totalPoints || 0}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Points/Game</span>
+                                            <span className="text-foreground/60">Points/Game</span>
                                             <span className="font-bold">{stats.pointsPerGame || '0.0'}</span>
                                         </div>
-                                        <div className="h-px bg-white/10 my-2" />
+                                        <div className="h-px bg-border my-2" />
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-white/40">2-Pointers Made</span>
+                                            <span className="text-foreground/40">2-Pointers Made</span>
                                             <span className="font-semibold">{stats.twoPointers || 0}</span>
                                         </div>
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-white/40">3-Pointers Made</span>
+                                            <span className="text-foreground/40">3-Pointers Made</span>
                                             <span className="font-semibold">{stats.threePointers || 0}</span>
                                         </div>
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-white/40">Free Throws Made</span>
+                                            <span className="text-foreground/40">Free Throws Made</span>
                                             <span className="font-semibold">{stats.freeThrows || 0}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Rebounding Card */}
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <div className="p-6 bg-muted rounded-2xl border border-border">
                                     <div className="flex items-center gap-3 mb-4">
                                         <Activity className="w-8 h-8 text-blue-500" />
                                         <h3 className="font-bold text-lg">Rebounding</h3>
                                     </div>
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Total Rebounds</span>
+                                            <span className="text-foreground/60">Total Rebounds</span>
                                             <span className="font-bold text-2xl text-blue-500">{stats.rebounds || 0}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Rebounds/Game</span>
+                                            <span className="text-foreground/60">Rebounds/Game</span>
                                             <span className="font-bold">{(stats.rebounds / (stats.appearances || 1)).toFixed(1)}</span>
                                         </div>
-                                        <div className="h-px bg-white/10 my-2" />
+                                        <div className="h-px bg-border my-2" />
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-white/40">Offensive Rebounds</span>
+                                            <span className="text-foreground/40">Offensive Rebounds</span>
                                             <span className="font-semibold text-blue-400/60">{stats.offensiveRebounds || 0}</span>
                                         </div>
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-white/40">Defensive Rebounds</span>
+                                            <span className="text-foreground/40">Defensive Rebounds</span>
                                             <span className="font-semibold text-blue-400/60">{stats.defensiveRebounds || 0}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Playmaking & Defense Card */}
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <div className="p-6 bg-muted rounded-2xl border border-border">
                                     <div className="flex items-center gap-3 mb-4">
                                         <TrendingUp className="w-8 h-8 text-purple-500" />
                                         <h3 className="font-bold text-lg">Playmaking & Def</h3>
                                     </div>
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Assists</span>
+                                            <span className="text-foreground/60">Assists</span>
                                             <span className="font-bold text-2xl text-purple-500">{stats.totalAssists || 0}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Steals</span>
+                                            <span className="text-foreground/60">Steals</span>
                                             <span className="font-bold text-2xl text-yellow-500">{stats.steals || 0}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Blocks</span>
+                                            <span className="text-foreground/60">Blocks</span>
                                             <span className="font-bold text-2xl text-blue-400">{stats.blocks || 0}</span>
                                         </div>
-                                        <div className="h-px bg-white/10 my-2" />
+                                        <div className="h-px bg-border my-2" />
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-white/40">Turnovers</span>
+                                            <span className="text-foreground/40">Turnovers</span>
                                             <span className="font-semibold text-red-400/60">{stats.turnovers || 0}</span>
                                         </div>
                                     </div>
@@ -545,68 +545,68 @@ export default function PlayerDetailClient() {
                             </>
                         ) : (
                             <>
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <div className="p-6 bg-muted rounded-2xl border border-border">
                                     <div className="flex items-center gap-3 mb-4">
                                         <Target className="w-8 h-8 text-green-500" />
                                         <h3 className="font-bold text-lg">Attacking</h3>
                                     </div>
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Goals</span>
+                                            <span className="text-foreground/60">Goals</span>
                                             <span className="font-bold text-2xl text-green-500">{stats.goals}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Assists</span>
+                                            <span className="text-foreground/60">Assists</span>
                                             <span className="font-bold text-2xl text-blue-500">{stats.assists}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Goals/Game</span>
+                                            <span className="text-foreground/60">Goals/Game</span>
                                             <span className="font-bold">{stats.goalsPerGame}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Assists/Game</span>
+                                            <span className="text-foreground/60">Assists/Game</span>
                                             <span className="font-bold">{stats.assistsPerGame}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <div className="p-6 bg-muted rounded-2xl border border-border">
                                     <div className="flex items-center gap-3 mb-4">
                                         <Activity className="w-8 h-8 text-blue-500" />
                                         <h3 className="font-bold text-lg">Discipline</h3>
                                     </div>
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Yellow Cards</span>
+                                            <span className="text-foreground/60">Yellow Cards</span>
                                             <span className="font-bold text-2xl text-yellow-500">{stats.yellowCards}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Red Cards</span>
+                                            <span className="text-foreground/60">Red Cards</span>
                                             <span className="font-bold text-2xl text-red-500">{stats.redCards}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Total Cards</span>
+                                            <span className="text-foreground/60">Total Cards</span>
                                             <span className="font-bold">{stats.yellowCards + stats.redCards}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <div className="p-6 bg-muted rounded-2xl border border-border">
                                     <div className="flex items-center gap-3 mb-4">
                                         <TrendingUp className="w-8 h-8 text-purple-500" />
                                         <h3 className="font-bold text-lg">Performance</h3>
                                     </div>
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Rating</span>
+                                            <span className="text-foreground/60">Rating</span>
                                             <span className="font-bold text-2xl text-primary">{stats.rating != null ? stats.rating.toFixed(1) : 'Not yet rated'}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Appearances</span>
+                                            <span className="text-foreground/60">Appearances</span>
                                             <span className="font-bold text-2xl">{stats.appearances || '-'}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Goal Contributions</span>
+                                            <span className="text-foreground/60">Goal Contributions</span>
                                             <span className="font-bold">{stats.goals + stats.assists}</span>
                                         </div>
                                     </div>
@@ -627,20 +627,20 @@ export default function PlayerDetailClient() {
                                 <Link key={index} href={`/matches/${event.match?.id}`}>
                                     <motion.div
                                         whileHover={{ scale: 1.01 }}
-                                        className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all cursor-pointer flex items-center justify-between"
+                                        className="p-4 bg-muted hover:bg-muted/70 rounded-xl border border-border transition-all cursor-pointer flex items-center justify-between"
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="text-2xl">{getEventIcon(event.type)}</div>
                                             <div>
                                                 <div className="font-semibold">{event.type.replace('_', ' ')}</div>
-                                                <div className="text-sm text-white/60">
+                                                <div className="text-sm text-foreground/60">
                                                     {event.match && format(new Date(event.match.startTime), 'MMM d, yyyy')}
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="text-right">
                                             <div className="text-sm font-bold">{event.minute}'</div>
-                                            <div className="text-xs text-white/60">{event.match?.competition}</div>
+                                            <div className="text-xs text-foreground/60">{event.match?.competition}</div>
                                         </div>
                                     </motion.div>
                                 </Link>

@@ -43,14 +43,14 @@ export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToH
     const drawPercentage = headToHead.totalMatches > 0 ? (headToHead.draws / headToHead.totalMatches) * 100 : 0;
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 space-y-6">
+        <div className="bg-muted border border-border rounded-[32px] p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <h2 className="text-sm font-black uppercase tracking-widest text-white/60 flex items-center gap-2">
+                <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60 flex items-center gap-2">
                     <Trophy size={16} className="text-primary" />
                     Head-to-Head
                 </h2>
-                <span className="text-xs text-white/40">
+                <span className="text-xs text-foreground/40">
                     {headToHead.totalMatches} {headToHead.totalMatches === 1 ? 'Match' : 'Matches'}
                 </span>
             </div>
@@ -65,8 +65,8 @@ export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToH
 
                 {/* VS */}
                 <div className="text-center">
-                    <div className="text-4xl font-display italic text-white/20 mb-2">VS</div>
-                    <div className="flex items-center justify-center gap-2 text-xs text-white/40">
+                    <div className="text-4xl font-display italic text-foreground/20 mb-2">VS</div>
+                    <div className="flex items-center justify-center gap-2 text-xs text-foreground/40">
                         <Calendar size={12} />
                         <span>All Time</span>
                     </div>
@@ -102,21 +102,21 @@ export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToH
             </div>
 
             {/* Goals Statistics */}
-            <div className="bg-white/5 rounded-2xl p-4">
+            <div className="bg-muted rounded-2xl p-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="text-center">
-                        <p className="text-xs text-white/40 font-bold mb-1">GOALS SCORED</p>
+                        <p className="text-xs text-foreground/40 font-bold mb-1">GOALS SCORED</p>
                         <p className="text-3xl font-display italic text-primary">{headToHead.team1GoalsFor}</p>
                     </div>
                     <div className="text-center">
-                        <p className="text-xs text-white/40 font-bold mb-1">GOALS SCORED</p>
+                        <p className="text-xs text-foreground/40 font-bold mb-1">GOALS SCORED</p>
                         <p className="text-3xl font-display italic text-primary">{headToHead.team2GoalsFor}</p>
                     </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-white/10">
-                    <div className="flex items-center justify-between text-xs text-white/60">
+                <div className="mt-3 pt-3 border-t border-border">
+                    <div className="flex items-center justify-between text-xs text-foreground/60">
                         <span>Avg: {(headToHead.team1GoalsFor / headToHead.totalMatches).toFixed(1)}</span>
-                        <span className="text-white/40">Goals Per Match</span>
+                        <span className="text-foreground/40">Goals Per Match</span>
                         <span>Avg: {(headToHead.team2GoalsFor / headToHead.totalMatches).toFixed(1)}</span>
                     </div>
                 </div>
@@ -126,10 +126,10 @@ export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToH
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold">
                     <span className="text-blue-500">{team1WinPercentage.toFixed(0)}%</span>
-                    <span className="text-white/40">Win Rate</span>
+                    <span className="text-foreground/40">Win Rate</span>
                     <span className="text-blue-500">{team2WinPercentage.toFixed(0)}%</span>
                 </div>
-                <div className="h-3 bg-white/10 rounded-full overflow-hidden flex">
+                <div className="h-3 bg-muted rounded-full overflow-hidden flex">
                     <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${team1WinPercentage}%` }}
@@ -154,7 +154,7 @@ export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToH
             {/* Recent Matches */}
             {showRecentMatches && recentMatches && recentMatches.length > 0 && (
                 <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Recent Matches</h3>
+                    <h3 className="text-xs font-black uppercase tracking-widest text-foreground/40">Recent Matches</h3>
                     <div className="space-y-2">
                         {recentMatches.map((match, idx) => (
                             <RecentMatchCard key={match.id} match={match} team1Id={team1.id} team2Id={team2.id} delay={idx * 0.1} />
@@ -184,9 +184,9 @@ function StatBox({
     };
 
     return (
-        <div className="bg-white/5 rounded-2xl p-4 text-center">
-            <p className="text-xs text-white/40 font-bold mb-2">{label}</p>
-            <p className="text-3xl font-display italic text-white mb-1">{value}</p>
+        <div className="bg-muted rounded-2xl p-4 text-center">
+            <p className="text-xs text-foreground/40 font-bold mb-2">{label}</p>
+            <p className="text-3xl font-display italic text-foreground mb-1">{value}</p>
             <div className={`inline-block px-2 py-0.5 rounded border text-xs font-bold ${colorClasses[color]}`}>
                 {percentage.toFixed(0)}%
             </div>
@@ -223,15 +223,15 @@ function RecentMatchCard({
             className={`flex items-center justify-between p-3 rounded-xl border ${getResultColor()}`}
         >
             <div className="flex items-center gap-3">
-                <div className="text-xs text-white/40">
+                <div className="text-xs text-foreground/40">
                     {new Date(match.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </div>
-                <div className="text-xs text-white/60">{match.competition}</div>
+                <div className="text-xs text-foreground/60">{match.competition}</div>
             </div>
             <div className="flex items-center gap-4">
-                <span className="text-lg font-display italic text-white">{team1Score}</span>
-                <span className="text-xs text-white/40">-</span>
-                <span className="text-lg font-display italic text-white">{team2Score}</span>
+                <span className="text-lg font-display italic text-foreground">{team1Score}</span>
+                <span className="text-xs text-foreground/40">-</span>
+                <span className="text-lg font-display italic text-foreground">{team2Score}</span>
             </div>
         </motion.div>
     );
@@ -240,12 +240,12 @@ function RecentMatchCard({
 // Empty state component
 export function HeadToHeadEmpty() {
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-12 text-center">
-            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Trophy size={32} className="text-white/20" />
+        <div className="bg-muted border border-border rounded-[32px] p-12 text-center">
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Trophy size={32} className="text-foreground/20" />
             </div>
-            <p className="text-sm font-bold text-white/60 mb-1">No Head-to-Head Data</p>
-            <p className="text-xs text-white/40">
+            <p className="text-sm font-bold text-foreground/60 mb-1">No Head-to-Head Data</p>
+            <p className="text-xs text-foreground/40">
                 These teams haven't faced each other yet
             </p>
         </div>

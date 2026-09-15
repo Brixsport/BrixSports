@@ -84,7 +84,7 @@ export default function CompetitionsShowcase() {
                 <section>
                     <div className="flex items-center gap-3 mb-6">
                         <Sparkles className="w-6 h-6 text-yellow-400" />
-                        <h2 className="text-3xl font-bold text-white">Active Competitions</h2>
+                        <h2 className="text-3xl font-bold text-foreground">Active Competitions</h2>
                     </div>
                     <div className="grid md:grid-cols-2 gap-6">
                         {[...competitions.featured, ...competitions.ongoing].map((comp, index) => (
@@ -143,7 +143,7 @@ export default function CompetitionsShowcase() {
                 <section>
                     <div className="flex items-center gap-3 mb-6">
                         <UserPlus className="w-6 h-6 text-green-400" />
-                        <h2 className="text-3xl font-bold text-white">Open for Registration</h2>
+                        <h2 className="text-3xl font-bold text-foreground">Open for Registration</h2>
                     </div>
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {competitions.upcoming.map((comp, index) => (
@@ -153,7 +153,7 @@ export default function CompetitionsShowcase() {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: index * 0.1 }}
                             >
-                                <div className="bg-white/5 backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:border-green-500/50 transition-all">
+                                <div className="bg-muted backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:border-green-500/50 transition-all">
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
                                             <Trophy className="w-6 h-6 text-green-400" />
@@ -162,7 +162,7 @@ export default function CompetitionsShowcase() {
                                             OPEN
                                         </div>
                                     </div>
-                                    <h3 className="text-lg font-bold text-white mb-2">{comp.name}</h3>
+                                    <h3 className="text-lg font-bold text-foreground mb-2">{comp.name}</h3>
                                     <div className="space-y-2 mb-4">
                                         <div className="flex items-center gap-2 text-sm text-gray-400">
                                             <Calendar className="w-4 h-4" />
@@ -205,7 +205,7 @@ export default function CompetitionsShowcase() {
                 <section>
                     <div className="flex items-center gap-3 mb-6">
                         <Medal className="w-6 h-6 text-yellow-400" />
-                        <h2 className="text-3xl font-bold text-white">Recent Champions</h2>
+                        <h2 className="text-3xl font-bold text-foreground">Recent Champions</h2>
                     </div>
                     <div className="grid md:grid-cols-2 gap-6">
                         {competitions.completed.slice(0, 4).map((comp, index) => (
@@ -216,12 +216,12 @@ export default function CompetitionsShowcase() {
                                 transition={{ delay: index * 0.1 }}
                             >
                                 <Link href={`/competitions/${comp.id}`}>
-                                    <div className="group bg-white/5 backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:border-yellow-500/50 transition-all cursor-pointer">
+                                    <div className="group bg-muted backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:border-yellow-500/50 transition-all cursor-pointer">
                                         <div className="flex items-center gap-2 mb-4">
                                             <CheckCircle className="w-5 h-5 text-green-400" />
                                             <span className="text-green-400 text-sm font-semibold">COMPLETED</span>
                                         </div>
-                                        <h3 className="text-xl font-bold text-white mb-3 group-hover:text-yellow-300 transition-colors">
+                                        <h3 className="text-xl font-bold text-foreground mb-3 group-hover:text-yellow-300 transition-colors">
                                             {comp.name}
                                         </h3>
                                         {comp.winner && (
@@ -230,7 +230,7 @@ export default function CompetitionsShowcase() {
                                                     <Trophy className="w-8 h-8 text-yellow-400" />
                                                     <div>
                                                         <p className="text-xs text-yellow-400 mb-1">CHAMPION</p>
-                                                        <p className="text-white font-bold text-lg">{comp.winner.name}</p>
+                                                        <p className="text-foreground font-bold text-lg">{comp.winner.name}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -266,7 +266,7 @@ export default function CompetitionsShowcase() {
                 competitions.completed.length === 0 && (
                     <div className="text-center py-20">
                         <Trophy className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-white mb-2">No Competitions Yet</h3>
+                        <h3 className="text-2xl font-bold text-foreground mb-2">No Competitions Yet</h3>
                         <p className="text-gray-400">Check back soon for upcoming tournaments!</p>
                     </div>
                 )}

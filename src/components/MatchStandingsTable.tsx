@@ -49,17 +49,17 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
 
     if (!competitionId) {
         return (
-            <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                <Table2 className="w-16 h-16 mx-auto mb-4 text-white/20" />
+            <div className="bg-muted border border-border rounded-[24px] p-12 text-center">
+                <Table2 className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
                 <h3 className="text-xl font-bold mb-2">Standings Unavailable</h3>
-                <p className="text-white/60">This match isn't linked to a competition table.</p>
+                <p className="text-foreground/60">This match isn't linked to a competition table.</p>
             </div>
         );
     }
 
     if (loading && standings.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 text-white/40">
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-foreground/40">
                 <Loader2 className="w-8 h-8 animate-spin" />
                 <span className="text-sm font-semibold uppercase tracking-wider">Loading table…</span>
             </div>
@@ -68,10 +68,10 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
 
     if (standings.length === 0) {
         return (
-            <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                <Table2 className="w-16 h-16 mx-auto mb-4 text-white/20" />
+            <div className="bg-muted border border-border rounded-[24px] p-12 text-center">
+                <Table2 className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
                 <h3 className="text-xl font-bold mb-2">No Standings Available</h3>
-                <p className="text-white/60">The table for this competition hasn't been published yet.</p>
+                <p className="text-foreground/60">The table for this competition hasn't been published yet.</p>
             </div>
         );
     }
@@ -87,9 +87,9 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
     const columns = sport?.toLowerCase() === 'basketball' ? BASKETBALL_COLUMNS : FOOTBALL_COLUMNS;
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[24px] overflow-hidden">
+        <div className="bg-muted border border-border rounded-[24px] overflow-hidden">
             {matchTeamRow?.groupName && (
-                <div className="px-4 pt-4 text-xs font-bold uppercase tracking-widest text-white/40">
+                <div className="px-4 pt-4 text-xs font-bold uppercase tracking-widest text-foreground/40">
                     Group {matchTeamRow.groupName}
                 </div>
             )}
@@ -99,7 +99,7 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
                     names, many teams), not the expected default. */}
                 <div>
                     {/* Header */}
-                    <div className="flex items-center gap-1 px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-white/40 border-b border-white/10">
+                    <div className="flex items-center gap-1 px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-foreground/40 border-b border-border">
                         <span className="w-5 text-center flex-shrink-0">Pos</span>
                         <span className="flex-1">Team</span>
                         {columns.map(col => (
@@ -117,25 +117,25 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
                         return (
                             <div
                                 key={row.teamId}
-                                className={`flex items-center gap-1 px-3 py-3 border-b border-white/5 last:border-b-0 ${isMatchTeam ? 'bg-white/5' : ''
+                                className={`flex items-center gap-1 px-3 py-3 border-b border-border last:border-b-0 ${isMatchTeam ? 'bg-muted' : ''
                                     }`}
                             >
-                                <span className="w-5 text-center text-sm text-white/60 flex-shrink-0">{index + 1}</span>
+                                <span className="w-5 text-center text-sm text-foreground/60 flex-shrink-0">{index + 1}</span>
                                 <div className="flex-1 flex items-center gap-2 min-w-0">
-                                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                                         <TeamLogo logo={row.teamLogo} name={row.teamName} size="sm" />
                                     </div>
                                     <div className="min-w-0">
                                         <div className="text-sm font-bold truncate">{row.teamName}</div>
                                         {row.university && (
-                                            <div className="text-[10px] text-white/40 uppercase tracking-wide truncate">{row.university}</div>
+                                            <div className="text-[10px] text-foreground/40 uppercase tracking-wide truncate">{row.university}</div>
                                         )}
                                     </div>
                                 </div>
                                 {columns.map(col => (
                                     <span
                                         key={col.key}
-                                        className={`w-8 text-center text-sm flex-shrink-0 ${col.key === 'points' ? 'font-bold text-primary' : 'text-white/80'}`}
+                                        className={`w-8 text-center text-sm flex-shrink-0 ${col.key === 'points' ? 'font-bold text-primary' : 'text-foreground/80'}`}
                                     >
                                         {formatCell(col.key, row[col.key] as number)}
                                     </span>
@@ -150,7 +150,7 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
                 param needed to land there. */}
             <Link
                 href={`/competitions/${competitionId}`}
-                className="flex items-center justify-center gap-1 px-4 py-3 text-xs font-bold uppercase tracking-widest text-white/60 hover:text-white border-t border-white/10 transition-colors"
+                className="flex items-center justify-center gap-1 px-4 py-3 text-xs font-bold uppercase tracking-widest text-foreground/60 hover:text-foreground border-t border-border transition-colors"
             >
                 View Full Standings
                 <ChevronRight className="w-3.5 h-3.5" />

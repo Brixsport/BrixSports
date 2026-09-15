@@ -24,9 +24,9 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
     if (!stats) {
         return (
             <div className="text-center py-20">
-                <Activity className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">No statistics available</h3>
-                <p className="text-white/40">Match statistics will appear here during the game</p>
+                <Activity className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">No statistics available</h3>
+                <p className="text-foreground/40">Match statistics will appear here during the game</p>
             </div>
         );
     }
@@ -39,7 +39,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
         const awayLeads = awayValue > homeValue;
 
         return (
-            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center justify-between rounded-xl border border-border bg-muted p-4">
                 {homeLeads ? (
                     <span className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-white font-bold">
                         {homeValue}{unit}
@@ -47,7 +47,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
                 ) : (
                     <span className="font-semibold">{homeValue}{unit}</span>
                 )}
-                <span className="text-sm text-white/60">{label}</span>
+                <span className="text-sm text-foreground/60">{label}</span>
                 {awayLeads ? (
                     <span className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-white font-bold">
                         {awayValue}{unit}
@@ -67,13 +67,13 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                     <span className="font-semibold">{homeValue}{unit}</span>
-                    <div className="flex items-center gap-2 text-white/60">
+                    <div className="flex items-center gap-2 text-foreground/60">
                         {icon}
                         <span>{label}</span>
                     </div>
                     <span className="font-semibold">{awayValue}{unit}</span>
                 </div>
-                <div className="relative h-2 bg-white/10 rounded-full overflow-hidden">
+                <div className="relative h-2 bg-muted rounded-full overflow-hidden">
                     {/* Home Team Bar (from left) */}
                     <motion.div
                         initial={{ width: 0 }}
@@ -209,7 +209,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
                         <button
                             key={q}
                             onClick={() => setQuarter(q)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${quarter === q ? 'bg-primary text-white' : 'bg-white/5 text-white/60 hover:text-white'
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${quarter === q ? 'bg-primary text-white' : 'bg-muted text-foreground/60 hover:text-foreground'
                                 }`}
                         >
                             {QUARTER_LABELS[q]}
@@ -263,7 +263,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
     return (
         <div className="max-w-4xl mx-auto">
             {/* Team Headers */}
-            <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/10">
+            <div className="flex items-center justify-between mb-8 pb-4 border-b border-border">
                 <div className="flex items-center gap-3">
                     <div
                         className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -277,12 +277,12 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
                     {sport !== 'Football' && (
                         <div>
                             <div className="font-bold">{homeTeam.name}</div>
-                            <div className="text-sm text-white/60">{homeTeam.shortName}</div>
+                            <div className="text-sm text-foreground/60">{homeTeam.shortName}</div>
                         </div>
                     )}
                 </div>
 
-                <div className="text-white/60 font-semibold">VS</div>
+                <div className="text-foreground/60 font-semibold">VS</div>
 
                 <div className="flex items-center gap-3 flex-row-reverse">
                     <div
@@ -294,7 +294,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
                     {sport !== 'Football' && (
                         <div className="text-right">
                             <div className="font-bold">{awayTeam.name}</div>
-                            <div className="text-sm text-white/60">{awayTeam.shortName}</div>
+                            <div className="text-sm text-foreground/60">{awayTeam.shortName}</div>
                         </div>
                     )}
                 </div>
@@ -304,7 +304,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: 
             {sport === 'Football' && renderFootballStats()}
             {sport === 'Basketball' && renderBasketballStats()}
             {sport !== 'Football' && sport !== 'Basketball' && (
-                <div className="text-center py-10 text-white/60">
+                <div className="text-center py-10 text-foreground/60">
                     Statistics for {sport} coming soon
                 </div>
             )}

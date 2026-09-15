@@ -87,7 +87,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
             case 'ASSIST':
                 return 'bg-orange-500/20 border-orange-500/50 text-orange-500';
             default:
-                return 'bg-white/10 border-white/20 text-white/80';
+                return 'bg-muted border-border text-foreground/80';
         }
     };
 
@@ -102,15 +102,15 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         <span className="font-bold text-lg">⚽ GOAL!</span>
                         <div className="mt-1">
                             <span className="font-semibold">{playerName}</span>
-                            {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                            {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                         </div>
                         {event.relatedPlayer && (
-                            <div className="text-sm text-white/60 mt-1">
+                            <div className="text-sm text-foreground/60 mt-1">
                                 Assist: {event.relatedPlayer.name} #{event.relatedPlayer.number}
                             </div>
                         )}
                         {event.detail && (
-                            <div className="text-xs text-white/50 mt-1 italic">{event.detail}</div>
+                            <div className="text-xs text-foreground/50 mt-1 italic">{event.detail}</div>
                         )}
                     </div>
                 );
@@ -120,10 +120,10 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         <span className="font-bold">🟨 Yellow Card</span>
                         <div className="mt-1">
                             <span className="font-semibold">{playerName}</span>
-                            {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                            {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                         </div>
                         {event.detail && (
-                            <div className="text-sm text-white/60 mt-1">{event.detail}</div>
+                            <div className="text-sm text-foreground/60 mt-1">{event.detail}</div>
                         )}
                     </div>
                 );
@@ -133,10 +133,10 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         <span className="font-bold">🟥 Red Card</span>
                         <div className="mt-1">
                             <span className="font-semibold">{playerName}</span>
-                            {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                            {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                         </div>
                         {event.detail && (
-                            <div className="text-sm text-white/60 mt-1">{event.detail}</div>
+                            <div className="text-sm text-foreground/60 mt-1">{event.detail}</div>
                         )}
                     </div>
                 );
@@ -164,7 +164,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         <span className="font-bold">🧤 Great Save!</span>
                         <div className="mt-1">
                             <span className="font-semibold">{playerName}</span>
-                            {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                            {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                         </div>
                     </div>
                 );
@@ -174,7 +174,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         <span className="font-bold text-lg">🎯 3-POINTER!</span>
                         <div className="mt-1">
                             <span className="font-semibold">{playerName}</span>
-                            {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                            {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                         </div>
                     </div>
                 );
@@ -184,7 +184,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         <span className="font-bold">🏀 2-Point Score</span>
                         <div className="mt-1">
                             <span className="font-semibold">{playerName}</span>
-                            {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                            {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                         </div>
                     </div>
                 );
@@ -201,7 +201,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         {playerName !== 'Unknown' && (
                             <div className="mt-1">
                                 <span className="font-semibold">{playerName}</span>
-                                {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                                {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                             </div>
                         )}
                     </div>
@@ -273,9 +273,9 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
     if (events.length === 0) {
         return (
             <div className="text-center py-20">
-                <Activity className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">No events yet</h3>
-                <p className="text-white/40">Match events will appear here as they happen</p>
+                <Activity className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">No events yet</h3>
+                <p className="text-foreground/40">Match events will appear here as they happen</p>
             </div>
         );
     }
@@ -296,8 +296,8 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                             key={key}
                             onClick={() => setFilter(key as EventFilter)}
                             className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 ${filter === key
-                                ? 'bg-primary text-black'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-white/10'
                                 }`}
                         >
                             <Icon size={14} />
@@ -314,7 +314,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                         {/* Period Header */}
                         <div className="flex items-center gap-4 mb-6">
                             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-                            <div className="px-4 py-2 bg-white/5 rounded-full border border-white/10">
+                            <div className="px-4 py-2 bg-muted rounded-full border border-border">
                                 <span className="font-semibold text-sm">{period}</span>
                             </div>
                             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
@@ -362,7 +362,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
 
                                                     {/* Team Badge */}
                                                     {event.team && (
-                                                        <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5">
+                                                        <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-muted">
                                                             <div
                                                                 className="w-3 h-3 rounded-full"
                                                                 style={{ backgroundColor: event.team.color }}
@@ -390,7 +390,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                                                                 initial={{ height: 0, opacity: 0 }}
                                                                 animate={{ height: 'auto', opacity: 1 }}
                                                                 exit={{ height: 0, opacity: 0 }}
-                                                                className="mt-3 pt-3 border-t border-white/10 text-xs text-white/60"
+                                                                className="mt-3 pt-3 border-t border-border text-xs text-foreground/60"
                                                             >
                                                                 <pre className="whitespace-pre-wrap">
                                                                     {JSON.stringify(safeParseEventValue(event.value), null, 2)}
@@ -404,9 +404,9 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                                                 {event.value && (
                                                     <div className="flex-shrink-0">
                                                         {isExpanded ? (
-                                                            <ChevronUp size={16} className="text-white/40" />
+                                                            <ChevronUp size={16} className="text-foreground/40" />
                                                         ) : (
-                                                            <ChevronDown size={16} className="text-white/40" />
+                                                            <ChevronDown size={16} className="text-foreground/40" />
                                                         )}
                                                     </div>
                                                 )}

@@ -113,7 +113,7 @@ export default function NewsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white pt-20 pb-12">
+        <div className="min-h-screen bg-background text-foreground pt-20 pb-12">
             <div className="max-w-7xl mx-auto px-4">
                 {/* Header */}
                 <motion.div
@@ -123,11 +123,11 @@ export default function NewsPage() {
                 >
                     <div className="flex items-center gap-2 mb-2">
                         <BackButton />
-                        <h1 className="text-4xl font-display font-bold text-white">
+                        <h1 className="text-4xl font-display font-bold text-foreground">
                             LATEST NEWS
                         </h1>
                     </div>
-                    <p className="text-white/60 text-lg">
+                    <p className="text-foreground/60 text-lg">
                         Stay updated with the latest sports news and transfers
                     </p>
                 </motion.div>
@@ -141,13 +141,13 @@ export default function NewsPage() {
                 >
                     {/* Search Bar */}
                     <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40" />
                         <input
                             type="text"
                             placeholder="Search news..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-12 pr-4 py-4 bg-[#0a0a0a] border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-primary/50 transition-all font-medium"
+                            className="w-full pl-12 pr-4 py-4 bg-muted border border-border rounded-xl text-foreground placeholder-foreground/40 focus:outline-none focus:border-primary/50 transition-all font-medium"
                         />
                     </div>
 
@@ -161,8 +161,8 @@ export default function NewsPage() {
                                     key={category.id}
                                     onClick={() => setSelectedCategory(category.id)}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wider whitespace-nowrap transition-all ${isActive
-                                        ? 'bg-primary text-black'
-                                        : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted text-foreground/60 hover:bg-muted/80 hover:text-foreground'
                                         }`}
                                 >
                                     <Icon className="w-4 h-4" />
@@ -181,7 +181,7 @@ export default function NewsPage() {
                         transition={{ delay: 0.2 }}
                         className="mb-12"
                     >
-                        <h2 className="text-xl font-bold uppercase tracking-wider text-white/80 mb-6 flex items-center gap-2">
+                        <h2 className="text-xl font-bold uppercase tracking-wider text-foreground/80 mb-6 flex items-center gap-2">
                             <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
                             Featured Stories
                         </h2>
@@ -198,7 +198,7 @@ export default function NewsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {[...Array(6)].map((_, i) => (
                             <div key={i} className="animate-pulse">
-                                <div className="bg-white/5 rounded-xl h-80" />
+                                <div className="bg-muted rounded-xl h-80" />
                             </div>
                         ))}
                     </div>
@@ -208,9 +208,9 @@ export default function NewsPage() {
                         animate={{ opacity: 1 }}
                         className="text-center py-20"
                     >
-                        <Newspaper className="w-16 h-16 text-white/10 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-white/40 mb-2">No news found</h3>
-                        <p className="text-white/20">Try adjusting your filters or search query</p>
+                        <Newspaper className="w-16 h-16 text-foreground/10 mx-auto mb-4" />
+                        <h3 className="text-2xl font-bold text-foreground/40 mb-2">No news found</h3>
+                        <p className="text-foreground/20">Try adjusting your filters or search query</p>
                     </motion.div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -234,7 +234,7 @@ function FeaturedNewsCard({ article, index }: { article: NewsArticle; index: num
             transition={{ delay: index * 0.1 }}
         >
             <Link href={`/news/${article.slug}`}>
-                <div className="group relative h-80 rounded-xl overflow-hidden cursor-pointer border border-white/10 hover:border-primary/50 transition-colors">
+                <div className="group relative h-80 rounded-xl overflow-hidden cursor-pointer border border-border hover:border-primary/50 transition-colors">
                     {/* Image */}
                     {article.imageUrl ? (
                         <Image
@@ -244,7 +244,7 @@ function FeaturedNewsCard({ article, index }: { article: NewsArticle; index: num
                             className="object-cover group-hover:scale-105 transition-transform duration-700"
                         />
                     ) : (
-                        <div className="absolute inset-0 bg-[#0a0a0a]" />
+                        <div className="absolute inset-0 bg-card" />
                     )}
 
                     {/* Overlay */}
@@ -258,13 +258,13 @@ function FeaturedNewsCard({ article, index }: { article: NewsArticle; index: num
                                 BREAKING
                             </div>
                         )}
-                        <h3 className="text-xl font-bold text-white mb-2 line-clamp-2 group-hover:text-primary transition-colors font-display tracking-wide">
+                        <h3 className="text-xl font-bold text-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors font-display tracking-wide">
                             {article.title}
                         </h3>
-                        <p className="text-white/60 text-sm line-clamp-2 mb-3">
+                        <p className="text-foreground/60 text-sm line-clamp-2 mb-3">
                             {article.excerpt}
                         </p>
-                        <div className="flex items-center gap-4 text-xs text-white/40 font-bold uppercase tracking-wider">
+                        <div className="flex items-center gap-4 text-xs text-foreground/40 font-bold uppercase tracking-wider">
                             <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
                                 {new Date(article.publishedAt).toLocaleDateString()}
@@ -296,9 +296,9 @@ function NewsCard({ article, index, getCategoryColor, formatDate }: {
             transition={{ delay: index * 0.05 }}
         >
             <Link href={`/news/${article.slug}`}>
-                <div className="group relative bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden hover:border-primary/50 transition-all duration-300">
+                <div className="group relative bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 transition-all duration-300">
                     {/* Image */}
-                    <div className="relative h-48 overflow-hidden bg-white/5">
+                    <div className="relative h-48 overflow-hidden bg-muted">
                         {article.imageUrl ? (
                             <Image
                                 src={article.imageUrl}
@@ -307,7 +307,7 @@ function NewsCard({ article, index, getCategoryColor, formatDate }: {
                                 className="object-cover group-hover:scale-105 transition-transform duration-700"
                             />
                         ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-white/10">
+                            <div className="absolute inset-0 flex items-center justify-center text-foreground/10">
                                 <Newspaper size={40} />
                             </div>
                         )}
@@ -327,15 +327,15 @@ function NewsCard({ article, index, getCategoryColor, formatDate }: {
 
                     {/* Content */}
                     <div className="p-5">
-                        <h3 className="text-lg font-bold text-white mb-2 line-clamp-2 group-hover:text-primary transition-colors font-display tracking-wide">
+                        <h3 className="text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors font-display tracking-wide">
                             {article.title}
                         </h3>
-                        <p className="text-white/50 text-sm line-clamp-3 mb-4">
+                        <p className="text-foreground/50 text-sm line-clamp-3 mb-4">
                             {article.excerpt}
                         </p>
 
                         {/* Meta */}
-                        <div className="flex items-center justify-between text-xs text-white/40 font-bold uppercase tracking-wider">
+                        <div className="flex items-center justify-between text-xs text-foreground/40 font-bold uppercase tracking-wider">
                             <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
                                 {formatDate(article.publishedAt)}

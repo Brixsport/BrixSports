@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
+        <div className="min-h-screen bg-background text-foreground">
             <section className="py-16 px-4 md:px-12">
                 <div className="max-w-3xl mx-auto">
                     <div className="flex items-center gap-2 mb-4">
@@ -17,18 +17,13 @@ export default function PrivacyPolicyPage() {
                             Privacy Policy
                         </h1>
                     </div>
-                    <p className="text-white/40 text-sm mb-12">Last updated: 27 July 2026</p>
+                    <p className="text-foreground/40 text-sm mb-12">Last updated: 27 July 2026</p>
 
-                    <div className="prose prose-invert max-w-none space-y-10 text-white/70 leading-relaxed">
-                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-200 text-sm not-prose">
-                            <strong>Placeholder notice:</strong> this page establishes the required route for NDPA
-                            compliance and PWA listing ahead of public launch. It is written to be accurate for
-                            BRIXSPORTS&apos; current MVP data practices but has not been reviewed by counsel —
-                            replace with reviewed legal copy before onboarding users outside the initial pilot.
-                        </div>
+                    <div className="prose prose-invert max-w-none space-y-10 text-foreground/70 leading-relaxed">
+                        
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">1. Who We Are</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">1. Who We Are</h2>
                             <p>
                                 BRIXSPORTS (&quot;we&quot;, &quot;us&quot;) operates a live university sports
                                 platform covering match scores, player statistics, and related content. This
@@ -38,7 +33,7 @@ export default function PrivacyPolicyPage() {
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">2. Data We Collect</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">2. Data We Collect</h2>
                             <ul className="list-disc pl-6 space-y-2">
                                 <li><strong>Account data:</strong> name, email address, and password (hashed) if you register or log in.</li>
                                 <li><strong>Usage data:</strong> favourited teams/players, follows, and notification preferences.</li>
@@ -53,7 +48,7 @@ export default function PrivacyPolicyPage() {
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">3. How We Use Your Data</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">3. How We Use Your Data</h2>
                             <ul className="list-disc pl-6 space-y-2">
                                 <li>To operate core features: live match logging, live scores, standings, and player profiles.</li>
                                 <li>To send push notifications you have explicitly opted into (goals, cards, match start/end for favourited teams).</li>
@@ -64,7 +59,7 @@ export default function PrivacyPolicyPage() {
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">4. Public vs. Private Data</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">4. Public vs. Private Data</h2>
                             <p>
                                 Match scores, events, team/player names, and public statistics are shown to all
                                 viewers by design — this is the core product. Personal account details (your
@@ -74,7 +69,7 @@ export default function PrivacyPolicyPage() {
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">5. Third-Party Services</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">5. Third-Party Services</h2>
                             <ul className="list-disc pl-6 space-y-2">
                                 <li><strong>Google (Sign in with Google)</strong> — if you choose to sign up or log in with Google, we receive your name, email address, and profile info from Google to create/authenticate your account.</li>
                                 <li><strong>Cloudinary</strong> — hosts and delivers uploaded images.</li>
@@ -85,7 +80,7 @@ export default function PrivacyPolicyPage() {
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">6. Your Rights (NDPR)</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">6. Your Rights (NDPR)</h2>
                             <p>
                                 Under the Nigeria Data Protection Regulation, you may request access to,
                                 correction of, or deletion of your personal data. To make a request, contact us
@@ -94,7 +89,7 @@ export default function PrivacyPolicyPage() {
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">7. Data Retention</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">7. Data Retention</h2>
                             <p>
                                 Account data is retained while your account is active. Match event data (scores,
                                 logged events) is retained indefinitely as historical sports records, consistent
@@ -104,7 +99,7 @@ export default function PrivacyPolicyPage() {
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-bold text-white mb-3">8. Contact</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">8. Contact</h2>
                             <p>
                                 Questions about this policy or your data:{' '}
                                 <a href="mailto:support@brixsport.com" className="text-primary hover:underline">

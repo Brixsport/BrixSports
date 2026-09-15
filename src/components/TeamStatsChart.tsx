@@ -22,7 +22,7 @@ export default function TeamStatsChart({ stats }: TeamStatsChartProps) {
     // If no data, show empty state or handle gracefully
     if (pieData.length === 0) {
         return (
-            <div className="absolute inset-0 flex items-center justify-center text-white/40 font-medium">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground/40 font-medium">
                 No stats available
             </div>
         );
@@ -57,7 +57,7 @@ export default function TeamStatsChart({ stats }: TeamStatsChartProps) {
             </ResponsiveContainer>
             <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
                 <span className="text-3xl font-black">{stats.played}</span>
-                <span className="text-xs text-white/40 uppercase font-bold">Total</span>
+                <span className="text-xs text-foreground/40 uppercase font-bold">Total</span>
             </div>
         </>
     );

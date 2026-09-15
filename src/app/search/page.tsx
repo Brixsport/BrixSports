@@ -17,7 +17,7 @@ interface SearchResults {
 
 export default function SearchPage() {
     return (
-        <div className="min-h-screen bg-[#050505] text-white pb-20">
+        <div className="min-h-screen bg-background text-foreground pb-20">
             <React.Suspense fallback={
                 <div className="flex items-center justify-center py-20">
                     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -85,18 +85,18 @@ function SearchContent() {
     return (
         <>
             {/* Header */}
-            <div className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10">
+            <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border">
                 <div className="max-w-7xl mx-auto px-4 py-6">
                     <div className="flex items-center gap-4 mb-4">
                         <button
                             onClick={() => router.back()}
-                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                            className="p-2 hover:bg-muted rounded-lg transition-colors"
                         >
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div>
                             <h1 className="text-2xl font-bold">Search Results</h1>
-                            <p className="text-white/60">
+                            <p className="text-foreground/60">
                                 {loading ? 'Searching...' : `${getTotalResults()} results for "${query}"`}
                             </p>
                         </div>
@@ -107,8 +107,8 @@ function SearchContent() {
                         <button
                             onClick={() => setActiveTab('all')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'all'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                 }`}
                         >
                             All ({getTotalResults()})
@@ -116,8 +116,8 @@ function SearchContent() {
                         <button
                             onClick={() => setActiveTab('teams')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'teams'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                 }`}
                         >
                             <Users className="w-4 h-4 inline mr-2" />
@@ -126,8 +126,8 @@ function SearchContent() {
                         <button
                             onClick={() => setActiveTab('players')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'players'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                 }`}
                         >
                             <TrendingUp className="w-4 h-4 inline mr-2" />
@@ -136,8 +136,8 @@ function SearchContent() {
                         <button
                             onClick={() => setActiveTab('matches')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'matches'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                 }`}
                         >
                             <Calendar className="w-4 h-4 inline mr-2" />
@@ -146,8 +146,8 @@ function SearchContent() {
                         <button
                             onClick={() => setActiveTab('competitions')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'competitions'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                 }`}
                         >
                             <Trophy className="w-4 h-4 inline mr-2" />
@@ -163,7 +163,7 @@ function SearchContent() {
                                 onClick={() => setSelectedSport(selectedSport === sport ? null : sport)}
                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedSport === sport
                                     ? 'bg-purple-600 text-white'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                    : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                     }`}
                             >
                                 {sport === 'Football' ? '⚽' : sport === 'Basketball' ? '🏀' : '🏃'} {sport}
@@ -181,9 +181,9 @@ function SearchContent() {
                     </div>
                 ) : !results || getTotalResults() === 0 ? (
                     <div className="text-center py-20">
-                        <Search className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                        <h3 className="text-xl font-semibold text-white/60 mb-2">No results found</h3>
-                        <p className="text-white/40">Try a different search term or adjust your filters</p>
+                        <Search className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground/60 mb-2">No results found</h3>
+                        <p className="text-foreground/40">Try a different search term or adjust your filters</p>
                     </div>
                 ) : (
                     <div className="space-y-8">
@@ -203,7 +203,7 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <Link href={`/teams/${team.id}`}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center gap-3">
                                                         <div
                                                             className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -213,7 +213,7 @@ function SearchContent() {
                                                         </div>
                                                         <div>
                                                             <div className="font-bold text-lg">{team.name}</div>
-                                                            <div className="text-sm text-white/60">{team.sport}</div>
+                                                            <div className="text-sm text-foreground/60">{team.sport}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -240,14 +240,14 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <div onClick={() => setSelectedPlayer(player)}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                                                             <span className="text-xl font-bold">#{player.number}</span>
                                                         </div>
                                                         <div className="flex-1">
                                                             <div className="font-bold text-lg">{player.name}</div>
-                                                            <div className="text-sm text-white/60">
+                                                            <div className="text-sm text-foreground/60">
                                                                 {player.position} • {player.team?.name}
                                                             </div>
                                                         </div>
@@ -256,7 +256,7 @@ function SearchContent() {
                                                                 <div className="text-2xl font-bold text-primary">
                                                                     {player.rating.toFixed(1)}
                                                                 </div>
-                                                                <div className="text-xs text-white/60">Rating</div>
+                                                                <div className="text-xs text-foreground/60">Rating</div>
                                                             </div>
                                                         )}
                                                     </div>
@@ -284,14 +284,14 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <Link href={`/competitions/${comp.id}`}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center gap-3">
                                                         {comp.logo && (
                                                             <img src={comp.logo} alt={comp.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
                                                         )}
                                                         <div>
                                                             <div className="font-bold text-lg">{comp.name}</div>
-                                                            <div className="text-sm text-white/60">
+                                                            <div className="text-sm text-foreground/60">
                                                                 {comp.sport} • {comp.season}
                                                             </div>
                                                         </div>
@@ -320,17 +320,17 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <Link href={`/matches/${match.id}`}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-sm text-white/60">{match.competition?.name}</span>
-                                                        <span className="text-xs text-white/40">
+                                                        <span className="text-sm text-foreground/60">{match.competition?.name}</span>
+                                                        <span className="text-xs text-foreground/40">
                                                             {new Date(match.startTime).toLocaleDateString()}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-bold">{match.homeTeam?.shortName}</span>
-                                                            <span className="text-white/40">vs</span>
+                                                            <span className="text-foreground/40">vs</span>
                                                             <span className="font-bold">{match.awayTeam?.shortName}</span>
                                                         </div>
                                                         {match.status !== 'UPCOMING' && (
