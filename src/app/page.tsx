@@ -35,6 +35,15 @@ const isValidImagePath = (path: string | undefined): boolean => {
   return path.startsWith('/') || path.startsWith('http');
 };
 
+// BACKLOG-387: module-level stale-while-revalidate cache for the homepage's
+// matches fetch. Survives component unmount/remount (a client-side nav away
+// and back), so tapping into a match then hitting back doesn't show a full
+// skeleton + refetch for data that's still fresh -- only a real cold load or
+// a cache older than the poll interval does. TTL matches the existing 15s
+// poll interval below, not picked independently.
+const MATCHES_CACHE_TTL_MS = 15000;
+let matchesCache: { matches: Match[]; timestamp: number } | null = null;
+
 export default function Home() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('ALL');
@@ -176,6 +185,7 @@ export default function Home() {
       }
 
       setMatches(allMatches);
+      matchesCache = { matches: allMatches, timestamp: Date.now() };
       return allMatches;
     } catch (error) {
       console.error('Error fetching matches:', error);
@@ -186,7 +196,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchAllMatches(true);
+    // BACKLOG-387: serve a fresh-enough cache immediately (no skeleton) on
+    // remount, then silently revalidate in the background -- covers the
+    // common "tap into a match, tap back to Fixtures" case, which previously
+    // always re-ran the full loading-state fetch even when the page was just
+    // visited seconds ago.
+    const isFresh = matchesCache && (Date.now() - matchesCache.timestamp) < MATCHES_CACHE_TTL_MS;
+    if (isFresh) {
+      setMatches(matchesCache!.matches);
+      setLoading(false);
+      fetchAllMatches(false);
+    } else {
+      fetchAllMatches(true);
+    }
 
     // Poll every 15s -- stopgap until a real WS subscription is wired to the
     // homepage, matching /live/page.tsx's existing pattern (BUG-020/BUG-149).
