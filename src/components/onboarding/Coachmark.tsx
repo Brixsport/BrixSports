@@ -81,7 +81,7 @@ export function Coachmark({
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 onEscapeKeyDown={dismiss}
                 onPointerDownOutside={(e) => e.preventDefault()}
-                className="w-64 bg-primary text-black border-primary"
+                className="w-64 bg-primary text-primary-foreground border-primary"
             >
                 <h4 className="font-bold text-sm mb-1">{title}</h4>
                 <p className="text-xs mb-3">{body}</p>

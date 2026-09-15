@@ -122,21 +122,21 @@ export function AuthModal() {
                         initial={{ scale: 0.9, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.9, opacity: 0 }}
-                        className="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden"
+                        className="bg-card border border-border rounded-2xl w-full max-w-md overflow-hidden"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="relative p-6 border-b border-white/10">
+                        <div className="relative p-6 border-b border-border">
                             <button
                                 onClick={closeAuthModal}
-                                className="absolute top-4 right-4 p-2 hover:bg-white/5 rounded-lg transition-colors"
+                                className="absolute top-4 right-4 p-2 hover:bg-muted rounded-lg transition-colors"
                             >
-                                <X size={20} className="text-white/60" />
+                                <X size={20} className="text-foreground/60" />
                             </button>
-                            <h2 className="text-2xl font-bold text-white">
+                            <h2 className="text-2xl font-bold text-foreground">
                                 {authModalMode === 'login' ? 'Welcome Back' : 'Create Account'}
                             </h2>
-                            <p className="text-white/60 text-sm mt-1">
+                            <p className="text-foreground/60 text-sm mt-1">
                                 {authModalMode === 'login'
                                     ? 'Sign in to continue'
                                     : 'Join the community today'}
@@ -170,16 +170,16 @@ export function AuthModal() {
                             {/* Name Field (Register only) */}
                             {authModalMode === 'register' && (
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-white/80">Full Name</label>
+                                    <label className="text-sm font-medium text-foreground/80">Full Name</label>
                                     <div className="relative">
-                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40" />
                                         <input
                                             type="text"
                                             value={name}
                                             onChange={(e) => setName(e.target.value)}
                                             placeholder="John Doe"
                                             required
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                            className="w-full bg-muted border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                                         />
                                     </div>
                                 </div>
@@ -187,25 +187,25 @@ export function AuthModal() {
 
                             {/* Email Field */}
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-white/80">Email</label>
+                                <label className="text-sm font-medium text-foreground/80">Email</label>
                                 <div className="relative">
-                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40" />
                                     <input
                                         type="email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         placeholder="you@example.com"
                                         required
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                        className="w-full bg-muted border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                                     />
                                 </div>
                             </div>
 
                             {/* Password Field */}
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-white/80">Password</label>
+                                <label className="text-sm font-medium text-foreground/80">Password</label>
                                 <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40" />
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         value={password}
@@ -213,17 +213,17 @@ export function AuthModal() {
                                         placeholder="••••••••"
                                         required
                                         minLength={authModalMode === 'register' ? 8 : undefined}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-12 py-3 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                        className="w-full bg-muted border border-border rounded-lg pl-10 pr-12 py-3 text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/5 rounded transition-colors"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded transition-colors"
                                     >
                                         {showPassword ? (
-                                            <EyeOff className="w-5 h-5 text-white/40" />
+                                            <EyeOff className="w-5 h-5 text-foreground/40" />
                                         ) : (
-                                            <Eye className="w-5 h-5 text-white/40" />
+                                            <Eye className="w-5 h-5 text-foreground/40" />
                                         )}
                                     </button>
                                 </div>
@@ -231,13 +231,13 @@ export function AuthModal() {
                                 {/* Password Strength Indicator (Register only) */}
                                 {authModalMode === 'register' && password.length > 0 && (
                                     <div className="space-y-1">
-                                        <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                                        <div className="h-1 bg-muted rounded-full overflow-hidden">
                                             <div
                                                 className={`h-full transition-all duration-300 ${getPasswordStrengthColor()}`}
                                                 style={{ width: getPasswordStrengthWidth() }}
                                             />
                                         </div>
-                                        <p className="text-xs text-white/60">
+                                        <p className="text-xs text-foreground/60">
                                             Password strength: <span className="capitalize">{passwordStrength}</span>
                                         </p>
                                     </div>
@@ -248,7 +248,7 @@ export function AuthModal() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 font-bold py-3 rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                                className="w-full bg-primary hover:bg-primary/90 disabled:bg-muted disabled:cursor-not-allowed text-primary-foreground disabled:text-muted-foreground font-bold py-3 rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]"
                             >
                                 {loading ? (
                                     <div className="flex items-center justify-center gap-2">
@@ -263,7 +263,7 @@ export function AuthModal() {
 
                         {/* Footer */}
                         <div className="p-6 pt-0 text-center">
-                            <p className="text-sm text-white/60">
+                            <p className="text-sm text-foreground/60">
                                 {authModalMode === 'login' ? "Don't have an account? " : "Already have an account? "}
                                 <button
                                     onClick={() => setAuthModalMode(authModalMode === 'login' ? 'register' : 'login')}

@@ -132,13 +132,13 @@ export default function DashboardPage() {
     ];
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
+        <div className="min-h-screen bg-background text-foreground p-6 md:p-12">
             <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header */}
                 <div>
                     <div className="flex items-center gap-3 mb-2">
                         <Zap size={16} className="text-primary" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
                             Your Feed
                         </span>
                     </div>
@@ -151,7 +151,7 @@ export default function DashboardPage() {
                         </div>
                         <Link
                             href="/profile"
-                            className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center gap-2 text-sm font-black uppercase tracking-widest w-fit"
+                            className="px-6 py-3 bg-muted border border-border rounded-2xl hover:bg-muted/70 transition-all flex items-center gap-2 text-sm font-black uppercase tracking-widest w-fit"
                         >
                             View Profile
                             <ArrowRight size={16} />
@@ -199,8 +199,8 @@ export default function DashboardPage() {
                                     key={filter.key}
                                     onClick={() => setActiveFilter(filter.key)}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all text-sm font-bold ${activeFilter === filter.key
-                                        ? 'bg-primary text-black'
-                                        : 'bg-white/5 border border-white/10 text-white/60 hover:bg-white/10'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted border border-border text-foreground/60 hover:bg-muted/70'
                                         }`}
                                 >
                                     {filter.icon}
@@ -210,8 +210,8 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Personalized Feed */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
-                            <h2 className="text-sm font-black uppercase tracking-widest text-white/60 mb-4 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6">
+                            <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60 mb-4 flex items-center gap-2">
                                 <TrendingUp size={16} className="text-primary" />
                                 For You
                             </h2>
@@ -223,8 +223,8 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Recent Activity */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
-                            <h2 className="text-sm font-black uppercase tracking-widest text-white/60 mb-4 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6">
+                            <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60 mb-4 flex items-center gap-2">
                                 <Activity size={16} className="text-primary" />
                                 Recent Activity
                             </h2>
@@ -239,9 +239,9 @@ export default function DashboardPage() {
                     {/* Right Column - Upcoming Matches & Stats */}
                     <div className="space-y-6">
                         {/* Upcoming Matches */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
+                        <div className="bg-muted border border-border rounded-[32px] p-6">
                             <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-sm font-black uppercase tracking-widest text-white/60 flex items-center gap-2">
+                                <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60 flex items-center gap-2">
                                     <Calendar size={16} className="text-primary" />
                                     Upcoming
                                 </h2>
@@ -260,8 +260,8 @@ export default function DashboardPage() {
                         </div>
 
                         {/* User Stats */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
-                            <h2 className="text-sm font-black uppercase tracking-widest text-white/60 mb-4 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6">
+                            <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60 mb-4 flex items-center gap-2">
                                 <Award size={16} className="text-primary" />
                                 Your Stats
                             </h2>
@@ -289,7 +289,7 @@ function QuickStatCard({ icon, label, value, color, pulse = false }: {
     return (
         <motion.div
             whileHover={{ y: -5 }}
-            className="bg-white/5 border border-white/10 rounded-2xl p-4 relative overflow-hidden"
+            className="bg-muted border border-border rounded-2xl p-4 relative overflow-hidden"
         >
             {pulse && (
                 <div className="absolute top-2 right-2">
@@ -303,7 +303,7 @@ function QuickStatCard({ icon, label, value, color, pulse = false }: {
                 {icon}
                 <span className="text-3xl font-display italic text-primary">{value}</span>
             </div>
-            <p className="text-xs font-black uppercase tracking-widest text-white/60">{label}</p>
+            <p className="text-xs font-black uppercase tracking-widest text-foreground/60">{label}</p>
         </motion.div>
     );
 }
@@ -314,7 +314,7 @@ function FeedItem({ item, delay }: { item: any; delay: number }) {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay }}
-            className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/10 transition-all cursor-pointer group"
+            className="bg-muted border border-border rounded-2xl p-4 hover:bg-muted/70 transition-all cursor-pointer group"
         >
             <div className="flex items-start gap-4">
                 <div className="text-4xl">{item.image}</div>
@@ -323,14 +323,14 @@ function FeedItem({ item, delay }: { item: any; delay: number }) {
                         <span className="px-2 py-0.5 bg-primary/20 border border-primary/30 rounded text-[10px] font-black uppercase text-primary">
                             {item.category}
                         </span>
-                        <span className="text-xs text-white/40">{item.time}</span>
+                        <span className="text-xs text-foreground/40">{item.time}</span>
                     </div>
-                    <h3 className="text-sm font-black text-white mb-1 group-hover:text-primary transition-colors">
+                    <h3 className="text-sm font-black text-foreground mb-1 group-hover:text-primary transition-colors">
                         {item.title}
                     </h3>
-                    <p className="text-xs text-white/60">{item.description}</p>
+                    <p className="text-xs text-foreground/60">{item.description}</p>
                 </div>
-                <ArrowRight size={16} className="text-white/40 group-hover:text-primary transition-colors" />
+                <ArrowRight size={16} className="text-foreground/40 group-hover:text-primary transition-colors" />
             </div>
         </motion.div>
     );
@@ -349,15 +349,15 @@ function ActivityItem({ activity, delay }: { activity: any; delay: number }) {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay }}
-            className="flex items-start gap-3 p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all"
+            className="flex items-start gap-3 p-3 bg-muted border border-border rounded-xl hover:bg-muted/70 transition-all"
         >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border ${colorClasses[activity.color as keyof typeof colorClasses]}`}>
                 {activity.icon}
             </div>
             <div className="flex-1">
-                <p className="text-sm font-bold text-white">{activity.title}</p>
-                <p className="text-xs text-white/60 mt-0.5">{activity.subtitle}</p>
-                <div className="flex items-center gap-1 mt-1 text-xs text-white/40">
+                <p className="text-sm font-bold text-foreground">{activity.title}</p>
+                <p className="text-xs text-foreground/60 mt-0.5">{activity.subtitle}</p>
+                <div className="flex items-center gap-1 mt-1 text-xs text-foreground/40">
                     <Clock size={10} />
                     {activity.time}
                 </div>
@@ -370,13 +370,13 @@ function UpcomingMatchCard({ match }: { match: any }) {
     return (
         <motion.div
             whileHover={{ scale: 1.02 }}
-            className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/10 transition-all cursor-pointer"
+            className="bg-muted border border-border rounded-2xl p-4 hover:bg-muted/70 transition-all cursor-pointer"
         >
             <div className="flex items-center gap-2 mb-3">
                 <span className="px-2 py-0.5 bg-primary/20 border border-primary/30 rounded text-[10px] font-black uppercase text-primary">
                     {match.sport}
                 </span>
-                <span className="text-xs text-white/40">{match.date} • {match.time}</span>
+                <span className="text-xs text-foreground/40">{match.date} • {match.time}</span>
             </div>
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -384,15 +384,15 @@ function UpcomingMatchCard({ match }: { match: any }) {
                     <span className="text-sm font-black uppercase">{match.home.name}</span>
                 </div>
             </div>
-            <div className="text-center text-xs font-black text-white/40 my-2">VS</div>
+            <div className="text-center text-xs font-black text-foreground/40 my-2">VS</div>
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <span className="text-2xl">{match.away.logo}</span>
                     <span className="text-sm font-black uppercase">{match.away.name}</span>
                 </div>
             </div>
-            <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between">
-                <span className="text-xs text-white/60">{match.venue}</span>
+            <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+                <span className="text-xs text-foreground/60">{match.venue}</span>
                 {match.isFollowing && (
                     <div className="flex items-center gap-1 text-xs text-primary">
                         <Bell size={12} />
@@ -406,8 +406,8 @@ function UpcomingMatchCard({ match }: { match: any }) {
 
 function StatRow({ label, value }: { label: string; value: number }) {
     return (
-        <div className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-            <span className="text-sm text-white/60">{label}</span>
+        <div className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+            <span className="text-sm text-foreground/60">{label}</span>
             <span className="text-lg font-display italic text-primary">{value}</span>
         </div>
     );

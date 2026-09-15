@@ -141,7 +141,7 @@ export default function SignupPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4">
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
 
             <OnboardingModal
                 isOpen={showOnboarding}
@@ -161,7 +161,7 @@ export default function SignupPage() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="w-full max-w-md bg-gradient-to-br from-zinc-900 to-black border border-white/10 rounded-3xl shadow-2xl overflow-hidden relative z-10"
+                className="w-full max-w-md bg-card border border-border rounded-3xl shadow-2xl overflow-hidden relative z-10"
             >
                 {/* Animated Background Pattern */}
                 <div className="absolute inset-0 opacity-5 pointer-events-none">
@@ -176,13 +176,13 @@ export default function SignupPage() {
 
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center font-display text-3xl -skew-x-12 text-black mx-auto mb-4 shadow-lg shadow-primary/20">
+                        <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center font-display text-3xl -skew-x-12 text-primary-foreground mx-auto mb-4 shadow-lg shadow-primary/20">
                             B
                         </div>
-                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-white">
+                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-foreground">
                             Join Brix Sport
                         </h2>
-                        <p className="text-sm text-white/40">
+                        <p className="text-sm text-foreground/40">
                             Create an account to get started
                         </p>
                     </div>
@@ -206,16 +206,16 @@ export default function SignupPage() {
 
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Full Name
                             </label>
                             <div className="relative">
-                                <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                                <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("name")}
                                     type="text"
                                     placeholder="Enter your name"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm"
+                                    className="w-full bg-muted border border-border rounded-xl pl-12 pr-4 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                             </div>
                             {form.formState.errors.name && (
@@ -224,16 +224,16 @@ export default function SignupPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Email
                             </label>
                             <div className="relative">
-                                <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                                <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("email")}
                                     type="email"
                                     placeholder="Enter your email"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm"
+                                    className="w-full bg-muted border border-border rounded-xl pl-12 pr-4 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                             </div>
                             {form.formState.errors.email && (
@@ -242,16 +242,16 @@ export default function SignupPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Password
                             </label>
                             <div className="relative">
-                                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("password")}
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Create a password"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm mb-2"
+                                    className="w-full bg-muted border border-border rounded-xl pl-12 pr-12 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm mb-2"
                                     onChange={(e) => {
                                         form.register("password").onChange(e);
                                     }}
@@ -259,7 +259,7 @@ export default function SignupPage() {
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/60 transition-colors"
                                     style={{ marginTop: "-4px" }}
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -281,7 +281,7 @@ export default function SignupPage() {
                                                             : strength === 3
                                                                 ? "bg-yellow-500"
                                                                 : "bg-emerald-500"
-                                                        : "bg-white/10"
+                                                        : "bg-muted"
                                                         }`}
                                                 />
                                             );
@@ -299,21 +299,21 @@ export default function SignupPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Confirm Password
                             </label>
                             <div className="relative">
-                                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("confirmPassword")}
                                     type={showConfirmPassword ? "text" : "password"}
                                     placeholder="Confirm your password"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm"
+                                    className="w-full bg-muted border border-border rounded-xl pl-12 pr-12 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/60 transition-colors"
                                 >
                                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -326,7 +326,7 @@ export default function SignupPage() {
                         <button
                             type="submit"
                             disabled={isLoading || success}
-                            className="w-full bg-primary hover:bg-primary/90 text-black font-black uppercase tracking-widest text-sm py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20 mt-6"
+                            className="w-full bg-primary hover:bg-primary/90 disabled:bg-primary/60 text-primary-foreground font-black uppercase tracking-widest text-sm py-4 rounded-xl transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20 mt-6"
                         >
                             {isLoading ? (
                                 <>
@@ -343,7 +343,7 @@ export default function SignupPage() {
                             )}
                         </button>
 
-                        <p className="text-center text-xs text-white/40 mt-4">
+                        <p className="text-center text-xs text-foreground/40 mt-4">
                             By creating an account, you agree to our{' '}
                             <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>
                             {' '}and{' '}
@@ -354,10 +354,10 @@ export default function SignupPage() {
                     {/* Divider */}
                     <div className="relative my-8">
                         <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-white/10" />
+                            <div className="w-full border-t border-border" />
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-[#0e0e11] px-4 text-white/40 font-bold tracking-widest">
+                            <span className="bg-card px-4 text-foreground/40 font-bold tracking-widest">
                                 Or continue with
                             </span>
                         </div>
@@ -369,7 +369,7 @@ export default function SignupPage() {
                             type="button"
                             onClick={handleGoogleLogin}
                             disabled={isLoading}
-                            className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-3 transition-all text-white"
+                            className="flex items-center justify-center gap-2 bg-muted hover:bg-muted/70 border border-border rounded-xl py-3 transition-all text-foreground"
                         >
                             <svg className="w-5 h-5" viewBox="0 0 24 24">
                                 <path
@@ -395,7 +395,7 @@ export default function SignupPage() {
 
                     {/* Sign In Link */}
                     <div className="mt-8 text-center">
-                        <p className="text-sm text-white/40">
+                        <p className="text-sm text-foreground/40">
                             Already have an account?{" "}
                             <Link
                                 href="/login"

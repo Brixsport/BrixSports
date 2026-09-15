@@ -35,9 +35,9 @@ export function ActivityFeed({
     const displayActivities = maxItems ? activities.slice(0, maxItems) : activities;
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
+        <div className="bg-muted border border-border rounded-[32px] p-6">
             {showHeader && (
-                <h2 className="text-sm font-black uppercase tracking-widest text-white/60 mb-4 flex items-center gap-2">
+                <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60 mb-4 flex items-center gap-2">
                     <Activity size={16} className="text-primary" />
                     {title}
                 </h2>
@@ -111,27 +111,27 @@ function ActivityCard({
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay }}
             onClick={handleClick}
-            className={`flex items-start gap-3 p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all ${onClick ? 'cursor-pointer' : ''
+            className={`flex items-start gap-3 p-3 bg-muted border border-border rounded-xl hover:bg-muted/80 transition-all ${onClick ? 'cursor-pointer' : ''
                 }`}
         >
             <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border ${activity.color ? colorClasses[activity.color] : 'bg-white/10 text-white border-white/20'
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border ${activity.color ? colorClasses[activity.color] : 'bg-muted text-foreground border-border'
                     }`}
             >
                 {getIcon()}
             </div>
             <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-white truncate">{activity.title}</p>
+                <p className="text-sm font-bold text-foreground truncate">{activity.title}</p>
                 {activity.subtitle && (
-                    <p className="text-xs text-white/60 mt-0.5 truncate">{activity.subtitle}</p>
+                    <p className="text-xs text-foreground/60 mt-0.5 truncate">{activity.subtitle}</p>
                 )}
-                <div className="flex items-center gap-1 mt-1 text-xs text-white/40">
+                <div className="flex items-center gap-1 mt-1 text-xs text-foreground/40">
                     <Clock size={10} />
                     {activity.time}
                 </div>
             </div>
             {onClick && (
-                <ArrowRight size={16} className="text-white/40 flex-shrink-0" />
+                <ArrowRight size={16} className="text-foreground/40 flex-shrink-0" />
             )}
         </motion.div>
     );
@@ -140,11 +140,11 @@ function ActivityCard({
 function EmptyState() {
     return (
         <div className="text-center py-12">
-            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Activity size={32} className="text-white/20" />
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Activity size={32} className="text-foreground/20" />
             </div>
-            <p className="text-sm font-bold text-white/60 mb-1">No activity yet</p>
-            <p className="text-xs text-white/40">
+            <p className="text-sm font-bold text-foreground/60 mb-1">No activity yet</p>
+            <p className="text-xs text-foreground/40">
                 Your recent activity will appear here
             </p>
         </div>

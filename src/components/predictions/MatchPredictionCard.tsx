@@ -172,17 +172,17 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
 
     if (loading) {
         return (
-            <div className="bg-white/5 rounded-xl border border-white/10 p-6 flex flex-col items-center justify-center gap-2">
+            <div className="bg-muted rounded-xl border border-border p-6 flex flex-col items-center justify-center gap-2">
                 <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-white/40">Loading...</p>
+                <p className="text-sm text-foreground/40">Loading...</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-white/5 rounded-xl border border-white/10">
+        <div className="bg-muted rounded-xl border border-border">
             {/* Header */}
-            <div className="px-4 md:px-6 py-3 md:py-4 border-b border-white/10">
+            <div className="px-4 md:px-6 py-3 md:py-4 border-b border-border">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 md:gap-3">
                         <div className="p-1.5 md:p-2 bg-primary/20 rounded-lg">
@@ -190,12 +190,12 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         </div>
                         <div>
                             <h3 className="font-bold text-base md:text-lg">Make Your Prediction</h3>
-                            <p className="text-white/60 text-xs md:text-sm hidden sm:block">Earn points for accurate predictions!</p>
+                            <p className="text-foreground/60 text-xs md:text-sm hidden sm:block">Earn points for accurate predictions!</p>
                         </div>
                     </div>
 
                     {stats && stats.totalPredictions > 0 && (
-                        <div className="flex items-center gap-1 md:gap-2 bg-white/5 text-white px-2 md:px-4 py-1.5 md:py-2 rounded-lg">
+                        <div className="flex items-center gap-1 md:gap-2 bg-muted text-foreground px-2 md:px-4 py-1.5 md:py-2 rounded-lg">
                             <Users className="w-3 h-3 md:w-4 md:h-4 text-primary" />
                             <span className="text-xs md:text-sm font-semibold">
                                 {stats.totalPredictions} {stats.totalPredictions === 1 ? 'prediction' : 'predictions'}
@@ -207,9 +207,9 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
 
             {/* Live Prediction Stats - Always Visible */}
             {stats && stats.totalPredictions > 0 && (
-                <div className="px-4 md:px-6 py-4 bg-white/5 border-b border-white/10">
+                <div className="px-4 md:px-6 py-4 bg-muted border-b border-border">
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between text-xs text-white/60 mb-2">
+                        <div className="flex items-center justify-between text-xs text-foreground/60 mb-2">
                             <span className="flex items-center gap-1">
                                 <TrendingUp className="w-3 h-3" />
                                 Community Predictions
@@ -220,10 +220,10 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         {/* Home Win */}
                         <div className="space-y-1">
                             <div className="flex items-center justify-between text-xs">
-                                <span className="text-white/80 font-medium">{match.homeTeam.shortName} Win</span>
+                                <span className="text-foreground/80 font-medium">{match.homeTeam.shortName} Win</span>
                                 <span className="font-bold" style={{ color: match.homeTeam.color }}>{stats.homeWinPercentage.toFixed(0)}%</span>
                             </div>
-                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-2 bg-border rounded-full overflow-hidden">
                                 <div
                                     className="h-full rounded-full transition-all duration-500"
                                     style={{
@@ -237,12 +237,12 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         {/* Draw */}
                         <div className="space-y-1">
                             <div className="flex items-center justify-between text-xs">
-                                <span className="text-white/80 font-medium">Draw</span>
-                                <span className="text-white/60 font-bold">{stats.drawPercentage.toFixed(0)}%</span>
+                                <span className="text-foreground/80 font-medium">Draw</span>
+                                <span className="text-foreground/60 font-bold">{stats.drawPercentage.toFixed(0)}%</span>
                             </div>
-                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-2 bg-border rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-gradient-to-r from-white/40 to-white/20 rounded-full transition-all duration-500"
+                                    className="h-full bg-gradient-to-r from-foreground/40 to-foreground/20 rounded-full transition-all duration-500"
                                     style={{ width: `${stats.drawPercentage}%` }}
                                 />
                             </div>
@@ -251,10 +251,10 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         {/* Away Win */}
                         <div className="space-y-1">
                             <div className="flex items-center justify-between text-xs">
-                                <span className="text-white/80 font-medium">{match.awayTeam.shortName} Win</span>
+                                <span className="text-foreground/80 font-medium">{match.awayTeam.shortName} Win</span>
                                 <span className="font-bold" style={{ color: match.awayTeam.color }}>{stats.awayWinPercentage.toFixed(0)}%</span>
                             </div>
-                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-2 bg-border rounded-full overflow-hidden">
                                 <div
                                     className="h-full rounded-full transition-all duration-500"
                                     style={{
@@ -266,9 +266,9 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         </div>
 
                         {/* Average Score Prediction */}
-                        <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-center gap-2 text-xs text-white/60">
+                        <div className="mt-3 pt-3 border-t border-border flex items-center justify-center gap-2 text-xs text-foreground/60">
                             <span>Avg. Score:</span>
-                            <span className="font-bold text-white">{stats.averageHomeScore.toFixed(1)} - {stats.averageAwayScore.toFixed(1)}</span>
+                            <span className="font-bold text-foreground">{stats.averageHomeScore.toFixed(1)} - {stats.averageAwayScore.toFixed(1)}</span>
                         </div>
                     </div>
                 </div>
@@ -287,8 +287,8 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
             )}
 
             {match.status === 'FINISHED' && (
-                <div className="px-6 py-4 bg-white/5 border-b border-white/10">
-                    <p className="text-sm font-semibold text-white/60 text-center">
+                <div className="px-6 py-4 bg-muted border-b border-border">
+                    <p className="text-sm font-semibold text-foreground/60 text-center">
                         Match has ended - Predictions are closed
                     </p>
                 </div>
@@ -305,24 +305,24 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             alt={match.homeTeam.name}
                             className="w-10 h-10 md:w-16 md:h-16 object-contain"
                         />
-                        <h4 className="font-bold text-white text-center text-xs md:text-base">{match.homeTeam.shortName}</h4>
+                        <h4 className="font-bold text-foreground text-center text-xs md:text-base">{match.homeTeam.shortName}</h4>
 
                         {/* Score Input */}
                         <div className="flex items-center gap-1 md:gap-2">
                             <button
                                 onClick={() => setHomeScore(Math.max(0, homeScore - scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-muted hover:bg-primary/50 active:bg-primary disabled:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50 text-foreground rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 -
                             </button>
-                            <div className="w-12 h-10 md:w-16 md:h-12 bg-white/10 rounded-lg flex items-center justify-center border-2 border-white/20">
-                                <span className="text-xl md:text-2xl font-bold text-white">{homeScore}</span>
+                            <div className="w-12 h-10 md:w-16 md:h-12 bg-muted rounded-lg flex items-center justify-center border-2 border-border">
+                                <span className="text-xl md:text-2xl font-bold text-foreground">{homeScore}</span>
                             </div>
                             <button
                                 onClick={() => setHomeScore(Math.min(maxScore, homeScore + scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-muted hover:bg-primary/50 active:bg-primary disabled:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50 text-foreground rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 +
                             </button>
@@ -331,8 +331,8 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
 
                     {/* VS */}
                     <div className="flex flex-col items-center">
-                        <div className="text-xl md:text-3xl font-bold text-white/40">VS</div>
-                        <div className="mt-1 md:mt-2 text-[10px] md:text-sm text-white/40 hidden sm:block">Final Score</div>
+                        <div className="text-xl md:text-3xl font-bold text-foreground/40">VS</div>
+                        <div className="mt-1 md:mt-2 text-[10px] md:text-sm text-foreground/40 hidden sm:block">Final Score</div>
                     </div>
 
                     {/* Away Team */}
@@ -342,24 +342,24 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             alt={match.awayTeam.name}
                             className="w-10 h-10 md:w-16 md:h-16 object-contain"
                         />
-                        <h4 className="font-bold text-white text-center text-xs md:text-base">{match.awayTeam.shortName}</h4>
+                        <h4 className="font-bold text-foreground text-center text-xs md:text-base">{match.awayTeam.shortName}</h4>
 
                         {/* Score Input */}
                         <div className="flex items-center gap-1 md:gap-2">
                             <button
                                 onClick={() => setAwayScore(Math.max(0, awayScore - scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-muted hover:bg-primary/50 active:bg-primary disabled:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50 text-foreground rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 -
                             </button>
-                            <div className="w-12 h-10 md:w-16 md:h-12 bg-white/10 rounded-lg flex items-center justify-center border-2 border-white/20">
-                                <span className="text-xl md:text-2xl font-bold text-white">{awayScore}</span>
+                            <div className="w-12 h-10 md:w-16 md:h-12 bg-muted rounded-lg flex items-center justify-center border-2 border-border">
+                                <span className="text-xl md:text-2xl font-bold text-foreground">{awayScore}</span>
                             </div>
                             <button
                                 onClick={() => setAwayScore(Math.min(maxScore, awayScore + scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-muted hover:bg-primary/50 active:bg-primary disabled:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50 text-foreground rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 +
                             </button>
@@ -370,11 +370,11 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                 {/* Confidence Slider */}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                        <label className="text-sm font-semibold text-white/60 flex items-center gap-2">
+                        <label className="text-sm font-semibold text-foreground/60 flex items-center gap-2">
                             <Zap className="w-4 h-4 text-primary" />
                             Confidence Level
                         </label>
-                        <span className="text-lg font-bold text-white">{confidence}%</span>
+                        <span className="text-lg font-bold text-foreground">{confidence}%</span>
                     </div>
                     <input
                         type="range"
@@ -383,31 +383,31 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         value={confidence}
                         onChange={(e) => setConfidence(parseInt(e.target.value))}
                         disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
+                        className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
                         style={{
                             background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${confidence}%, #ffffff20 ${confidence}%, #ffffff20 100%)`
                         }}
                     />
-                    <div className="flex justify-between text-xs text-white/40">
+                    <div className="flex justify-between text-xs text-foreground/40">
                         <span>Not Sure</span>
                         <span>Very Confident</span>
                     </div>
                 </div>
 
                 {/* Prediction Summary */}
-                <div className="bg-white/5 border border-white/10 rounded-lg p-3 md:p-4">
+                <div className="bg-muted border border-border rounded-lg p-3 md:p-4">
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex-1">
-                            <p className="text-xs md:text-sm text-white/60">Your Prediction</p>
-                            <p className="text-base md:text-xl font-bold text-white mt-1">
+                            <p className="text-xs md:text-sm text-foreground/60">Your Prediction</p>
+                            <p className="text-base md:text-xl font-bold text-foreground mt-1">
                                 {getWinnerText()} to win
                             </p>
-                            <p className="text-xs md:text-sm text-white/40 mt-1">
+                            <p className="text-xs md:text-sm text-foreground/40 mt-1">
                                 Score: {homeScore} - {awayScore}
                             </p>
                         </div>
                         <div className="text-right">
-                            <p className="text-xs md:text-sm text-white/60">Points</p>
+                            <p className="text-xs md:text-sm text-foreground/60">Points</p>
                             <p className="text-xl md:text-2xl font-bold text-primary mt-1">
                                 {Math.round(confidence * 1.5)}
                             </p>
@@ -447,7 +447,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         <button
                             onClick={handleEdit}
                             disabled={match.status === 'LIVE' || match.status === 'FINISHED'}
-                            className="w-full bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition-colors"
+                            className="w-full bg-muted hover:bg-muted/80 disabled:bg-muted/60 disabled:cursor-not-allowed text-foreground py-3 rounded-lg font-semibold transition-colors"
                         >
                             Edit Prediction
                         </button>

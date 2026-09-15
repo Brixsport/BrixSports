@@ -163,19 +163,19 @@ export default function FavouritesPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
+            <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
                 <div className="text-center">
                     <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-white/60">Loading your favourites...</p>
+                    <p className="text-foreground/60">Loading your favourites...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white pb-24 md:pb-12">
+        <div className="min-h-screen bg-background text-foreground pb-24 md:pb-12">
             {/* Header */}
-            <div className="sticky top-0 z-40 bg-[#0a0a0a] border-b border-white/10 backdrop-blur-xl">
+            <div className="sticky top-0 z-40 bg-background/95 border-b border-border backdrop-blur-xl">
                 <div className="max-w-7xl mx-auto px-4 py-6">
                     <div className="flex items-center gap-3">
                         <BackButton forceShow />
@@ -184,7 +184,7 @@ export default function FavouritesPage() {
                             <h1 className="font-display text-3xl tracking-tighter italic uppercase leading-none">
                                 Favourites
                             </h1>
-                            <p className="text-sm text-white/60 mt-1">
+                            <p className="text-sm text-foreground/60 mt-1">
                                 {teams.length} teams • {players.length} players • {competitions.length} competitions
                             </p>
                         </div>
@@ -199,21 +199,21 @@ export default function FavouritesPage() {
                         animate={{ opacity: 1, y: 0 }}
                         className="text-center py-20"
                     >
-                        <Heart size={64} className="mx-auto text-white/10 mb-6" />
+                        <Heart size={64} className="mx-auto text-foreground/10 mb-6" />
                         <h2 className="text-2xl font-bold mb-2">No Favourites Yet</h2>
-                        <p className="text-white/60 mb-8 max-w-md mx-auto">
+                        <p className="text-foreground/60 mb-8 max-w-md mx-auto">
                             Start following your favorite teams and players to see their latest updates here
                         </p>
                         <div className="flex gap-4 justify-center">
                             <Link
                                 href="/teams"
-                                className="px-6 py-3 bg-primary text-black rounded-xl font-bold hover:bg-primary/90 transition-colors"
+                                className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-bold hover:bg-primary/90 transition-colors"
                             >
                                 Browse Teams
                             </Link>
                             <Link
                                 href="/players/compare"
-                                className="px-6 py-3 bg-white/10 text-white rounded-xl font-bold hover:bg-white/20 transition-colors"
+                                className="px-6 py-3 bg-muted text-foreground rounded-xl font-bold hover:bg-muted/70 transition-colors"
                             >
                                 Browse Players
                             </Link>
@@ -247,20 +247,20 @@ export default function FavouritesPage() {
                                         <Link
                                             key={match.id}
                                             href={`/matches/${match.id}`}
-                                            className="block bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 transition-all"
+                                            className="block bg-muted hover:bg-muted/70 border border-border hover:border-primary/50 rounded-xl p-4 transition-all"
                                         >
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3 flex-1">
                                                     <span className="text-2xl">{match.homeTeam?.logo}</span>
                                                     <span className="font-semibold">{match.homeTeam?.shortName}</span>
                                                 </div>
-                                                <div className="px-4 text-white/40">vs</div>
+                                                <div className="px-4 text-foreground/40">vs</div>
                                                 <div className="flex items-center gap-3 flex-1 justify-end">
                                                     <span className="font-semibold">{match.awayTeam?.shortName}</span>
                                                     <span className="text-2xl">{match.awayTeam?.logo}</span>
                                                 </div>
                                             </div>
-                                            <div className="mt-2 text-xs text-white/40 text-center">
+                                            <div className="mt-2 text-xs text-foreground/40 text-center">
                                                 {new Date(match.startTime).toLocaleDateString()} • {match.competition}
                                             </div>
                                         </Link>
@@ -279,7 +279,7 @@ export default function FavouritesPage() {
                                         <Link
                                             key={team.id}
                                             href={`/teams/${team.id}`}
-                                            className="relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-6 transition-all group"
+                                            className="relative bg-muted hover:bg-muted/70 border border-border hover:border-primary/50 rounded-xl p-6 transition-all group"
                                         >
                                             <button
                                                 ref={index === 0 ? firstToggleRef : undefined}
@@ -293,7 +293,7 @@ export default function FavouritesPage() {
                                                 title={alertsOn ? 'Alerts on -- tap to mute' : 'Alerts muted -- tap to enable'}
                                                 className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${alertsOn
                                                         ? 'bg-primary/20 text-primary hover:bg-primary/30'
-                                                        : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/50'
+                                                        : 'bg-muted text-foreground/30 hover:bg-muted/70 hover:text-foreground/50'
                                                     }`}
                                             >
                                                 {alertsOn ? <Bell size={14} /> : <BellOff size={14} />}
@@ -303,16 +303,16 @@ export default function FavouritesPage() {
                                                 <h3 className="font-bold text-sm uppercase tracking-wider mb-1">
                                                     {team.shortName}
                                                 </h3>
-                                                <p className="text-xs text-white/40">{team.university}</p>
+                                                <p className="text-xs text-foreground/40">{team.university}</p>
                                                 {team.stats && (
-                                                    <div className="mt-3 pt-3 border-t border-white/10 flex justify-around text-xs">
+                                                    <div className="mt-3 pt-3 border-t border-border flex justify-around text-xs">
                                                         <div>
                                                             <div className="font-bold text-primary">{team.stats.won || 0}</div>
-                                                            <div className="text-white/40">W</div>
+                                                            <div className="text-foreground/40">W</div>
                                                         </div>
                                                         <div>
                                                             <div className="font-bold text-red-500">{team.stats.lost || 0}</div>
-                                                            <div className="text-white/40">L</div>
+                                                            <div className="text-foreground/40">L</div>
                                                         </div>
                                                     </div>
                                                 )}
@@ -341,14 +341,14 @@ export default function FavouritesPage() {
                                         <Link
                                             key={competition.id}
                                             href={`/competitions/${competition.id}`}
-                                            className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 transition-all group flex items-center gap-4"
+                                            className="bg-muted hover:bg-muted/70 border border-border hover:border-primary/50 rounded-xl p-4 transition-all group flex items-center gap-4"
                                         >
                                             <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">
                                                 <Trophy size={20} className="text-primary" />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <h3 className="font-bold text-sm uppercase tracking-wider truncate">{competition.name}</h3>
-                                                <p className="text-xs text-white/40">{competition.sport || 'Multi-Sport'}</p>
+                                                <p className="text-xs text-foreground/40">{competition.sport || 'Multi-Sport'}</p>
                                             </div>
                                         </Link>
                                     ))}
@@ -364,7 +364,7 @@ export default function FavouritesPage() {
                                         <Link
                                             key={player.id}
                                             href={`/players/${player.id}`}
-                                            className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 transition-all group"
+                                            className="bg-muted hover:bg-muted/70 border border-border hover:border-primary/50 rounded-xl p-4 transition-all group"
                                         >
                                             <div className="flex items-center gap-4">
                                                 <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center text-2xl font-bold">
@@ -372,12 +372,12 @@ export default function FavouritesPage() {
                                                 </div>
                                                 <div className="flex-1">
                                                     <h3 className="font-bold text-lg">{player.name}</h3>
-                                                    <p className="text-sm text-white/60">{player.position}</p>
-                                                    <p className="text-xs text-white/40 mt-1">{player.team?.name}</p>
+                                                    <p className="text-sm text-foreground/60">{player.position}</p>
+                                                    <p className="text-xs text-foreground/40 mt-1">{player.team?.name}</p>
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="text-2xl font-bold text-primary">{player.rating}</div>
-                                                    <div className="text-xs text-white/40">Rating</div>
+                                                    <div className="text-xs text-foreground/40">Rating</div>
                                                 </div>
                                             </div>
                                         </Link>

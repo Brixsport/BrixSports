@@ -14,7 +14,7 @@ export default function AuthButton() {
 
     if (nextAuthStatus === 'loading') {
         return (
-            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
         );
     }
 
@@ -29,7 +29,7 @@ export default function AuthButton() {
                             className="w-8 h-8 rounded-full"
                         />
                     )}
-                    <span className="text-white font-medium hidden md:block">
+                    <span className="text-foreground font-medium hidden md:block">
                         {userData?.name}
                     </span>
                 </div>
@@ -53,7 +53,7 @@ export default function AuthButton() {
     return (
         <button
             onClick={() => signIn('google')}
-            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/70 text-foreground rounded-lg transition-colors"
         >
             <User className="w-4 h-4" />
             <span>Sign In</span>

@@ -82,14 +82,14 @@ export default function NotificationsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
+        <div className="min-h-screen bg-background text-foreground">
             {/* Header */}
-            <div className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10">
+            <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border">
                 <div className="max-w-4xl mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
                         <Link
                             href="/"
-                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+                            className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
                         >
                             <ArrowLeft size={20} />
                             <span className="text-sm font-bold">Back</span>
@@ -99,7 +99,7 @@ export default function NotificationsPage() {
                             <Bell className="w-6 h-6 text-primary" />
                             <h1 className="text-2xl font-black uppercase tracking-tight">Notifications</h1>
                             {unreadCount > 0 && (
-                                <span className="px-2 py-1 bg-primary text-black rounded-full text-xs font-bold">
+                                <span className="px-2 py-1 bg-primary text-primary-foreground rounded-full text-xs font-bold">
                                     {unreadCount}
                                 </span>
                             )}
@@ -123,8 +123,8 @@ export default function NotificationsPage() {
                     <button
                         onClick={() => setFilter('all')}
                         className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${filter === 'all'
-                            ? 'bg-primary text-black'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-foreground/60 hover:bg-muted/70'
                             }`}
                     >
                         All ({notifications.length})
@@ -132,8 +132,8 @@ export default function NotificationsPage() {
                     <button
                         onClick={() => setFilter('unread')}
                         className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${filter === 'unread'
-                            ? 'bg-primary text-black'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-foreground/60 hover:bg-muted/70'
                             }`}
                     >
                         Unread ({unreadCount})
@@ -145,7 +145,7 @@ export default function NotificationsPage() {
                     {loading ? (
                         <div className="text-center py-20">
                             <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                            <p className="text-white/60">Loading notifications...</p>
+                            <p className="text-foreground/60">Loading notifications...</p>
                         </div>
                     ) : filteredNotifications.length > 0 ? (
                         filteredNotifications.map((notification) => (
@@ -154,7 +154,7 @@ export default function NotificationsPage() {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className={`p-4 rounded-2xl border transition-all ${notification.read
-                                    ? 'bg-white/5 border-white/10'
+                                    ? 'bg-muted border-border'
                                     : 'bg-primary/10 border-primary/30'
                                     }`}
                             >
@@ -163,16 +163,16 @@ export default function NotificationsPage() {
 
                                     <div className="flex-1">
                                         <div className="flex items-start justify-between gap-2 mb-1">
-                                            <h3 className="font-bold text-white">{notification.title}</h3>
+                                            <h3 className="font-bold text-foreground">{notification.title}</h3>
                                             {!notification.read && (
                                                 <span className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2"></span>
                                             )}
                                         </div>
 
-                                        <p className="text-sm text-white/60 mb-2">{notification.message}</p>
+                                        <p className="text-sm text-foreground/60 mb-2">{notification.message}</p>
 
                                         <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2 text-xs text-white/40">
+                                            <div className="flex items-center gap-2 text-xs text-foreground/40">
                                                 <Clock size={12} />
                                                 <span>{format(new Date(notification.createdAt), 'MMM d, h:mm a')}</span>
                                             </div>
@@ -181,7 +181,7 @@ export default function NotificationsPage() {
                                                 {!notification.read && (
                                                     <button
                                                         onClick={() => markAsRead(notification.id)}
-                                                        className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                                                        className="p-1 hover:bg-muted/70 rounded-lg transition-colors"
                                                         title="Mark as read"
                                                     >
                                                         <Check size={16} className="text-primary" />
@@ -189,10 +189,10 @@ export default function NotificationsPage() {
                                                 )}
                                                 <button
                                                     onClick={() => deleteNotification(notification.id)}
-                                                    className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                                                    className="p-1 hover:bg-muted/70 rounded-lg transition-colors"
                                                     title="Delete"
                                                 >
-                                                    <X size={16} className="text-white/60" />
+                                                    <X size={16} className="text-foreground/60" />
                                                 </button>
                                             </div>
                                         </div>
@@ -202,11 +202,11 @@ export default function NotificationsPage() {
                         ))
                     ) : (
                         <div className="text-center py-20">
-                            <BellOff className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                            <h3 className="text-xl font-bold text-white/60 mb-2">
+                            <BellOff className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                            <h3 className="text-xl font-bold text-foreground/60 mb-2">
                                 {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
                             </h3>
-                            <p className="text-sm text-white/40">
+                            <p className="text-sm text-foreground/40">
                                 {filter === 'unread'
                                     ? 'All caught up! Check back later for updates.'
                                     : 'Enable notifications to get live updates for matches and news.'}

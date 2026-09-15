@@ -114,8 +114,8 @@ function ResetPasswordForm() {
                     <Lock className="w-10 h-10 text-red-500" />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold text-white mb-2">Invalid Link</h3>
-                    <p className="text-white/50 text-sm">The password reset link is invalid or has expired.</p>
+                    <h3 className="text-xl font-bold text-foreground mb-2">Invalid Link</h3>
+                    <p className="text-foreground/50 text-sm">The password reset link is invalid or has expired.</p>
                 </div>
                 <Link
                     href="/forgot-password"
@@ -138,8 +138,8 @@ function ResetPasswordForm() {
                     <CheckCircle className="w-10 h-10 text-[#3b82f6]" />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold mb-2 text-white">Password Reset Successful!</h3>
-                    <p className="text-white/50 text-sm">
+                    <h3 className="text-xl font-bold mb-2 text-foreground">Password Reset Successful!</h3>
+                    <p className="text-foreground/50 text-sm">
                         You can now log in with your new password. Redirecting...
                     </p>
                 </div>
@@ -173,21 +173,21 @@ function ResetPasswordForm() {
 
             {/* Password Field */}
             <div className="space-y-2">
-                <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                     New Password
                 </label>
                 <div className="relative">
-                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                     <input
                         {...form.register("password")}
                         type={showPassword ? "text" : "password"}
                         placeholder="Enter new password"
-                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#3b82f6]/50 focus:bg-white/10 transition-all text-sm"
+                        className="w-full bg-muted border border-border rounded-xl pl-12 pr-12 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-[#3b82f6]/50 focus:bg-muted transition-all text-sm"
                     />
                     <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/60 transition-colors"
                     >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -208,13 +208,13 @@ function ResetPasswordForm() {
                                                     : strength === 3
                                                         ? "bg-yellow-500"
                                                         : "bg-[#3b82f6]"
-                                                : "bg-white/10"
+                                                : "bg-muted"
                                             }`}
                                     />
                                 );
                             })}
                         </div>
-                        <p className="text-[10px] uppercase font-bold tracking-wider text-right text-white/40">
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-right text-foreground/40">
                             {Object.values(STRENGTH_LABELS)[calculateStrength(form.watch("password"))]}
                         </p>
                     </div>
@@ -227,21 +227,21 @@ function ResetPasswordForm() {
 
             {/* Confirm Password Field */}
             <div className="space-y-2">
-                <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                     Confirm Password
                 </label>
                 <div className="relative">
-                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                     <input
                         {...form.register("confirmPassword")}
                         type={showConfirmPassword ? "text" : "password"}
                         placeholder="Confirm new password"
-                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#3b82f6]/50 focus:bg-white/10 transition-all text-sm"
+                        className="w-full bg-muted border border-border rounded-xl pl-12 pr-12 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-[#3b82f6]/50 focus:bg-muted transition-all text-sm"
                     />
                     <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/60 transition-colors"
                     >
                         {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -275,7 +275,7 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
     return (
-        <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-[#050505]">
+        <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-background">
             {/* Animated Background */}
             <div className="absolute inset-0 z-0">
                 <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#3b82f6]/10 blur-[150px] animate-pulse" />
@@ -290,7 +290,7 @@ export default function ResetPasswordPage() {
                 className="z-10 w-full max-w-md"
             >
                 {/* Main Card */}
-                <div className="relative bg-[#0a0a0a]/80 backdrop-blur-2xl rounded-3xl p-8 border border-white/10 shadow-2xl shadow-[#3b82f6]/5">
+                <div className="relative bg-card/80 backdrop-blur-2xl rounded-3xl p-8 border border-border shadow-2xl shadow-[#3b82f6]/5">
                     {/* Top Gradient Line */}
                     <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#3b82f6] via-[#8b5cf6] to-[#3b82f6] rounded-t-3xl" />
 
@@ -310,10 +310,10 @@ export default function ResetPasswordPage() {
 
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-white">
+                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-foreground">
                             Create New Password
                         </h2>
-                        <p className="text-sm text-white/40">
+                        <p className="text-sm text-foreground/40">
                             Enter a strong password for your account
                         </p>
                     </div>
@@ -328,10 +328,10 @@ export default function ResetPasswordPage() {
                     </Suspense>
 
                     {/* Back to Login */}
-                    <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                    <div className="mt-8 pt-6 border-t border-border text-center">
                         <Link
                             href="/login"
-                            className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-[#3b82f6] transition-colors"
+                            className="inline-flex items-center gap-2 text-sm text-foreground/50 hover:text-[#3b82f6] transition-colors"
                         >
                             <ArrowLeft className="w-4 h-4" />
                             Back to Sign In
@@ -340,7 +340,7 @@ export default function ResetPasswordPage() {
                 </div>
 
                 {/* Footer */}
-                <p className="text-center text-xs text-white/30 mt-6">
+                <p className="text-center text-xs text-foreground/30 mt-6">
                     Need help? Contact us at support@brixsports.com
                 </p>
             </motion.div>

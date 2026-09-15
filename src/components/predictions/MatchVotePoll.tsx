@@ -236,23 +236,23 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
     }
 
     return (
-        <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+        <div className="bg-muted rounded-xl border border-border overflow-hidden">
             {/* Header */}
-            <div className="bg-white/5 border-b border-white/10 px-4 md:px-6 py-3 md:py-4">
+            <div className="bg-muted border-b border-border px-4 md:px-6 py-3 md:py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 md:gap-3">
                         <div className="p-1.5 md:p-2 bg-primary/20 rounded-lg">
                             <BarChart3 className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                         </div>
                         <div>
-                            <h3 className="text-white font-bold text-base md:text-lg">Match Poll</h3>
-                            <p className="text-white/60 text-xs md:text-sm hidden sm:block">
+                            <h3 className="text-foreground font-bold text-base md:text-lg">Match Poll</h3>
+                            <p className="text-foreground/60 text-xs md:text-sm hidden sm:block">
                                 {pollData.userVote ? 'Results' : 'Vote for the winner!'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-1 md:gap-2 bg-white/10 text-white px-2 md:px-4 py-1.5 md:py-2 rounded-lg">
+                    <div className="flex items-center gap-1 md:gap-2 bg-muted text-foreground px-2 md:px-4 py-1.5 md:py-2 rounded-lg">
                         <Users className="w-3 h-3 md:w-4 md:h-4" />
                         <span className="text-xs md:text-sm font-semibold">
                             {pollData.totalVotes}
@@ -265,14 +265,14 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                 {/* Show voting interface if not voted */}
                 {mounted && !pollData.userVote && isAuthenticated ? (
                     <>
-                        <p className="text-center text-white/60 text-sm">Who do you think will win this match?</p>
+                        <p className="text-center text-foreground/60 text-sm">Who do you think will win this match?</p>
 
                         <div className="grid grid-cols-1 gap-3 md:gap-4">
                             {/* Home Team Vote */}
                             <button
                                 onClick={() => handleVote('home')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 active:bg-white/15 border-2 border-white/10 hover:border-white/30 active:border-white/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="group relative bg-muted hover:bg-muted/80 active:bg-muted border-2 border-border hover:border-border active:border-border disabled:border-border disabled:bg-muted rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                                 style={{
                                     borderColor: voting ? undefined : `${match.homeTeam.color}00`,
                                 }}
@@ -290,10 +290,10 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                         className="w-12 h-12 md:w-16 md:h-16 object-contain"
                                     />
                                     <div className="flex-1 text-left">
-                                        <h4 className="text-lg md:text-xl font-bold text-white">{match.homeTeam.name}</h4>
-                                        <p className="text-xs md:text-sm text-white/70">Home Team</p>
+                                        <h4 className="text-lg md:text-xl font-bold text-foreground">{match.homeTeam.name}</h4>
+                                        <p className="text-xs md:text-sm text-foreground/70">Home Team</p>
                                     </div>
-                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/30 group-hover:text-white/80 transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-foreground/30 group-hover:text-foreground/80 transition-colors" />
                                 </div>
                             </button>
 
@@ -301,17 +301,17 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('draw')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 active:bg-white/15 border-2 border-white/10 hover:border-white/30 active:border-white/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="group relative bg-muted hover:bg-muted/80 active:bg-muted border-2 border-border hover:border-border active:border-border disabled:border-border disabled:bg-muted rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <div className="flex items-center gap-3 md:gap-4">
-                                    <div className="w-12 h-12 md:w-16 md:h-16 bg-white/10 rounded-full flex items-center justify-center">
-                                        <TrendingUp className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                                    <div className="w-12 h-12 md:w-16 md:h-16 bg-muted rounded-full flex items-center justify-center">
+                                        <TrendingUp className="w-6 h-6 md:w-8 md:h-8 text-foreground" />
                                     </div>
                                     <div className="flex-1 text-left">
-                                        <h4 className="text-lg md:text-xl font-bold text-white">Draw</h4>
-                                        <p className="text-xs md:text-sm text-white/70">Equal Score</p>
+                                        <h4 className="text-lg md:text-xl font-bold text-foreground">Draw</h4>
+                                        <p className="text-xs md:text-sm text-foreground/70">Equal Score</p>
                                     </div>
-                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/30 group-hover:text-white/80 transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-foreground/30 group-hover:text-foreground/80 transition-colors" />
                                 </div>
                             </button>
 
@@ -319,7 +319,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('away')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 active:bg-white/15 border-2 border-white/10 hover:border-white/30 active:border-white/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="group relative bg-muted hover:bg-muted/80 active:bg-muted border-2 border-border hover:border-border active:border-border disabled:border-border disabled:bg-muted rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                                 style={{
                                     borderColor: voting ? undefined : `${match.awayTeam.color}00`,
                                 }}
@@ -337,10 +337,10 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                         className="w-12 h-12 md:w-16 md:h-16 object-contain"
                                     />
                                     <div className="flex-1 text-left">
-                                        <h4 className="text-lg md:text-xl font-bold text-white">{match.awayTeam.name}</h4>
-                                        <p className="text-xs md:text-sm text-white/70">Away Team</p>
+                                        <h4 className="text-lg md:text-xl font-bold text-foreground">{match.awayTeam.name}</h4>
+                                        <p className="text-xs md:text-sm text-foreground/70">Away Team</p>
                                     </div>
-                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/30 group-hover:text-white/80 transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-foreground/30 group-hover:text-foreground/80 transition-colors" />
                                 </div>
                             </button>
                         </div>
@@ -376,7 +376,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                         key={option.choice}
                                         className={cn(
                                             "relative rounded-xl overflow-hidden border-2 transition-all",
-                                            isWinning ? "border-primary" : "border-white/10",
+                                            isWinning ? "border-primary" : "border-border",
                                             isUserVote && "ring-2 ring-primary"
                                         )}
                                     >
@@ -400,7 +400,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                                     />
                                                 )}
                                                 <div>
-                                                    <p className="font-bold text-white flex items-center gap-2">
+                                                    <p className="font-bold text-foreground flex items-center gap-2">
                                                         {option.label}
                                                         {isWinning && <span className="text-primary">👑</span>}
                                                         {isUserVote && <span className="text-primary">✓</span>}
@@ -409,7 +409,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-2xl font-bold text-white">{percentage}%</p>
+                                                <p className="text-2xl font-bold text-foreground">{percentage}%</p>
                                             </div>
                                         </div>
                                     </div>
@@ -419,7 +419,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
 
                         {mounted && !isAuthenticated && (
                             <div className="text-center pt-4">
-                                <p className="text-sm text-white/40">
+                                <p className="text-sm text-foreground/40">
                                     <button
                                         onClick={() => openAuthModal()}
                                         className="text-primary hover:text-primary/80 font-semibold cursor-pointer"

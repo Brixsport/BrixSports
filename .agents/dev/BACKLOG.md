@@ -8052,6 +8052,18 @@ Reuses the exact mechanical conversion rule already proven on the pilot page (`t
 - **Not done:** live visual verification against the deployed preview (same constraint as `BACKLOG-387`/`388` — no clean secret-safe path to the protected Vercel preview's DOM this pass). Flagged items above, and the 5 deliberately-skipped files, still need a dedicated follow-up.
 **Files:** the 36 listed in `git log` for this commit.
 
+**Phase 2b executed, 2026-09-15, same session:** Authenticated Fan pages -- auth flows, profile, notifications, onboarding, feed/polls/predictions. Same method as Phase 2a: 3 parallel subagents on disjoint file sets, each `tsc`-verified, every diff and flagged judgment call personally spot-checked before committing.
+
+- **22 files converted** (auth: `login`/`signup`/`reset-password`/`forgot-password`/`dashboard`/`user/[userId]`/both `AuthModal.tsx`/`AuthButton.tsx`; profile/notifications/onboarding: `profile/page.tsx`/`profile/favorites`/`notifications/page.tsx`/`Notifications.tsx`/`NotificationPrompt.tsx`/`Coachmark.tsx`/`OnboardingModal.tsx`; feed/predictions: `MyFeed.tsx`/`PersonalizedFeed.tsx`/`ActivityFeed.tsx`/`FanWall.tsx`/`predictions/MatchVotePoll.tsx`/`predictions/MatchPredictionCard.tsx`).
+- **3 more real opacity-bug instances found and fixed** (now 5 total across this initiative): `login`/`signup`'s disabled submit buttons (bare `opacity-50` wrapping `text-black`), `profile/page.tsx`'s empty-state + locked-achievement-badge wrappers, `OnboardingModal.tsx`'s disabled team button. Same fix shape every time: fade the background only, keep text at a fixed token color.
+- **A self-correction worth noting:** the `OnboardingModal.tsx` agent's own blanket sweep wrongly converted 2 deliberate-exception instances (a permanent dark-overlay photo label, a fixed-red delete badge) — caught and manually reverted by the same agent before reporting, not left for the parent session to find.
+- **4 more files deliberately left unconverted** (self-contained hardcoded palettes, same reasoning as Phase 2a's 5): `CreatePoll.tsx`, `MatchPoll.tsx`, `MatchPollEnhanced.tsx`, `PollComments.tsx` (one interconnected widget on a `slate-900/800/700` palette) and `MatchVotePoll.tsx`'s `compact` render branch (`gray-800/50`). Now 10 files total across both phases flagged for a dedicated non-token-system pass.
+- **Two real bugs found outside the mechanical class's scope, correctly left untouched rather than guessed at:** `MatchVotePoll.tsx`'s `onMouseLeave` handlers reset border color via a hardcoded inline `rgba(255,255,255,0.1)` style (not a className, invisible in light mode) — needs a JS-level fix reading the `--border` token, not a class swap. `MatchPredictionCard.tsx`'s confidence-slider inline gradient hardcodes `#ffffff20` for its unfilled track, same issue.
+- **One real gap with no clean single-token fix, flagged rather than forced:** `MatchPredictionCard.tsx`'s submit button shares one `text-white`/`border-white` pair across two different backgrounds (`bg-primary` normal, `bg-white/10` submitting) via a ternary — no single token satisfies both states correctly. Low severity (only visible during the brief submitting state); needs an explicit design decision, not a mechanical conversion.
+- `tsc --noEmit`: 18 errors, exactly the pre-existing baseline, zero new, across all 22 files.
+- **Not done:** live visual verification (same open constraint as Phase 2a -- no clean secret-safe path to the protected Vercel preview's DOM yet).
+**Files (Phase 2b):** the 22 files listed above.
+
 ---
 
 ### ~~BUG-217~~ — `AuthContext.checkAuth()` Treats Network Failure the Same as Confirmed Logout, and Deletes a Still-Possibly-Valid Token on Any Non-2xx Response

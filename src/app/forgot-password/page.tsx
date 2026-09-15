@@ -66,7 +66,7 @@ export default function ForgotPasswordPage() {
     }
 
     return (
-        <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-[#050505]">
+        <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-background">
             {/* Animated Background */}
             <div className="absolute inset-0 z-0">
                 <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#3b82f6]/10 blur-[150px] animate-pulse" />
@@ -81,7 +81,7 @@ export default function ForgotPasswordPage() {
                 className="z-10 w-full max-w-md"
             >
                 {/* Main Card */}
-                <div className="relative bg-[#0a0a0a]/80 backdrop-blur-2xl rounded-3xl p-8 border border-white/10 shadow-2xl shadow-[#3b82f6]/5">
+                <div className="relative bg-card/80 backdrop-blur-2xl rounded-3xl p-8 border border-border shadow-2xl shadow-[#3b82f6]/5">
                     {/* Top Gradient Line */}
                     <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#3b82f6] via-[#8b5cf6] to-[#3b82f6] rounded-t-3xl" />
 
@@ -101,10 +101,10 @@ export default function ForgotPasswordPage() {
 
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-white">
+                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-foreground">
                             Reset Password
                         </h2>
-                        <p className="text-sm text-white/40">
+                        <p className="text-sm text-foreground/40">
                             Enter your email and we&apos;ll send you a reset link
                         </p>
                     </div>
@@ -135,14 +135,14 @@ export default function ForgotPasswordPage() {
                                 <CheckCircle2 className="w-10 h-10 text-[#3b82f6]" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold mb-2 text-white">Check your inbox</h3>
-                                <p className="text-white/50 text-sm">
+                                <h3 className="text-xl font-bold mb-2 text-foreground">Check your inbox</h3>
+                                <p className="text-foreground/50 text-sm">
                                     We&apos;ve sent a password reset link to <span className="font-medium text-[#3b82f6]">{form.getValues().email}</span>
                                 </p>
                             </div>
                             <button
                                 onClick={() => setIsSubmitted(false)}
-                                className="text-sm text-white/50 hover:text-[#3b82f6] transition-colors"
+                                className="text-sm text-foreground/50 hover:text-[#3b82f6] transition-colors"
                             >
                                 Try another email
                             </button>
@@ -151,16 +151,16 @@ export default function ForgotPasswordPage() {
                         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                             {/* Email Field */}
                             <div className="space-y-2">
-                                <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                                <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                     Email Address
                                 </label>
                                 <div className="relative">
-                                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                     <input
                                         {...form.register("email")}
                                         type="email"
                                         placeholder="Enter your email"
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#3b82f6]/50 focus:bg-white/10 transition-all text-sm"
+                                        className="w-full bg-muted border border-border rounded-xl pl-12 pr-4 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-[#3b82f6]/50 focus:bg-muted transition-all text-sm"
                                     />
                                 </div>
                                 {form.formState.errors.email && (
@@ -190,10 +190,10 @@ export default function ForgotPasswordPage() {
                     )}
 
                     {/* Back to Login */}
-                    <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                    <div className="mt-8 pt-6 border-t border-border text-center">
                         <Link
                             href="/login"
-                            className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-[#3b82f6] transition-colors"
+                            className="inline-flex items-center gap-2 text-sm text-foreground/50 hover:text-[#3b82f6] transition-colors"
                         >
                             <ArrowLeft className="w-4 h-4" />
                             Back to Sign In
@@ -202,7 +202,7 @@ export default function ForgotPasswordPage() {
                 </div>
 
                 {/* Footer */}
-                <p className="text-center text-xs text-white/30 mt-6">
+                <p className="text-center text-xs text-foreground/30 mt-6">
                     Need help? Contact us at support@brixsports.com
                 </p>
             </motion.div>

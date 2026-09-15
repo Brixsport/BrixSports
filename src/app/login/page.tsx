@@ -126,7 +126,7 @@ function LoginPageContent() {
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4">
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
             {/* Background Effects */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px]" />
@@ -137,7 +137,7 @@ function LoginPageContent() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="w-full max-w-md bg-gradient-to-br from-zinc-900 to-black border border-white/10 rounded-3xl shadow-2xl overflow-hidden relative z-10"
+                className="w-full max-w-md bg-card border border-border rounded-3xl shadow-2xl overflow-hidden relative z-10"
             >
                 {/* Animated Background Pattern */}
                 <div className="absolute inset-0 opacity-5 pointer-events-none">
@@ -152,13 +152,13 @@ function LoginPageContent() {
 
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center font-display text-3xl -skew-x-12 text-black mx-auto mb-4 shadow-lg shadow-primary/20">
+                        <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center font-display text-3xl -skew-x-12 text-primary-foreground mx-auto mb-4 shadow-lg shadow-primary/20">
                             B
                         </div>
-                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-white">
+                        <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-foreground">
                             Welcome Back
                         </h2>
-                        <p className="text-sm text-white/40">
+                        <p className="text-sm text-foreground/40">
                             Sign in to access your personalized sports experience
                         </p>
                     </div>
@@ -198,16 +198,16 @@ function LoginPageContent() {
 
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Email
                             </label>
                             <div className="relative">
-                                <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                                <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("email")}
                                     type="email"
                                     placeholder="Enter your email"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm"
+                                    className="w-full bg-muted border border-border rounded-xl pl-12 pr-4 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                             </div>
                             {form.formState.errors.email && (
@@ -217,7 +217,7 @@ function LoginPageContent() {
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between mb-2">
-                                <label className="block text-xs font-bold uppercase tracking-widest text-white/60">
+                                <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60">
                                     Password
                                 </label>
                                 <Link
@@ -228,17 +228,17 @@ function LoginPageContent() {
                                 </Link>
                             </div>
                             <div className="relative">
-                                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("password")}
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Enter your password"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm"
+                                    className="w-full bg-muted border border-border rounded-xl pl-12 pr-12 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/60 transition-colors"
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -251,7 +251,7 @@ function LoginPageContent() {
                         <button
                             type="submit"
                             disabled={isLoading || success}
-                            className="w-full bg-primary hover:bg-primary/90 text-black font-black uppercase tracking-widest text-sm py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20 mt-6"
+                            className="w-full bg-primary hover:bg-primary/90 disabled:bg-primary/60 text-primary-foreground font-black uppercase tracking-widest text-sm py-4 rounded-xl transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20 mt-6"
                         >
                             {isLoading ? (
                                 <>
@@ -272,10 +272,10 @@ function LoginPageContent() {
                     {/* Divider */}
                     <div className="relative my-8">
                         <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-white/10" />
+                            <div className="w-full border-t border-border" />
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-[#0e0e11] px-4 text-white/40 font-bold tracking-widest">
+                            <span className="bg-card px-4 text-foreground/40 font-bold tracking-widest">
                                 Or continue with
                             </span>
                         </div>
@@ -287,7 +287,7 @@ function LoginPageContent() {
                             type="button"
                             onClick={handleGoogleLogin}
                             disabled={isLoading}
-                            className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-3 transition-all text-white"
+                            className="flex items-center justify-center gap-2 bg-muted hover:bg-muted/70 border border-border rounded-xl py-3 transition-all text-foreground"
                         >
                             <svg className="w-5 h-5" viewBox="0 0 24 24">
                                 <path
@@ -313,7 +313,7 @@ function LoginPageContent() {
 
                     {/* Sign Up Link */}
                     <div className="mt-8 text-center">
-                        <p className="text-sm text-white/40">
+                        <p className="text-sm text-foreground/40">
                             Don't have an account?{" "}
                             <Link
                                 href="/signup"
@@ -332,7 +332,7 @@ function LoginPageContent() {
 export default function LoginPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
         }>
