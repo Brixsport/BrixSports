@@ -128,7 +128,7 @@
   }
 
   html {
-    @apply bg-[#050505];
+    @apply bg-background;
   }
 
   body {

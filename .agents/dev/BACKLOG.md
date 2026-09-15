@@ -8015,6 +8015,32 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 **Found/Requested:** session 51 (2026-08-11), Richard's explicit ask to build light mode for the whole system as part of the broader roadmap sequencing conversation. **Phase 1 built and live-verified:** session 51, same session.
 
+**Phase 2 survey + a real live bug found, 2026-09-15:** Richard asked for a full light-mode scaffold, framed as if starting from zero — it isn't; this is a continuation of this exact entry. Ran the `frontend-design` + `design:design-system` skills' audit process across the whole app before proposing anything.
+
+**Bug found and fixed:** `globals.css`'s `html { @apply bg-[#050505]; }` hardcoded the `<html>` root to near-black regardless of theme — bypassing the token system entirely, at the outermost box. Even a page fully retrofitted to semantic tokens would still show a black flash/edge (scroll bounce past `body`'s bounds, any unpainted margin) in light mode because of this one line. Fixed: `bg-background`. Tiny, safe, touches no page — unblocks the mechanism itself rather than any individual screen.
+
+**Audit — token coverage across the app:**
+| | Files | What |
+|---|---|---|
+| Token-driven (`bg-background`/`text-foreground`/`bg-card`) | 28 | Almost entirely the shadcn primitive library (`src/components/ui/*` — button, card, dialog, sheet, table, tabs, etc.), which shadcn scaffolds token-based by default. Plus the one Phase 2 pilot (`profile/settings/page.tsx`). |
+| Hardcoded dark-only (`bg-black`, `text-white`, `bg-[#0a0a0a]`/`bg-[#050505]`, `border-white/N`) | 174 | Effectively every actual page and hand-built feature component — the token system exists at the foundation but was never adopted when building the real product UI. |
+
+The gap isn't "no palette exists" (a real, Richard-reviewed one already does) — it's that 174 files never consume it.
+
+**Proposed Phase 2 rollout (plan only, no pages touched this pass — Richard's explicit "propose first" call):**
+
+Reuses the exact mechanical conversion rule already proven on the pilot page (`text-white(/NN)`→`text-foreground(/NN)`, `bg-white/5`+`border-white/10`→`bg-muted`+`border-border`, `bg-[#050505]`→`bg-background`/`bg-card`, `text-black`-on-primary→`text-primary-foreground`) plus its one hard-won lesson (bare `opacity-NN` on text is backdrop-relative, not theme-safe — always separate the background fade from a fixed `text-muted-foreground`, never fade text via a wrapping opacity). Every phase still needs a manual per-file audit pass for deliberate exceptions (the pilot found two: the modal backdrop scrim, the toggle knob) — this is not a blind find-replace, same discipline `BACKLOG-379`'s bulk BackButton rollout used (mechanical pass + independent re-verification of every file, not taken on trust).
+
+- **Phase 2a — Public viewer critical path (~28 files), do first:** homepage (`page.tsx`), match detail (`MatchDetailClient.tsx`), teams (`teams/page.tsx`, `TeamDetailClient.tsx`), competitions (`competitions/page.tsx`, `[id]/page.tsx`), players (`[id]/page.tsx`, `PlayerDetailClient.tsx`), news, `/live`, `/search`, `MatchCard.tsx`, `BottomNav.tsx`, `LiveMatchStatus.tsx`/`LiveStats.tsx`/`LiveUpdates.tsx`/`MatchTimeline.tsx`, `HeadToHead.tsx`, `StandingsGrid.tsx`/`StandingsFilters.tsx`/`MatchStandingsTable.tsx`, `TeamStatsChart.tsx`/`TeamProfileOverlay.tsx`/`TopPlayers.tsx`, `PlayerProfileOverlay.tsx`/`PlayerStatsModal.tsx`/`PlayerComparison.tsx`/`PlayerPerformanceGraphs.tsx`, `CompetitionsShowcase.tsx`, `GlobalSearch.tsx`/`SearchOverlay.tsx`, `livestream/*`, `AdBanner.tsx`, `about`/`privacy`/`terms`/`docs`/`stats` static pages. Highest traffic, Flow C territory, the pages a light-mode toggle would actually need to work on to feel real.
+- **Phase 2b — Authenticated Fan pages (~20 files):** `profile/page.tsx`, `profile/favorites`, `notifications`, `login`/`signup`/`reset-password`/`forgot-password`, `dashboard`, `user/[userId]`, `AuthModal.tsx`/`AuthButton.tsx`, `Coachmark.tsx`/`OnboardingModal.tsx`, `Notifications.tsx`/`NotificationPrompt.tsx`, `MyFeed.tsx`/`PersonalizedFeed.tsx`/`ActivityFeed.tsx`, `FanWall.tsx`/`CreatePoll.tsx`/`MatchPoll*.tsx`/`PollComments.tsx`, `predictions/*`.
+- **Phase 2c — Secondary features (~20 files):** `fpl/*`, `draft`, `transfers` (viewer-facing news page, not `/admin/transfers`), `lineup-builder/*` + `lineup/*` components, `blog/*`, `seo/FAQSection.tsx`, `pwa/*` prompts, `/offline`.
+- **Phase 2d — Admin (~55 files), lowest priority:** internal tool, `AdminSidebar` already gives consistent chrome regardless of theme, a tiny audience next to viewer traffic — recommend deprioritizing indefinitely at MVP tier rather than spending retrofit effort here, unless Richard wants full admin theming for its own sake. The 5 🔴 High Volatility surfaces within admin (Ads, Lineup Builder, Transfers, User Management, News) need their own explicit per-page brief before any styling edit, same as any other change there — not blanket-covered by this plan.
+- **Phase 2e — Logger (`FootballLogger.tsx`/`BasketballLogger.tsx`/`logger/page.tsx` + ~5 more, ~7 files), open question, not a default "do it":** this is Critical Flow B, a live-match operator tool. A real design question, not just a technical one — dark UI during a live match (glare, battery, night-game usage) may be the *right* permanent choice regardless of system theme, not a gap to close. If retrofitted at all, do it last, with mandatory live-device manual testing before shipping (CLAUDE.md's own rule for anything touching Flow B) — recommend Richard decide this one specifically rather than defaulting to "retrofit everything."
+
+**Suggested cadence:** one phase per session/PR, each independently `tsc`-checked and live-verified against the deployed preview (same method the pilot already proved: `getComputedStyle` on real elements post-toggle, not eyeballing) before starting the next phase — not all 174 files in one pass.
+
+**Not done this pass:** any actual page retrofit (Phase 2a-e above) — audit, one root-cause bug fix, and this plan only, per Richard's explicit "propose before touching pages" instruction.
+
 ---
 
 ### ~~BUG-217~~ — `AuthContext.checkAuth()` Treats Network Failure the Same as Confirmed Logout, and Deletes a Still-Possibly-Valid Token on Any Non-2xx Response
