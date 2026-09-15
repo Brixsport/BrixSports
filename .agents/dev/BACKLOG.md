@@ -13364,4 +13364,7 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 - Pending: live 375px `scrollWidth` vs `clientWidth` check on the deployed preview (this project's own established verification method for exactly this failure class, per `BACKLOG-370`/`371`) — not yet run this pass, doing so before considering this fully closed.
 **Files:** `src/components/BottomNav.tsx`.
 
+**Reverted, 2026-09-15, same day:** Richard reconsidered and asked to remove the 3 added items (Teams/Lineups/News) — back to `Fixtures`/`Competitions`/`Profile` only, `Competitions` label restored (no longer needs the "Comps" shortening once it's back to 3 columns). Kept the `grid grid-cols-N` layout approach rather than restoring the original `flex justify-around` + fixed `min-w-[70px]`, now `grid-cols-3` — a grid is the safer default if the item count changes again, and there was no reason to revert a strictly-better layout mechanism along with the content change. Kept the `Users`/`ListChecks`/`Newspaper` icon imports removed (unused now). The underlying gap this entry describes (Teams/Lineup Builder/News unreachable from a global nav) is open again — no replacement solution decided; revisit if Richard wants a different approach later (a dedicated "More" tab, or leaving it as homepage-only per the original state).
+**Files (revert):** `src/components/BottomNav.tsx`.
+
 ---
