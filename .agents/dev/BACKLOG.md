@@ -8106,7 +8106,10 @@ Reuses the exact mechanical conversion rule already proven on the pilot page (`t
 
 **Evidence:**
 - `tsc --noEmit`: 18 errors, unchanged baseline.
-- **Live-verified before committing**, not just reasoned about: injected the exact candidate values via `document.documentElement.style.setProperty` against the real deployed branch preview (both the match-detail page and the homepage match list), screenshotted both, confirmed real visible card/page separation and a legible match-card hierarchy before writing the change to source. Not yet re-verified against the actual redeployed build with the real CSS file (in progress -- see commit list for the push).
+- **Live-verified before committing**, not just reasoned about: injected the exact candidate values via `document.documentElement.style.setProperty` against the real deployed branch preview (both the match-detail page and the homepage match list), screenshotted both, confirmed real visible card/page separation and a legible match-card hierarchy before writing the change to source.
+- **Re-confirmed after redeploy against the real CSS** (commit `4f477c6`, no injection): `getComputedStyle(document.body).backgroundColor` on the live page resolves to the exact new value (`oklch(0.95 0.005 85)`), and the match-detail overview panel now shows real three-tier elevation (background → muted outer panel → card inner tile), screenshot-confirmed. Both this and the Phase-2a-gap fix above are now fully closed and verified against the actual deployed build, not just local/injected state.
+
+**BACKLOG-216 status: all planned scope (Phases 1, 2a, 2b, 2c) is now shipped, live-verified against the real deployed branch preview, and includes the token-level contrast fix found via that verification. Phase 2d skipped, Phase 2e resolved as dark-only-permanent. Nothing outstanding on this item.**
 
 ---
 
