@@ -8100,6 +8100,14 @@ Reuses the exact mechanical conversion rule already proven on the pilot page (`t
   - Every other match in the sweep (65 files total) is either Phase 2d Admin (deliberately skipped), Phase 2e Logger (deliberately kept dark-only), an already-documented self-contained-palette exception (livestream/*, CreatePoll.tsx), a shadcn `ui/*` primitive's own backdrop convention, or a genuine modal/dropdown scrim -- not re-audited file-by-file beyond confirming the pattern match, since none of those are claimed as "converted" by any phase's evidence block in the first place.
 - `tsc --noEmit`: 18 errors, unchanged baseline, after all three fixes (`MatchDetailClient.tsx`, `news/page.tsx`, `AdBanner.tsx`).
 
+**Light-mode token contrast fix, same session, Richard's direct feedback against the live deployed match-detail page:** "the white is looking dull/faint, not sharp" -- referencing SofaScore's light-mode look. Root cause found in `src/app/globals.css`'s `:root` block, not any individual page: `--background` (0.97) and `--card` (0.99) sat only 0.02 lightness apart, so every card/page boundary across all 76 retrofitted files read as flat regardless of how correctly each file used the tokens -- a token-definition problem, not a conversion-rule problem.
+
+**Fix:** widened the light-mode lightness gaps while keeping the same warm hue (~85) and leaving `--foreground`/`--muted-foreground` and the entire dark theme untouched: `--background` 0.97→0.95, `--card`/`--popover` 0.99→0.995, `--muted` 0.95→0.92, `--border`/`--input` 0.9→0.85, plus the matching `--sidebar`/`--sidebar-accent`/`--sidebar-border` triplet. This is a single-file, ~7-line token change but has app-wide effect (every light-mode surface in all three completed phases) since the whole retrofit is built on these tokens -- flagging the blast radius explicitly rather than treating "small diff" as "small impact."
+
+**Evidence:**
+- `tsc --noEmit`: 18 errors, unchanged baseline.
+- **Live-verified before committing**, not just reasoned about: injected the exact candidate values via `document.documentElement.style.setProperty` against the real deployed branch preview (both the match-detail page and the homepage match list), screenshotted both, confirmed real visible card/page separation and a legible match-card hierarchy before writing the change to source. Not yet re-verified against the actual redeployed build with the real CSS file (in progress -- see commit list for the push).
+
 ---
 
 ### ~~BUG-217~~ — `AuthContext.checkAuth()` Treats Network Failure the Same as Confirmed Logout, and Deletes a Still-Possibly-Valid Token on Any Non-2xx Response

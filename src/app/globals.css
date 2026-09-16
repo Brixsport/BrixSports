@@ -53,38 +53,54 @@
      against a real screenshot. Slight warm tint (hue ~85, matching the
      "paper white" convention most polished light themes use) plus a touch
      less lightness softens it without meaningfully changing contrast ratios
-     against --foreground/--muted-foreground (unchanged, still 0 chroma). */
-  --background: oklch(0.97 0.004 85);
+     against --foreground/--muted-foreground (unchanged, still 0 chroma).
+
+     Session 2026-09-16: the fix above overcorrected -- background(0.97) and
+     card(0.99) sat only 0.02 apart, so every card/page boundary across all
+     76 retrofitted files read as flat/washed out instead of sharp (flagged
+     directly by Richard against the live deployed match-detail page,
+     referencing SofaScore's crisp white-card-on-light-gray-page look).
+     Widened the gaps while keeping the same warm hue and --foreground/
+     --muted-foreground untouched (dark mode also untouched): background
+     dropped to a visibly gray page (0.95), card raised near-white (0.995)
+     for real elevation contrast, muted deepened to a distinguishable
+     secondary-panel tone (0.92), border/input darkened (0.85) so dividers
+     and card edges are actually visible instead of nearly invisible.
+     Live-verified by injecting these exact values via document.documentElement.style
+     against the real deployed preview before committing -- homepage match
+     list, nav, and match-detail overview panel all screenshot-confirmed
+     sharper, not just computed-style-confirmed. */
+  --background: oklch(0.95 0.005 85);
   --foreground: oklch(0.15 0 0);
-  --card: oklch(0.99 0.003 85);
+  --card: oklch(0.995 0.002 85);
   --card-foreground: oklch(0.15 0 0);
-  --popover: oklch(0.99 0.003 85);
+  --popover: oklch(0.995 0.002 85);
   --popover-foreground: oklch(0.15 0 0);
   --primary: oklch(0.6 0.2 250);
   /* Premium Blue */
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.92 0.02 250);
   --secondary-foreground: oklch(0.2 0.05 250);
-  --muted: oklch(0.95 0 0);
+  --muted: oklch(0.92 0.003 85);
   --muted-foreground: oklch(0.45 0 0);
   --accent: oklch(0.6 0.2 250 / 0.1);
   --accent-foreground: oklch(0.6 0.2 250);
   --destructive: oklch(0.6 0.2 25);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
+  --border: oklch(0.85 0 0);
+  --input: oklch(0.85 0 0);
   --ring: oklch(0.6 0.2 250);
   --chart-1: oklch(0.6 0.2 250);
   --chart-2: oklch(0.5 0.2 250);
   --chart-3: oklch(0.8 0.15 85);
   --chart-4: oklch(0.7 0.2 30);
   --chart-5: oklch(0.4 0.15 200);
-  --sidebar: oklch(0.97 0.004 85);
+  --sidebar: oklch(0.95 0.005 85);
   --sidebar-foreground: oklch(0.15 0 0);
   --sidebar-primary: oklch(0.6 0.2 250);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.95 0 0);
+  --sidebar-accent: oklch(0.92 0.003 85);
   --sidebar-accent-foreground: oklch(0.6 0.2 250);
-  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-border: oklch(0.85 0 0);
   --sidebar-ring: oklch(0.6 0.2 250);
 }
 
