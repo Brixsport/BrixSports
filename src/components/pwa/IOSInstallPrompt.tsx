@@ -80,20 +80,20 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
                 <div className="bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl shadow-primary/20">
                     <button
                         onClick={handleDismiss}
-                        className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
+                        className="absolute top-4 right-4 text-foreground/40 hover:text-foreground transition-colors"
                     >
                         <X size={20} />
                     </button>
 
                     <div className="flex items-start gap-4 mb-6">
                         <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center flex-shrink-0">
-                            <Smartphone className="text-black" size={24} />
+                            <Smartphone className="text-primary-foreground" size={24} />
                         </div>
                         <div>
-                            <h3 className="font-display text-xl italic uppercase tracking-tight text-white mb-1">
+                            <h3 className="font-display text-xl italic uppercase tracking-tight text-foreground mb-1">
                                 Install Brixsport
                             </h3>
-                            <p className="text-sm text-white/60">
+                            <p className="text-sm text-foreground/60">
                                 Add to your home screen for the best experience
                             </p>
                         </div>
@@ -105,10 +105,10 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
                                 <span className="text-blue-400 font-bold text-sm">1</span>
                             </div>
                             <div className="flex-1">
-                                <p className="text-white text-sm font-medium mb-1">
+                                <p className="text-foreground text-sm font-medium mb-1">
                                     Tap the Share button
                                 </p>
-                                <div className="flex items-center gap-2 text-white/60 text-xs">
+                                <div className="flex items-center gap-2 text-foreground/60 text-xs">
                                     <Share size={16} className="text-blue-400" />
                                     <span>Look for the share icon in Safari</span>
                                 </div>
@@ -120,10 +120,10 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
                                 <span className="text-blue-400 font-bold text-sm">2</span>
                             </div>
                             <div className="flex-1">
-                                <p className="text-white text-sm font-medium mb-1">
+                                <p className="text-foreground text-sm font-medium mb-1">
                                     Select "Add to Home Screen"
                                 </p>
-                                <div className="flex items-center gap-2 text-white/60 text-xs">
+                                <div className="flex items-center gap-2 text-foreground/60 text-xs">
                                     <Plus size={16} className="text-blue-400" />
                                     <span>Scroll down in the share menu</span>
                                 </div>
@@ -135,25 +135,25 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
                                 <span className="text-blue-400 font-bold text-sm">3</span>
                             </div>
                             <div className="flex-1">
-                                <p className="text-white text-sm font-medium mb-1">
+                                <p className="text-foreground text-sm font-medium mb-1">
                                     Tap "Add" to confirm
                                 </p>
-                                <p className="text-white/60 text-xs">
+                                <p className="text-foreground/60 text-xs">
                                     The app will appear on your home screen
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                        <p className="text-xs text-white/60 text-center">
+                    <div className="bg-muted border border-border rounded-xl p-3">
+                        <p className="text-xs text-foreground/60 text-center">
                             <span className="text-primary font-bold">Pro tip:</span> Once installed, you'll get faster load times, offline access, and push notifications for live matches!
                         </p>
                     </div>
 
                     <button
                         onClick={handleDismiss}
-                        className="w-full mt-4 px-4 py-3 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors"
+                        className="w-full mt-4 px-4 py-3 text-foreground/60 hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors"
                     >
                         Got it, thanks!
                     </button>

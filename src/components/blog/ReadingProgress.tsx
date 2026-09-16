@@ -101,7 +101,7 @@ export default function ReadingProgress({ target = 'article', className = '' }: 
                         </svg>
                         {/* Percentage text */}
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-xs font-bold text-white">
+                            <span className="text-xs font-bold text-foreground">
                                 {Math.round(progress)}%
                             </span>
                         </div>

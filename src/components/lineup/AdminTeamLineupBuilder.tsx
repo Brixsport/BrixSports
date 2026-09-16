@@ -81,7 +81,7 @@ export function AdminTeamLineupBuilder({
     const captainId = placement.placements.find((p) => p.isCaptain)?.playerId;
 
     return (
-        <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${isDisabled ? 'opacity-70 pointer-events-none' : ''}`}>
+        <div className={`bg-muted rounded-xl border border-border p-6 ${isDisabled ? 'opacity-70 pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold">{teamName}</h3>
                 <div className={`text-xs font-bold ${placement.placements.length === maxStarters ? 'text-green-400' : 'text-orange-400'}`}>
@@ -101,7 +101,7 @@ export function AdminTeamLineupBuilder({
                         value={placement.formationId}
                         onChange={(e) => onRequestFormationChange(e.target.value)}
                         disabled={isDisabled}
-                        className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10 text-xs font-display italic font-bold text-white uppercase tracking-wider focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                        className="px-3 py-1 bg-card/50 rounded-lg backdrop-blur-md border border-border text-xs font-display italic font-bold text-foreground uppercase tracking-wider focus:outline-none cursor-pointer disabled:cursor-not-allowed"
                     >
                         {formationOptions.map((f) => (
                             <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
@@ -112,10 +112,10 @@ export function AdminTeamLineupBuilder({
 
             {/* Captain selection -- only currently-placed starters are eligible */}
             <div className="mt-4">
-                <label className="text-sm text-white/60 mb-2 block">Captain</label>
+                <label className="text-sm text-foreground/60 mb-2 block">Captain</label>
                 <div className="flex flex-wrap gap-2">
                     {placement.placements.length === 0 ? (
-                        <p className="text-xs text-white/40">Place starters on the pitch first</p>
+                        <p className="text-xs text-foreground/40">Place starters on the pitch first</p>
                     ) : (
                         placement.placements.map((p) => {
                             const player = rosterById[p.playerId];
@@ -127,7 +127,7 @@ export function AdminTeamLineupBuilder({
                                     onClick={() => placement.setCaptain(p.playerId)}
                                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors ${isCaptain
                                         ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
-                                        : 'bg-white/10 text-white/60 hover:bg-white/20 border border-transparent'
+                                        : 'bg-muted text-foreground/60 hover:bg-muted/70 border border-transparent'
                                         }`}
                                 >
                                     <Star size={12} className={isCaptain ? 'fill-yellow-400' : ''} />
@@ -142,16 +142,16 @@ export function AdminTeamLineupBuilder({
             {/* Bench -- everyone on the roster not currently placed. Matches the
                 existing publish semantics (substitutes = roster minus starters),
                 just shown explicitly instead of only being an implicit leftover. */}
-            <div className="mt-4 pt-4 border-t border-white/10">
+            <div className="mt-4 pt-4 border-t border-border">
                 <div className="flex items-center gap-2 mb-2">
-                    <Users size={14} className="text-white/40" />
-                    <label className="text-sm text-white/60">Bench ({benchPlayers.length})</label>
+                    <Users size={14} className="text-foreground/40" />
+                    <label className="text-sm text-foreground/60">Bench ({benchPlayers.length})</label>
                 </div>
                 <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                     {benchPlayers.map((p) => (
                         <span
                             key={p.id}
-                            className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-[10px] text-white/60"
+                            className="px-2 py-1 rounded-lg bg-muted border border-border text-[10px] text-foreground/60"
                         >
                             #{p.number} {p.jerseyName || p.name}
                         </span>

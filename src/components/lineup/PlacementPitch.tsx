@@ -55,7 +55,7 @@ export function PlacementPitch({
 
     if (!formation) {
         return (
-            <div className="text-center py-12 text-white/40 text-sm">
+            <div className="text-center py-12 text-foreground/40 text-sm">
                 Unknown formation: {formationId}
             </div>
         );
@@ -108,7 +108,7 @@ export function PlacementPitch({
 
             {teamLabel && (
                 <div className="absolute top-4 left-4 z-10">
-                    <div className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-black/50 text-white border border-white/10 backdrop-blur-md">
+                    <div className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-card/50 text-foreground border border-border backdrop-blur-md">
                         {teamLabel}
                     </div>
                 </div>
@@ -116,8 +116,8 @@ export function PlacementPitch({
 
             <div className="absolute top-4 right-4 z-10">
                 {formationControl ?? (
-                    <div className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10">
-                        <span className="text-xs font-display italic font-bold text-white uppercase tracking-wider">
+                    <div className="px-3 py-1 bg-card/50 rounded-lg backdrop-blur-md border border-border">
+                        <span className="text-xs font-display italic font-bold text-foreground uppercase tracking-wider">
                             {formation.label}
                         </span>
                     </div>
@@ -236,9 +236,9 @@ function PlacementSlot({
 
                     {typeof details!.rating === 'number' && (
                         <div className="absolute top-1 right-1">
-                            <div className="flex items-center gap-0.5 bg-black/30 rounded px-1">
+                            <div className="flex items-center gap-0.5 bg-card/30 rounded px-1">
                                 <Star size={is5Aside ? 10 : 8} className="text-yellow-400 fill-yellow-400" />
-                                <span className={`${is5Aside ? 'text-[10px]' : 'text-[8px]'} font-bold text-white`}>
+                                <span className={`${is5Aside ? 'text-[10px]' : 'text-[8px]'} font-bold text-foreground`}>
                                     {details!.rating!.toFixed(1)}
                                 </span>
                             </div>

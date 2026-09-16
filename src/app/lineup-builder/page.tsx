@@ -265,7 +265,7 @@ export default function LineupBuilderPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
+        <div className="min-h-screen bg-background text-foreground p-6 md:p-12">
             <div className="max-w-[1400px] mx-auto space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
@@ -274,12 +274,12 @@ export default function LineupBuilderPage() {
                             <h1 className="font-display text-4xl tracking-tighter italic uppercase leading-none mb-2">
                                 Lineup Builder
                             </h1>
-                            <p className="text-sm text-white/60">Build your dream XI from any team, any player.</p>
+                            <p className="text-sm text-foreground/60">Build your dream XI from any team, any player.</p>
                         </div>
                     </div>
                     <Link
                         href="/lineup-builder/gallery"
-                        className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-white/10 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-muted border border-border rounded-xl text-xs font-black uppercase tracking-wider hover:bg-muted/70 transition-colors"
                     >
                         <Grid3x3 size={14} />
                         Gallery
@@ -289,20 +289,20 @@ export default function LineupBuilderPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Sidebar */}
                     <div className="space-y-4 order-2 lg:order-1">
-                        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                            <label className="text-sm text-white/60 mb-2 block">Team Name</label>
+                        <div className="bg-muted border border-border rounded-xl p-4">
+                            <label className="text-sm text-foreground/60 mb-2 block">Team Name</label>
                             <input
                                 type="text"
                                 value={teamName}
                                 onChange={(e) => setTeamName(e.target.value)}
-                                className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
+                                className="w-full bg-muted border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-primary"
                             />
                         </div>
 
-                        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                        <div className="bg-muted border border-border rounded-xl p-4">
                             <button
                                 onClick={() => setPrefillOpen((open) => !open)}
-                                className="w-full flex items-center justify-between text-sm text-white/60"
+                                className="w-full flex items-center justify-between text-sm text-foreground/60"
                             >
                                 <span>Pre-fill lineup</span>
                                 <ChevronRight size={14} className={`transition-transform ${prefillOpen ? 'rotate-90' : ''}`} />
@@ -314,7 +314,7 @@ export default function LineupBuilderPage() {
                                         value={teamSearch}
                                         onChange={(e) => setTeamSearch(e.target.value)}
                                         placeholder="Search a team..."
-                                        className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary mt-2 mb-2"
+                                        className="w-full bg-muted border border-border rounded-lg px-4 py-2 text-foreground text-sm focus:outline-none focus:border-primary mt-2 mb-2"
                                     />
                                     <div className="space-y-1 max-h-56 overflow-y-auto">
                                         {realTeams
@@ -329,45 +329,45 @@ export default function LineupBuilderPage() {
                                                     key={t.id}
                                                     onClick={() => handlePrefillTeam(t)}
                                                     disabled={prefilling !== null}
-                                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left hover:bg-white/10 transition-colors disabled:opacity-50"
+                                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left hover:bg-muted/70 transition-colors disabled:opacity-50"
                                                 >
                                                     {t.logo ? (
                                                         // eslint-disable-next-line @next/next/no-img-element
                                                         <img src={t.logo} alt="" className="w-5 h-5 rounded-full object-cover" />
                                                     ) : (
-                                                        <span className="w-5 h-5 rounded-full bg-white/10" />
+                                                        <span className="w-5 h-5 rounded-full bg-muted" />
                                                     )}
-                                                    <span className="text-white/80 truncate">{t.name}</span>
-                                                    {prefilling === t.id && <span className="ml-auto text-white/40">…</span>}
+                                                    <span className="text-foreground/80 truncate">{t.name}</span>
+                                                    {prefilling === t.id && <span className="ml-auto text-foreground/40">…</span>}
                                                 </button>
                                             ))}
                                     </div>
-                                    <p className="text-[10px] text-white/40 mt-2">
+                                    <p className="text-[10px] text-foreground/40 mt-2">
                                         {loadingPlayers ? 'Loading players…' : `${availablePlayers.length} players available`}
                                     </p>
                                 </>
                             )}
                         </div>
 
-                        <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2">
+                        <div className="bg-muted border border-border rounded-xl p-4 space-y-2">
                             <button
                                 onClick={() => handleSave(false)}
                                 disabled={saving}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/10 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-white/20 transition-colors disabled:opacity-50"
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-muted rounded-xl text-xs font-black uppercase tracking-wider hover:bg-muted/70 transition-colors disabled:opacity-50"
                             >
                                 <Save size={14} /> Save Draft
                             </button>
                             <button
                                 onClick={() => handleSave(true)}
                                 disabled={saving}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-black rounded-xl text-xs font-black uppercase tracking-wider hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-primary-foreground rounded-xl text-xs font-black uppercase tracking-wider hover:bg-primary/90 transition-colors disabled:opacity-50"
                             >
                                 <Send size={14} /> Publish to Gallery
                             </button>
                             <button
                                 onClick={handleDownload}
                                 disabled={saving}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-white/10 transition-colors disabled:opacity-50"
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-muted border border-border rounded-xl text-xs font-black uppercase tracking-wider hover:bg-muted/70 transition-colors disabled:opacity-50"
                             >
                                 Download Image
                             </button>
@@ -380,8 +380,8 @@ export default function LineupBuilderPage() {
                         </div>
 
                         {myTeams.length > 0 && (
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                                <label className="text-sm text-white/60 mb-2 block">My Teams</label>
+                            <div className="bg-muted border border-border rounded-xl p-4">
+                                <label className="text-sm text-foreground/60 mb-2 block">My Teams</label>
                                 <div className="space-y-2 max-h-64 overflow-y-auto">
                                     {myTeams.map((team) => (
                                         <button
@@ -389,11 +389,11 @@ export default function LineupBuilderPage() {
                                             onClick={() => handleLoadTeam(team)}
                                             className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${currentXiId === team.id
                                                 ? 'bg-primary/20 border border-primary/40'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                : 'bg-muted border border-border hover:bg-muted/70'
                                                 }`}
                                         >
-                                            <p className="font-bold text-white truncate">{team.name}</p>
-                                            <p className="text-white/40">{team.formation}{team.isPublic ? ' · Public' : ' · Draft'}</p>
+                                            <p className="font-bold text-foreground truncate">{team.name}</p>
+                                            <p className="text-foreground/40">{team.formation}{team.isPublic ? ' · Public' : ' · Draft'}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -414,7 +414,7 @@ export default function LineupBuilderPage() {
                                     <select
                                         value={placement.formationId}
                                         onChange={(e) => handleFormationChange(e.target.value)}
-                                        className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10 text-xs font-display italic font-bold text-white uppercase tracking-wider focus:outline-none cursor-pointer"
+                                        className="px-3 py-1 bg-card/50 rounded-lg backdrop-blur-md border border-border text-xs font-display italic font-bold text-foreground uppercase tracking-wider focus:outline-none cursor-pointer"
                                     >
                                         {FORMATION_OPTIONS.map((f) => (
                                             <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
@@ -426,10 +426,10 @@ export default function LineupBuilderPage() {
 
                         {/* Captain */}
                         <div className="mt-4">
-                            <label className="text-sm text-white/60 mb-2 block">Captain</label>
+                            <label className="text-sm text-foreground/60 mb-2 block">Captain</label>
                             <div className="flex flex-wrap gap-2">
                                 {placement.placements.length === 0 ? (
-                                    <p className="text-xs text-white/40">Place players on the pitch first</p>
+                                    <p className="text-xs text-foreground/40">Place players on the pitch first</p>
                                 ) : (
                                     placement.placements.map((p) => {
                                         const player = playersById[p.playerId];
@@ -441,7 +441,7 @@ export default function LineupBuilderPage() {
                                                 onClick={() => placement.setCaptain(p.playerId)}
                                                 className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors ${isCaptain
                                                     ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
-                                                    : 'bg-white/10 text-white/60 hover:bg-white/20 border border-transparent'
+                                                    : 'bg-muted text-foreground/60 hover:bg-muted/70 border border-transparent'
                                                     }`}
                                             >
                                                 <Star size={12} className={isCaptain ? 'fill-yellow-400' : ''} />

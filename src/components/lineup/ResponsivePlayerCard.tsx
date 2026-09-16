@@ -118,7 +118,7 @@ export function ResponsivePlayerCard({
             </div>
 
             {/* Player Name - Adaptive Text */}
-            <div className={`mt-1 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded text-white ${size.text} font-semibold whitespace-nowrap text-center border border-white/20 max-w-[60px] truncate`}>
+            <div className={`mt-1 bg-card/70 backdrop-blur-sm px-1.5 py-0.5 rounded text-foreground ${size.text} font-semibold whitespace-nowrap text-center border border-border max-w-[60px] truncate`}>
                 {player.jerseyName || player.name.split(' ').pop()}
             </div>
 

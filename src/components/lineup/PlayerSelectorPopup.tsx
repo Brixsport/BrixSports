@@ -80,16 +80,16 @@ export function PlayerSelectorPopup({
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: 40, opacity: 0 }}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl bg-neutral-950 border border-white/10 shadow-2xl max-h-[85vh] flex flex-col"
+                    className="w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl bg-card border border-border shadow-2xl max-h-[85vh] flex flex-col"
                 >
-                    <div className="flex items-center justify-between p-4 border-b border-white/10">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-white">{title}</h3>
-                        <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 text-white/60">
+                    <div className="flex items-center justify-between p-4 border-b border-border">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-foreground">{title}</h3>
+                        <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted text-foreground/60">
                             <X size={18} />
                         </button>
                     </div>
 
-                    <div className="p-4 space-y-3 border-b border-white/10">
+                    <div className="p-4 space-y-3 border-b border-border">
                         {currentPlayerId && onRemove && (
                             <button
                                 onClick={() => {
@@ -104,13 +104,13 @@ export function PlayerSelectorPopup({
                         )}
 
                         <div className="relative">
-                            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/40" />
+                            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-foreground/40" />
                             <input
                                 type="text"
                                 placeholder="Search players..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors"
+                                className="w-full bg-muted border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-foreground placeholder-foreground/40 focus:outline-none focus:border-primary transition-colors"
                             />
                         </div>
 
@@ -120,8 +120,8 @@ export function PlayerSelectorPopup({
                                     key={pos}
                                     onClick={() => setPositionFilter(pos)}
                                     className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${positionFilter === pos
-                                        ? 'bg-primary text-black'
-                                        : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted text-foreground/60 hover:bg-muted/70'
                                         }`}
                                 >
                                     {pos}
@@ -132,7 +132,7 @@ export function PlayerSelectorPopup({
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                         {filtered.length === 0 ? (
-                            <div className="text-center py-8 text-white/40 text-sm">No players found</div>
+                            <div className="text-center py-8 text-foreground/40 text-sm">No players found</div>
                         ) : (
                             filtered.map((candidate) => {
                                 const isPlacedElsewhere = excludePlayerIds.includes(candidate.id) && candidate.id !== currentPlayerId;
@@ -177,8 +177,8 @@ function CandidateRow({
             className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${isCurrent
                 ? 'bg-primary/10 border-primary'
                 : placedElsewhere
-                    ? 'bg-white/5 border-white/10 hover:border-yellow-500/50 hover:bg-white/10'
-                    : 'bg-white/5 border-white/10 hover:border-primary/50 hover:bg-white/10'
+                    ? 'bg-muted border-border hover:border-yellow-500/50 hover:bg-muted/70'
+                    : 'bg-muted border-border hover:border-primary/50 hover:bg-muted/70'
                 }`}
         >
             <div
@@ -191,10 +191,10 @@ function CandidateRow({
             </div>
 
             <div className="flex-1 text-left">
-                <p className="text-sm font-black uppercase tracking-tight text-white">
+                <p className="text-sm font-black uppercase tracking-tight text-foreground">
                     {candidate.jerseyName || candidate.name}
                 </p>
-                <p className="text-[10px] text-white/60 font-bold uppercase tracking-wider">
+                <p className="text-[10px] text-foreground/60 font-bold uppercase tracking-wider">
                     {candidate.position}
                     {placedElsewhere && ' · tap to swap'}
                 </p>

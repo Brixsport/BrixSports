@@ -46,7 +46,7 @@ function BenchSection({
 
     return (
         <div className={`space-y-2 ${className}`}>
-            <h4 className="text-white/60 text-xs font-bold uppercase tracking-wider px-2">Substitutes</h4>
+            <h4 className="text-foreground/60 text-xs font-bold uppercase tracking-wider px-2">Substitutes</h4>
             <div className="grid grid-cols-1 gap-2">
                 {subs.map((sub) => {
                     const player = players[sub.playerId];
@@ -62,7 +62,7 @@ function BenchSection({
                         <div
                             key={player.id}
                             onClick={() => onPlayerClick(player)}
-                            className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors cursor-pointer relative overflow-hidden"
+                            className="flex items-center gap-3 p-2 bg-muted rounded-lg border border-border hover:bg-muted/70 transition-colors cursor-pointer relative overflow-hidden"
                         >
                             {/* Sub In Indicator */}
                             {subEvent && (
@@ -84,7 +84,7 @@ function BenchSection({
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                    <span className={`text-sm font-medium truncate block ${subEvent ? 'text-green-400' : 'text-white'}`}>
+                                    <span className={`text-sm font-medium truncate block ${subEvent ? 'text-green-400' : 'text-foreground'}`}>
                                         {player.jerseyName || player.name}
                                     </span>
                                     {subEvent && (
@@ -93,14 +93,14 @@ function BenchSection({
                                         </span>
                                     )}
                                 </div>
-                                <span className="text-white/40 text-xs truncate block">
+                                <span className="text-foreground/40 text-xs truncate block">
                                     {player.position}
                                 </span>
                             </div>
                             {sub.rating && (
                                 <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sub.rating >= 7 ? 'bg-green-500/20 text-green-400' :
                                     sub.rating >= 6 ? 'bg-yellow-500/20 text-yellow-400' :
-                                        'bg-white/10 text-white/60'
+                                        'bg-muted text-foreground/60'
                                     }`}>
                                     {sub.rating.toFixed(1)}
                                 </div>
@@ -134,17 +134,17 @@ function ListView({
     return (
         <div className="space-y-4">
             {/* Team Toggle */}
-            <div className="flex gap-2 p-1 bg-white/5 rounded-xl">
+            <div className="flex gap-2 p-1 bg-muted rounded-xl">
                 <button
                     onClick={() => setActiveTeam('home')}
-                    className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${activeTeam === 'home' ? 'bg-white/10 text-white' : 'text-white/60'
+                    className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${activeTeam === 'home' ? 'bg-primary text-primary-foreground' : 'text-foreground/60'
                         }`}
                 >
                     {homeTeam.name}
                 </button>
                 <button
                     onClick={() => setActiveTeam('away')}
-                    className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${activeTeam === 'away' ? 'bg-white/10 text-white' : 'text-white/60'
+                    className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${activeTeam === 'away' ? 'bg-primary text-primary-foreground' : 'text-foreground/60'
                         }`}
                 >
                     {awayTeam.name}
@@ -152,8 +152,8 @@ function ListView({
             </div>
 
             {/* Player List */}
-            <div className="bg-white/5 rounded-xl border border-white/10 p-2">
-                <div className="text-white/40 text-xs font-bold uppercase tracking-wider mb-2 px-2">Starting XI</div>
+            <div className="bg-muted rounded-xl border border-border p-2">
+                <div className="text-foreground/40 text-xs font-bold uppercase tracking-wider mb-2 px-2">Starting XI</div>
                 <div className="space-y-2">
                     {currentLineup.map((lineupPlayer) => {
                         const player = currentPlayers[lineupPlayer.playerId];
@@ -165,7 +165,7 @@ function ListView({
                             <div
                                 key={player.id}
                                 onClick={() => onPlayerClick(player)}
-                                className="flex items-center gap-4 p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer relative overflow-hidden"
+                                className="flex items-center gap-4 p-3 bg-muted rounded-lg hover:bg-muted/70 transition-colors cursor-pointer relative overflow-hidden"
                             >
                                 {/* Sub Out Indicator */}
                                 {subOutEvent && (
@@ -187,19 +187,19 @@ function ListView({
                                 </div>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
-                                        <h4 className="font-bold text-white text-sm">{player.jerseyName || player.name}</h4>
+                                        <h4 className="font-bold text-foreground text-sm">{player.jerseyName || player.name}</h4>
                                         {subOutEvent && (
                                             <span className="text-[10px] bg-red-500/20 text-red-400 px-1 rounded font-bold">
                                                 {subOutEvent.minute}'
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-xs text-white/60">{player.position}</p>
+                                    <p className="text-xs text-foreground/60">{player.position}</p>
                                 </div>
                                 {lineupPlayer.rating && (
                                     <div className="text-right">
-                                        <div className="text-lg font-bold text-white">{lineupPlayer.rating.toFixed(1)}</div>
-                                        <div className="text-[10px] text-white/60">Rating</div>
+                                        <div className="text-lg font-bold text-foreground">{lineupPlayer.rating.toFixed(1)}</div>
+                                        <div className="text-[10px] text-foreground/60">Rating</div>
                                     </div>
                                 )}
                             </div>
@@ -214,7 +214,7 @@ function ListView({
                 subs={activeTeam === 'home' ? homeSubs : awaySubs}
                 events={events} // Pass events
                 onPlayerClick={onPlayerClick}
-                className="bg-white/5 rounded-xl border border-white/10 p-2"
+                className="bg-muted rounded-xl border border-border p-2"
             />
         </div>
     );
@@ -256,15 +256,15 @@ export function ResponsiveLineup({
     return (
         <div className="w-full relative">
             {/* View Toggle - Fixed at top, won't scroll */}
-            <div className="sticky top-0 z-30 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10 p-4 -mx-4 -mt-6 mb-4">
+            <div className="sticky top-0 z-30 bg-card/95 backdrop-blur-md border-b border-border p-4 -mx-4 -mt-6 mb-4">
                 <div className="flex items-center justify-between max-w-5xl mx-auto">
-                    <h3 className="font-bold text-lg text-white">Lineups</h3>
-                    <div className="flex gap-2 bg-white/5 p-1 rounded-lg">
+                    <h3 className="font-bold text-lg text-foreground">Lineups</h3>
+                    <div className="flex gap-2 bg-muted p-1 rounded-lg">
                         <button
                             onClick={() => setViewMode('pitch')}
                             className={`px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 ${viewMode === 'pitch'
-                                ? 'bg-primary text-black shadow-lg'
-                                : 'bg-transparent text-white/60 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-lg'
+                                : 'bg-transparent text-foreground/60 hover:text-foreground'
                                 }`}
                         >
                             Pitch
@@ -272,8 +272,8 @@ export function ResponsiveLineup({
                         <button
                             onClick={() => setViewMode('list')}
                             className={`px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 ${viewMode === 'list'
-                                ? 'bg-primary text-black shadow-lg'
-                                : 'bg-transparent text-white/60 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-lg'
+                                : 'bg-transparent text-foreground/60 hover:text-foreground'
                                 }`}
                         >
                             List

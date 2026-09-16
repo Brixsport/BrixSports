@@ -81,8 +81,10 @@ function FootballLineup({ team, players, formation }: { team: Team; players: Pla
   const startingPlayers = players.slice(0, 11);
 
   return (
-    <div className="relative w-full aspect-[2/3] bg-gradient-to-b from-blue-900/20 to-blue-950/40 rounded-3xl overflow-hidden border border-white/10">
-      {/* Field Lines */}
+    <div className="relative w-full aspect-[2/3] bg-gradient-to-b from-blue-900/20 to-blue-950/40 rounded-3xl overflow-hidden border border-border">
+      {/* Field Lines -- deliberately theme-agnostic: literal pitch markings (halfway line,
+          center circle, penalty box), same as a real field's white paint lines, left as
+          bg-white/border-white per BACKLOG-216's pitch-color exception */}
       <div className="absolute inset-0">
         <div className="absolute top-0 left-0 right-0 h-[1px] bg-white/20" />
         <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-white/20" />
@@ -124,9 +126,9 @@ function FootballLineup({ team, players, formation }: { team: Team; players: Pla
               )}
 
               {/* Player Info Tooltip */}
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-sm px-3 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 border border-white/20">
-                <p className="text-xs font-black uppercase tracking-wider text-white">{player.name}</p>
-                <p className="text-[10px] text-white/60 font-bold">{pos.position}</p>
+              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-card/90 backdrop-blur-sm px-3 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 border border-border">
+                <p className="text-xs font-black uppercase tracking-wider text-foreground">{player.name}</p>
+                <p className="text-[10px] text-foreground/60 font-bold">{pos.position}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Star size={10} className="text-yellow-500" />
                   <span className="text-xs font-bold text-yellow-500">{player.stats?.rating ?? 'N/A'}</span>
@@ -138,8 +140,8 @@ function FootballLineup({ team, players, formation }: { team: Team; players: Pla
       })}
 
       {/* Formation Label */}
-      <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
-        <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Formation</p>
+      <div className="absolute top-4 left-4 bg-card/60 backdrop-blur-sm px-4 py-2 rounded-xl border border-border">
+        <p className="text-[10px] font-black uppercase tracking-widest text-foreground/60">Formation</p>
         <p className="text-lg font-display italic text-primary">{formation}</p>
       </div>
     </div>
@@ -150,8 +152,9 @@ function BasketballLineup({ team, players }: { team: Team; players: Player[] }) 
   const startingFive = players.slice(0, 5);
 
   return (
-    <div className="relative w-full aspect-[3/4] bg-gradient-to-b from-orange-900/20 to-orange-950/40 rounded-3xl overflow-hidden border border-white/10">
-      {/* Court Lines */}
+    <div className="relative w-full aspect-[3/4] bg-gradient-to-b from-orange-900/20 to-orange-950/40 rounded-3xl overflow-hidden border border-border">
+      {/* Court Lines -- deliberately theme-agnostic, same reasoning as the football
+          Field Lines above (BACKLOG-216 pitch-color exception) */}
       <div className="absolute inset-0">
         <div className="absolute top-0 left-0 right-0 h-[1px] bg-white/20" />
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-48 h-48 border-2 border-white/20 rounded-full" />
@@ -189,9 +192,9 @@ function BasketballLineup({ team, players }: { team: Team; players: Player[] }) 
                 </div>
               )}
 
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-sm px-3 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 border border-white/20">
-                <p className="text-xs font-black uppercase tracking-wider text-white">{player.name}</p>
-                <p className="text-[10px] text-white/60 font-bold">{pos.label}</p>
+              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-card/90 backdrop-blur-sm px-3 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 border border-border">
+                <p className="text-xs font-black uppercase tracking-wider text-foreground">{player.name}</p>
+                <p className="text-[10px] text-foreground/60 font-bold">{pos.label}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Star size={10} className="text-yellow-500" />
                   <span className="text-xs font-bold text-yellow-500">{player.stats?.rating ?? 'N/A'}</span>
@@ -202,8 +205,8 @@ function BasketballLineup({ team, players }: { team: Team; players: Player[] }) 
         );
       })}
 
-      <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
-        <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Starting Five</p>
+      <div className="absolute top-4 left-4 bg-card/60 backdrop-blur-sm px-4 py-2 rounded-xl border border-border">
+        <p className="text-[10px] font-black uppercase tracking-widest text-foreground/60">Starting Five</p>
         <p className="text-lg font-display italic text-primary">{team.shortName}</p>
       </div>
     </div>
@@ -212,12 +215,12 @@ function BasketballLineup({ team, players }: { team: Team; players: Player[] }) 
 
 function TrackLineup({ team, players }: { team: Team; players: Player[] }) {
   return (
-    <div className="w-full bg-gradient-to-br from-red-900/20 to-red-950/40 rounded-3xl p-6 border border-white/10">
+    <div className="w-full bg-gradient-to-br from-red-900/20 to-red-950/40 rounded-3xl p-6 border border-border">
       <div className="flex items-center gap-3 mb-6">
         <Activity className="text-primary" size={20} />
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Team Roster</p>
-          <p className="text-lg font-display italic text-white">{team.name}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-foreground/60">Team Roster</p>
+          <p className="text-lg font-display italic text-foreground">{team.name}</p>
         </div>
       </div>
 
@@ -228,7 +231,7 @@ function TrackLineup({ team, players }: { team: Team; players: Player[] }) {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: idx * 0.05 }}
-            className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/10 transition-all group"
+            className="bg-muted border border-border rounded-2xl p-4 hover:bg-muted/80 transition-all group"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -241,14 +244,14 @@ function TrackLineup({ team, players }: { team: Team; players: Player[] }) {
                   {player.number}
                 </div>
                 <div>
-                  <p className="text-sm font-black uppercase tracking-tight text-white">{player.name}</p>
-                  <p className="text-[10px] text-white/60 font-bold uppercase">{player.position}</p>
+                  <p className="text-sm font-black uppercase tracking-tight text-foreground">{player.name}</p>
+                  <p className="text-[10px] text-foreground/60 font-bold uppercase">{player.position}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {(player.stats?.rating ?? 0) >= 8 && <Star size={14} className="text-yellow-500 fill-yellow-500" />}
                 <div className="text-right">
-                  <p className="text-xs font-bold text-white/60">Rating</p>
+                  <p className="text-xs font-bold text-foreground/60">Rating</p>
                   <p className="text-lg font-display italic text-primary">{player.stats?.rating ?? 'N/A'}</p>
                 </div>
               </div>

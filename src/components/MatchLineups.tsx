@@ -24,9 +24,9 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
     if (!lineups || (!lineups.home && !lineups.away)) {
         return (
             <div className="text-center py-20">
-                <Users className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">Lineups not available</h3>
-                <p className="text-white/40">Team lineups will be displayed here once available</p>
+                <Users className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">Lineups not available</h3>
+                <p className="text-foreground/40">Team lineups will be displayed here once available</p>
             </div>
         );
     }
@@ -170,7 +170,7 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
             <div className="flex justify-end px-4 py-2">
                 <button
                     onClick={handleShareLineup}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 border border-border text-xs font-semibold transition-colors"
                 >
                     Share LineUp
                     <Share2 className="w-3.5 h-3.5" />
@@ -224,7 +224,7 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white/5 border border-white/10 rounded-2xl p-6 mt-6 mx-4"
+                    className="bg-muted border border-border rounded-2xl p-6 mt-6 mx-4"
                 >
                     <div className="flex items-center gap-3 mb-6">
                         <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
@@ -232,7 +232,7 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                         </div>
                         <div>
                             <h3 className="text-lg font-bold">Substitutions</h3>
-                            <p className="text-sm text-white/60">{substitutions.length} changes made</p>
+                            <p className="text-sm text-foreground/60">{substitutions.length} changes made</p>
                         </div>
                     </div>
 
@@ -258,7 +258,7 @@ const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
     const teamColor = team.color;
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all">
+        <div className="bg-muted border border-border rounded-xl p-4 hover:bg-muted/80 transition-all">
             <div className="flex items-center gap-4">
                 {/* Team Logo */}
                 <TeamLogo logo={team.logo} name={team.name} size="sm" />
@@ -277,12 +277,12 @@ const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
                             <div className="text-sm font-semibold text-red-400">
                                 {substitution.playerOut?.name || 'Unknown'}
                             </div>
-                            <div className="text-xs text-white/60">OUT</div>
+                            <div className="text-xs text-foreground/60">OUT</div>
                         </div>
                     </div>
 
                     {/* Arrow */}
-                    <ArrowRightLeft className="w-5 h-5 text-white/40 flex-shrink-0" />
+                    <ArrowRightLeft className="w-5 h-5 text-foreground/40 flex-shrink-0" />
 
                     {/* Player In */}
                     <div className="flex items-center gap-2 flex-1">
@@ -296,7 +296,7 @@ const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
                             <div className="text-sm font-semibold text-green-400">
                                 {substitution.playerIn?.name || 'Unknown'}
                             </div>
-                            <div className="text-xs text-white/60">IN</div>
+                            <div className="text-xs text-foreground/60">IN</div>
                         </div>
                     </div>
                 </div>
@@ -304,8 +304,8 @@ const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
                 {/* Time */}
                 {substitution.minute && (
                     <div className="text-right">
-                        <div className="text-sm font-bold text-white/80">{substitution.minute}'</div>
-                        <div className="text-xs text-white/60">
+                        <div className="text-sm font-bold text-foreground/80">{substitution.minute}'</div>
+                        <div className="text-xs text-foreground/60">
                             {substitution.half === 2 ? '2nd Half' : '1st Half'}
                         </div>
                     </div>

@@ -209,7 +209,7 @@ export function UpdatePrompt() {
                         <button
                             onClick={handleDismiss}
                             disabled={isUpdating}
-                            className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors cursor-pointer z-10 disabled:opacity-0"
+                            className="absolute top-4 right-4 text-foreground/40 hover:text-foreground transition-colors cursor-pointer z-10 disabled:opacity-0"
                             type="button"
                         >
                             <X size={20} />
@@ -220,10 +220,10 @@ export function UpdatePrompt() {
                                 <RefreshCw className="text-white" size={24} />
                             </div>
                             <div>
-                                <h3 className="font-display text-xl italic uppercase tracking-tight text-white mb-1">
+                                <h3 className="font-display text-xl italic uppercase tracking-tight text-foreground mb-1">
                                     Update Available
                                 </h3>
-                                <p className="text-sm text-white/60">
+                                <p className="text-sm text-foreground/60">
                                     A new version of Brixsport is ready. Update now for the latest features and improvements.
                                 </p>
                             </div>
@@ -234,7 +234,7 @@ export function UpdatePrompt() {
                                 onClick={handleUpdate}
                                 disabled={isUpdating}
                                 type="button"
-                                className="flex-1 bg-blue-500 text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:scale-100"
+                                className="flex-1 bg-blue-500 disabled:bg-blue-500/50 text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 cursor-pointer disabled:scale-100"
                             >
                                 {isUpdating ? (
                                     <>
@@ -252,7 +252,7 @@ export function UpdatePrompt() {
                                 <button
                                     onClick={handleDismiss}
                                     type="button"
-                                    className="px-4 py-3 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors cursor-pointer"
+                                    className="px-4 py-3 text-foreground/60 hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors cursor-pointer"
                                 >
                                     Later
                                 </button>

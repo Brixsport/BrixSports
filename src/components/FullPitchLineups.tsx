@@ -208,13 +208,13 @@ export function FullPitchLineups({
                     <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
                     <div>
                         <span className="font-bold text-lg">{homeTeam.name}</span>
-                        <div className="text-sm text-white/60">{homeTeam.formation || getFallbackFormation()}</div>
+                        <div className="text-sm text-foreground/60">{homeTeam.formation || getFallbackFormation()}</div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="text-right">
                         <span className="font-bold text-lg">{awayTeam.name}</span>
-                        <div className="text-sm text-white/60">{awayTeam.formation || getFallbackFormation()}</div>
+                        <div className="text-sm text-foreground/60">{awayTeam.formation || getFallbackFormation()}</div>
                     </div>
                     <img src={awayTeam.logo} alt={awayTeam.name} className="w-10 h-10 object-contain" />
                 </div>
@@ -254,9 +254,9 @@ export function FullPitchLineups({
             {/* Substitutes - paired side-by-side rows (matches Figma: centered header between team badges, one home + one away sub per row) */}
             {(homeSubs.length > 0 || awaySubs.length > 0) && (
                 <div className="px-4">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                    <div className="flex items-center justify-between border-b border-border pb-3 mb-3">
                         <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 object-contain" />
-                        <span className="font-bold text-sm text-white/80">Substitutes</span>
+                        <span className="font-bold text-sm text-foreground/80">Substitutes</span>
                         <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 object-contain" />
                     </div>
                     <div className="space-y-2">
@@ -301,7 +301,7 @@ interface BenchPlayerProps {
 
 function BenchPlayer({ player, rating, position, teamColor, onClick, reverse }: BenchPlayerProps) {
     const getRatingColor = (rating: number) => {
-        if (rating === 0) return 'bg-white/10 text-white/40';
+        if (rating === 0) return 'bg-muted text-foreground/40';
         if (rating >= 7.0) return 'bg-green-500/20 text-green-400';
         if (rating >= 6.0) return 'bg-yellow-500/20 text-yellow-400';
         return 'bg-red-500/20 text-red-400';
@@ -311,7 +311,7 @@ function BenchPlayer({ player, rating, position, teamColor, onClick, reverse }: 
         <div
             onClick={onClick}
             className={cn(
-                "flex items-center gap-1.5 sm:gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all",
+                "flex items-center gap-1.5 sm:gap-2 bg-muted hover:bg-muted/70 border border-border rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all",
                 reverse && "flex-row-reverse text-right"
             )}
         >
@@ -323,10 +323,10 @@ function BenchPlayer({ player, rating, position, teamColor, onClick, reverse }: 
 
             {/* Player info */}
             <div className="min-w-0 flex-1">
-                <div className="text-xs sm:text-sm font-semibold text-white truncate">
+                <div className="text-xs sm:text-sm font-semibold text-foreground truncate">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </div>
-                <div className="text-[9px] sm:text-[10px] text-white/60">{position}</div>
+                <div className="text-[9px] sm:text-[10px] text-foreground/60">{position}</div>
             </div>
 
             {/* Rating */}
