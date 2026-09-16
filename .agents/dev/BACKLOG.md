@@ -8127,6 +8127,11 @@ Reuses the exact mechanical conversion rule already proven on the pilot page (`t
 
 **Bigger finding from the same investigation, not yet acted on:** this file was missed because both this session's original Phase 2a/2b/2c sweeps AND the earlier same-session follow-up sweep only grepped for `bg-black`/`bg-[#...]` literal-hex patterns -- never `text-white`/`bg-white/`, which is the far more common pattern across this codebase. Re-ran the sweep with the correct pattern (`text-white(/[0-9]+)?|bg-white/[0-9]`) across `src/app`+`src/components`, excluding admin/logger/already-documented-exception files: **60 files still match**, including some already claimed fully converted in Phase 2a's own evidence block (`BottomNav.tsx`, `LiveMatchStatus.tsx`, `LiveMatchTimeline.tsx`, `LiveStats.tsx`). Not yet triaged file-by-file -- many hits are likely legitimate (the established pitch/jersey-marker exception class covers most of the lineup/pitch files in the list; `text-white` on a colored badge background is sometimes correct per the `LiveStats.tsx` precedent already documented above). This needs a proper per-file read, not a blind mechanical pass, given the mix of real bugs and legitimate exceptions already proven to coexist under this same grep pattern. **Flagging as a significant open item, size and priority to be decided with Richard, not started.**
 
+**Full 60-file list** (from `grep -rlE "text-white(/[0-9]+)?[^-]|bg-white/[0-9]" src/app src/components`, admin/logger/known-exception files excluded, captured here so a future triage pass doesn't have to re-derive it):
+`src/app/analytics/loggers/page.tsx`, `src/app/competitions/[id]/register/page.tsx`, `src/app/competitions/[id]/registration-success/page.tsx`, `src/app/competitions/[id]/stats/[category]/page.tsx`, `src/app/docs/page.tsx`, `src/app/error.tsx`, `src/app/forgot-password/page.tsx`, `src/app/fpl/create-team/page.tsx`, `src/app/fpl/leagues/page.tsx`, `src/app/fpl/page.tsx`, `src/app/news/page.tsx`, `src/app/not-found.tsx`, `src/app/page.tsx`, `src/app/players/compare/page.tsx`, `src/app/reset-password/page.tsx`, `src/app/search/page.tsx`, `src/components/BasketballMatchOverlay.tsx`, `src/components/BottomNav.tsx`, `src/components/CompetitionRegistration.tsx`, `src/components/CompetitionsShowcase.tsx`, `src/components/FootballPitch.tsx`, `src/components/FullPitchLineups.tsx`, `src/components/lineup/MobilePlayerSheet.tsx`, `src/components/lineup/PlacementPitch.tsx`, `src/components/lineup/ResponsiveLineup.tsx`, `src/components/lineup/ResponsivePitch.tsx`, `src/components/lineup/ResponsivePlayerCard.tsx`, `src/components/LineupVisualizer.tsx`, `src/components/LiveMatchStatus.tsx`, `src/components/LiveMatchSummary.tsx`, `src/components/LiveMatchTimeline.tsx`, `src/components/LiveStats.tsx`, `src/components/livestream/LiveNowSection.tsx`, `src/components/LoggerAnalyticsDashboard.tsx`, `src/components/MatchCalendar.tsx`, `src/components/MatchComponents.tsx`, `src/components/matches/UpcomingMatchView.tsx`, `src/components/MatchLineups.tsx`, `src/components/MatchLoggerUI.tsx`, `src/components/MatchOverlay.tsx`, `src/components/MatchTimeline.tsx`, `src/components/MultiLoggerStatus.tsx`, `src/components/notifications/PushDiagnosticPage.tsx`, `src/components/notifications/PushNotificationDebugger.tsx`, `src/components/onboarding/Coachmark.tsx`, `src/components/OnboardingModal.tsx`, `src/components/PollComments.tsx`, `src/components/predictions/MatchPredictionCard.tsx`, `src/components/predictions/MatchVotePoll.tsx`, `src/components/pwa/IOSInstallPrompt.tsx`, `src/components/pwa/UpdatePrompt.tsx`, `src/components/RichTextEditor.tsx`, `src/components/SettingsOverlay.tsx`, `src/components/SimpleMatchOverlay.tsx`, `src/components/StandingsFilters.tsx`, `src/components/StatBar.tsx`, `src/components/ui/BackButton.tsx`, `src/components/ui/badge.tsx`, `src/components/ui/button.tsx`, `src/components/ui/MatchCard.tsx`, `src/components/ui/mobile-image-upload.tsx`, `src/components/ui/UnderlineTabs.tsx`.
+
+Quick sanity notes on a few, without a full read (not to be taken as a completed triage): `ui/badge.tsx`/`ui/button.tsx`/`ui/BackButton.tsx` are shadcn primitives, likely legitimate `text-white` on a colored-variant background (same class as the already-approved `LiveStats.tsx` precedent) rather than bugs — but not confirmed, just plausible given the component type. `OnboardingModal.tsx`/`Coachmark.tsx`/`SettingsOverlay.tsx`/`predictions/*` were touched in Phase 2b — a match here could be a genuine remaining instance or a deliberate exception already noted in that phase's evidence block; needs cross-referencing, not assumed either way.
+
 **Evidence (BasketballBoxScore.tsx fix):**
 - `tsc --noEmit`: 18 errors, unchanged baseline.
 - `grep -n "text-white\|bg-white/\|border-white/"` on the file: zero matches post-fix.
@@ -13456,5 +13461,64 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Reverted, 2026-09-15, same day:** Richard reconsidered and asked to remove the 3 added items (Teams/Lineups/News) — back to `Fixtures`/`Competitions`/`Profile` only, `Competitions` label restored (no longer needs the "Comps" shortening once it's back to 3 columns). Kept the `grid grid-cols-N` layout approach rather than restoring the original `flex justify-around` + fixed `min-w-[70px]`, now `grid-cols-3` — a grid is the safer default if the item count changes again, and there was no reason to revert a strictly-better layout mechanism along with the content change. Kept the `Users`/`ListChecks`/`Newspaper` icon imports removed (unused now). The underlying gap this entry describes (Teams/Lineup Builder/News unreachable from a global nav) is open again — no replacement solution decided; revisit if Richard wants a different approach later (a dedicated "More" tab, or leaving it as homepage-only per the original state).
 **Files (revert):** `src/components/BottomNav.tsx`.
+
+---
+
+### BACKLOG-389 — Live-Match Scores Don't Color-Code by State (Live vs. Finished Read Identically)
+
+**Status:** PLANNED, not started — Richard asked to plan before implementing, plan below approved in conversation but not yet executed.
+**Priority:** Medium — from the SofaScore-benchmarked design critique (`BACKLOG-216`'s live-verification pass), the single highest-leverage "looks sharp" recommendation.
+
+**Problem:** every score digit in the app renders `text-foreground` (or the equivalent literal black/white) regardless of match status. SofaScore's convention — and the thing that makes its list scannable at a glance — is that a LIVE score renders in a saturated red, unmistakably distinct from a FINISHED (default/black) or UPCOMING (no score shown) state. BrixSports already has this exact red used elsewhere (the pulsing live dot, the live clock text `text-red-400`) but never applies it to the score numbers themselves — the one element a viewer actually scans for.
+
+**Planned scope — every raw-score render site found:**
+| File | Section | Lines (pre-fix) | Live by default? |
+|---|---|---|---|
+| `src/app/matches/[id]/MatchDetailClient.tsx` | main header score | 736, 738 | No — needs `isLive` check |
+| `src/components/ui/MatchCard.tsx` | `compact` variant | 126, 130 | No — needs `isLive` check |
+| `src/components/ui/MatchCard.tsx` | `live` variant | 196, 210 | Yes, always (this variant only renders for live matches) |
+| `src/components/ui/MatchCard.tsx` | `detailed` variant | 278, 280 | No — needs `isLive` check |
+
+**Planned design decisions:**
+- Color: `text-red-500` (reuses the existing live-red family, no new color introduced), full replace not a tint, matching SofaScore's approach.
+- No conflict with the existing shootout-winner `text-blue-400` badge (separate span, independent of main score color).
+- `MatchCard.tsx`'s own `isLive` (`status === 'LIVE' || 'HALF_TIME'`) is narrower than `MatchDetailClient.tsx`'s full `LIVE_STATES` set (also covers `FIRST_HALF`/`SECOND_HALF`/`EXTRA_TIME_*`/`PENALTY_SHOOTOUT`) — plan includes aligning `MatchCard.tsx` to the same full set as part of this fix, otherwise a mid-period match on a list card won't turn red.
+
+**Explicitly out of scope for this item:** `MatchCard.tsx`'s broader unconverted-gray-palette issue (`text-gray-400`, `border-gray-700`, `bg-white/10` — found while scoping this fix) is a separate, larger mechanical-conversion gap, not part of the color-by-state change. See `BACKLOG-216`'s open 60-file sweep note below — `MatchCard.tsx` is one of the files on that list.
+
+**Risk:** all four spots are on 🟢 Stable surfaces (public livescore page, match cards) — no 🔴 brief needed, color-only change once implemented.
+
+**Test plan (not yet run):** `tsc --noEmit` clean at baseline, then live-verify against the deployed preview with a real `LIVE`-status match — confirm red on both the homepage list card and its detail page, confirm a `FINISHED` match stays black on both.
+
+**Found/Planned:** session 2026-09-16, from the design-critique agent's SofaScore comparison. Plan presented and implicitly approved (Richard moved on to prioritize other items first) — not yet implemented.
+
+---
+
+### BACKLOG-390 — Design Critique Findings: Density, Touch Targets, Duplicate Filter Controls, Match Overview Padding
+
+**Status:** OPEN, not started — recorded per Richard's explicit "note all for now, ensure not to leave anything" instruction. Structural/UX judgment calls, not bugs; needs Richard's prioritization before any is picked up.
+**Priority:** Unset — deliberately not ranked yet, these are recommendations to weigh, not confirmed work items.
+
+**Source:** an independent, fresh-eyes `general-purpose` subagent run via the `design-critique` skill against the real deployed branch preview, both dark and light modes, benchmarked informally against live sofascore.com. Full original report preserved in this session's conversation transcript; findings below are the actionable subset (the agent's report also praised several things already working well — score-hierarchy on match detail, restrained brand-blue usage, the cream-toned light background — not repeated here since those don't need action).
+
+**1. Above-the-fold information density.** Roughly 70% of first-screen height (header → sport tabs → status-filter pills → a full "Matches" date-picker card → the "Live Center" banner) is chrome before the first actual match row appears. Sofascore fits ~5 fully-populated match rows (with competition headers, live badges, favorite stars) in the same space. Suggested direction: compress or de-emphasize the "Matches" date-picker card — it likely doesn't need to be a full card with its own heading; an inline icon+date-stepper row would save ~150-200px.
+
+**2. Touch targets undersized against the 44×44px WCAG/platform guideline**, measured directly via `getBoundingClientRect()` on the live deployed page:
+   - Search icon button: 34×34px
+   - Hamburger menu button: 36×36px
+   - Status filter pills (LIVE/FINISHED/UPCOMING/FAVORITES): 32px tall
+   - Bottom tab bar items (115×59) are fine — the shortfall is specific to top-bar icons and filter chips, not universal.
+
+**3. Two visually-identical "ALL" controls stacked within ~150px** — the sport-category tab row (`ALL/FOOTBALL/BASKETBALL/OTHER`) and the status-filter pill row (`ALL/LIVE/FINISHED/UPCOMING/FAVORITES`) use the same typography/weight, reading as one confusing duplicate rather than two independent filters. Suggested: visually distinguish the two (e.g. underline-tab style for sport category vs. pill/chip style for status filter, which the status row already partly does).
+
+**4. Filter pill row truncates mid-word ("FAVORIT…") with no scroll affordance** (no edge fade, no chevron) signaling more content exists off-screen.
+
+**5. Match Overview tab leads with decoration before data.** A large centered eye icon + "Match Overview" heading + one line of status text, before the actually useful Venue/Competition/Status facts appear further down as three separate stacked cards. For a completed match this hero icon is pure vertical padding with no information value.
+
+**6. Light-mode Live Center banner gradient reads noticeably softer/less urgent** than its dark-mode equivalent (red-to-blue gradient goes visibly more pastel), slightly undercutting the "this is happening now" signal for live matches specifically in light mode.
+
+**Not a finding needing action, noted for completeness:** team-row avatar fidelity is inconsistent (some teams get a real crest image, others a flat single-letter box) — confirmed to be a data-availability issue (not every team has a logo uploaded yet), not a design/code defect.
+
+**Found:** session 2026-09-16, design-critique subagent run at Richard's request following the token-contrast and card-shadow fixes above.
 
 ---
