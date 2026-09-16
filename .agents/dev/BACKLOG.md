@@ -8121,6 +8121,16 @@ Reuses the exact mechanical conversion rule already proven on the pilot page (`t
 - `tsc --noEmit`: 18 errors, unchanged baseline.
 - Live-verified by injecting the exact rule via a `<style>` tag against the real deployed preview before committing to source -- screenshot-confirmed a real, visible soft shadow under the homepage "Matches" card, clearly distinguishable from the flat pre-shadow state.
 
+**Real accessibility bug found by an independent fresh-eyes design-critique agent (Richard's request, full report in session), fixed same session:** `src/components/BasketballBoxScore.tsx` -- the basketball match-detail Box Score tab -- was **never converted at all**, not a partial miss like the earlier finds. Every class was the pre-initiative `text-white(/NN)`/`bg-white/NN`/`border-white/NN` pattern. In light mode this made the table header row (PLAYER/PTS/AST/REB) and every player's position sub-label (`text-white/40`/`text-white/60`) render at near-zero contrast against the light card background -- confirmed by the reviewing agent via direct screenshot comparison against dark mode (same DOM, legible there, illegible in light mode). Fails WCAG contrast outright, not a subjective polish call.
+
+**Fix:** full mechanical conversion, same established rule -- `text-white/NN`→`text-foreground/NN`, `bg-white/5`→`bg-muted`, `border-white/10`→`border-border` (row dividers used `border-border/50` to preserve the original's intentionally faint `white/5` weight rather than the stronger default), `bg-primary text-white`→`bg-primary text-primary-foreground`.
+
+**Bigger finding from the same investigation, not yet acted on:** this file was missed because both this session's original Phase 2a/2b/2c sweeps AND the earlier same-session follow-up sweep only grepped for `bg-black`/`bg-[#...]` literal-hex patterns -- never `text-white`/`bg-white/`, which is the far more common pattern across this codebase. Re-ran the sweep with the correct pattern (`text-white(/[0-9]+)?|bg-white/[0-9]`) across `src/app`+`src/components`, excluding admin/logger/already-documented-exception files: **60 files still match**, including some already claimed fully converted in Phase 2a's own evidence block (`BottomNav.tsx`, `LiveMatchStatus.tsx`, `LiveMatchTimeline.tsx`, `LiveStats.tsx`). Not yet triaged file-by-file -- many hits are likely legitimate (the established pitch/jersey-marker exception class covers most of the lineup/pitch files in the list; `text-white` on a colored badge background is sometimes correct per the `LiveStats.tsx` precedent already documented above). This needs a proper per-file read, not a blind mechanical pass, given the mix of real bugs and legitimate exceptions already proven to coexist under this same grep pattern. **Flagging as a significant open item, size and priority to be decided with Richard, not started.**
+
+**Evidence (BasketballBoxScore.tsx fix):**
+- `tsc --noEmit`: 18 errors, unchanged baseline.
+- `grep -n "text-white\|bg-white/\|border-white/"` on the file: zero matches post-fix.
+
 ---
 
 ### ~~BUG-217~~ — `AuthContext.checkAuth()` Treats Network Failure the Same as Confirmed Logout, and Deletes a Still-Possibly-Valid Token on Any Non-2xx Response
