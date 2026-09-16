@@ -8111,6 +8111,16 @@ Reuses the exact mechanical conversion rule already proven on the pilot page (`t
 
 **BACKLOG-216 status: all planned scope (Phases 1, 2a, 2b, 2c) is now shipped, live-verified against the real deployed branch preview, and includes the token-level contrast fix found via that verification. Phase 2d skipped, Phase 2e resolved as dark-only-permanent. Nothing outstanding on this item.**
 
+**Card shadow fix, same session, from the SofaScore-benchmarked design critique run after the token contrast fix:** the widened background/card contrast made surfaces distinguishable but still read as flat fills, not "lifted" elevated surfaces the way a polished sports-score UI (SofaScore) does. A shadow is what actually sells elevation, not lightness alone.
+
+**Fix:** one CSS rule in `globals.css`'s `@layer base`, not a per-file change: `:root:not(.dark) .bg-card { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06); }`. Light mode only, deliberately -- the same shadow against dark mode's near-black background would be invisible (shadows need a lighter surface behind them to read), and dark mode already gets separation from the lightness step going the other direction (muted lighter than background). Targets the `bg-card` utility class directly so every one of the 76+ retrofitted files gets it automatically, no per-file edits and no risk of missing one.
+
+**Also considered and dropped this pass:** competition badge art in list headers (the other critique recommendation) -- checked live via `/api/competitions`, every competition in the DB currently has `logo: null` or `""`, so there's no art to render yet. Richard confirmed he'll add competition logos later (BUSA League has one available). Revisit once that data exists -- the trophy-icon fallback in `src/app/page.tsx` (`{/* Ideally we'd have a map or lookup for competition logos, for now use standard icon */}`) is a pre-existing, already-acknowledged gap, not something this session introduced.
+
+**Evidence:**
+- `tsc --noEmit`: 18 errors, unchanged baseline.
+- Live-verified by injecting the exact rule via a `<style>` tag against the real deployed preview before committing to source -- screenshot-confirmed a real, visible soft shadow under the homepage "Matches" card, clearly distinguishable from the flat pre-shadow state.
+
 ---
 
 ### ~~BUG-217~~ — `AuthContext.checkAuth()` Treats Network Failure the Same as Confirmed Logout, and Deletes a Still-Possibly-Valid Token on Any Non-2xx Response
