@@ -313,7 +313,7 @@ function NewsCard({ article, index, getCategoryColor, formatDate }: {
                         )}
 
                         {/* Category Badge */}
-                        <div className="absolute top-3 left-3 px-2 py-1 rounded bg-black/80 backdrop-blur-md text-white/80 text-[10px] font-bold uppercase tracking-wider border border-white/10">
+                        <div className="absolute top-3 left-3 px-2 py-1 rounded bg-card/80 backdrop-blur-md text-foreground/80 text-[10px] font-bold uppercase tracking-wider border border-border">
                             {article.category}
                         </div>
 

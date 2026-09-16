@@ -504,7 +504,7 @@ export default function MatchDetailClient() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
         );
@@ -512,7 +512,7 @@ export default function MatchDetailClient() {
 
     if (!matchData) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
+            <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold mb-2">Match not found</h2>
                     <button
@@ -654,17 +654,17 @@ export default function MatchDetailClient() {
         PERIOD_LABELS[period] ?? period.replace(/_/g, ' ');
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
+        <div className="min-h-screen bg-background text-foreground">
             <ToastContainer toasts={toasts} onClose={removeToast} />
             {/* Sticky Header - permanently pinned like a navbar; collapses to a
                 compact team/score bar on scroll instead of hiding (BACKLOG-338) */}
-            <div className="sticky top-0 z-40 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]/90 backdrop-blur-xl border-b border-white/10">
+            <div className="sticky top-0 z-40 bg-gradient-to-b from-background via-background/95 to-background/90 backdrop-blur-xl border-b border-border">
                 <div className={`max-w-7xl mx-auto px-4 transition-[padding] duration-300 ease-out ${isCompact ? 'pt-2 pb-1' : 'py-4'}`}>
                     {/* Top bar */}
                     <div className={`flex items-center justify-between transition-all duration-300 ease-out ${isCompact ? 'mb-1' : 'mb-4'}`}>
                         <button
                             onClick={() => router.back()}
-                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+                            className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
                         >
                             <ArrowLeft className="w-5 h-5" />
                             <span>Back</span>
@@ -676,7 +676,7 @@ export default function MatchDetailClient() {
                                 disabled={notifyLoading}
                                 aria-label={isNotifySubscribed ? 'Turn off notifications for this match' : 'Notify me about this match'}
                                 title={isNotifySubscribed ? 'Turn off notifications for this match' : 'Notify me about this match'}
-                                className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${isNotifySubscribed ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${isNotifySubscribed ? 'bg-blue-500/20 text-blue-400' : 'bg-muted text-foreground/60 hover:bg-muted/70'
                                     }`}
                             >
                                 <Bell className={`w-5 h-5 ${isNotifySubscribed ? 'fill-current' : ''}`} />
@@ -684,7 +684,7 @@ export default function MatchDetailClient() {
 
                             <button
                                 onClick={handleShare}
-                                className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 transition-colors"
+                                className="p-2 rounded-lg bg-muted text-foreground/60 hover:bg-muted/70 transition-colors"
                             >
                                 <Share2 className="w-5 h-5" />
                             </button>
@@ -708,7 +708,7 @@ export default function MatchDetailClient() {
                                 onClick={() => handleFollowTeam(match.homeTeam)}
                                 aria-label={isFavoriteTeam(match.homeTeam.id) ? `Unfollow ${match.homeTeam.name}` : `Follow ${match.homeTeam.name} — get alerts for this team's matches`}
                                 title={isFavoriteTeam(match.homeTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
-                                className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                                className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-foreground/30 hover:text-foreground/60'}`}
                             >
                                 <Star className={`w-4 h-4 ${isFavoriteTeam(match.homeTeam.id) ? 'fill-current' : ''}`} />
                             </button>
@@ -723,7 +723,7 @@ export default function MatchDetailClient() {
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-sm text-white/60">{match.homeTeam.shortName}</div>
+                                <div className="text-sm text-foreground/60">{match.homeTeam.shortName}</div>
                             </div>
                         </div>
 
@@ -734,15 +734,15 @@ export default function MatchDetailClient() {
                                 so no winner-color treatment here (that's a homepage/list-view thing). */}
                             <div className={`flex items-center transition-all duration-300 ease-out ${isCompact ? 'gap-2' : 'gap-4'}`}>
                                 <div className={`font-black transition-all duration-300 ease-out ${isCompact ? 'text-2xl' : 'text-4xl'}`}>{match.homeScore}</div>
-                                <div className={`text-white/40 transition-all duration-300 ease-out ${isCompact ? 'text-lg' : 'text-2xl'}`}>-</div>
+                                <div className={`text-foreground/40 transition-all duration-300 ease-out ${isCompact ? 'text-lg' : 'text-2xl'}`}>-</div>
                                 <div className={`font-black transition-all duration-300 ease-out ${isCompact ? 'text-2xl' : 'text-4xl'}`}>{match.awayScore}</div>
                             </div>
                             {hasShootoutResult && (
-                                <div className="text-xs text-white/50 font-bold uppercase tracking-wider mt-0.5">
+                                <div className="text-xs text-foreground/50 font-bold uppercase tracking-wider mt-0.5">
                                     PEN {match.shootoutHomeScore}-{match.shootoutAwayScore}
                                 </div>
                             )}
-                            <div className="text-sm text-white/60 mt-1 uppercase font-bold tracking-wider">
+                            <div className="text-sm text-foreground/60 mt-1 uppercase font-bold tracking-wider">
                                 {isLive ? (
                                     <span className="flex items-center gap-1.5 justify-center">
                                         <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
@@ -784,7 +784,7 @@ export default function MatchDetailClient() {
                                     )}
                                     {match.awayTeam.name}
                                 </div>
-                                <div className="text-sm text-white/60">{match.awayTeam.shortName}</div>
+                                <div className="text-sm text-foreground/60">{match.awayTeam.shortName}</div>
                             </div>
                             {/* Star sits outside the sm:block name wrapper above -- see the
                                 matching comment on the home-team side (BUG-214). */}
@@ -792,7 +792,7 @@ export default function MatchDetailClient() {
                                 onClick={() => handleFollowTeam(match.awayTeam)}
                                 aria-label={isFavoriteTeam(match.awayTeam.id) ? `Unfollow ${match.awayTeam.name}` : `Follow ${match.awayTeam.name} — get alerts for this team's matches`}
                                 title={isFavoriteTeam(match.awayTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
-                                className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                                className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-foreground/30 hover:text-foreground/60'}`}
                             >
                                 <Star className={`w-4 h-4 ${isFavoriteTeam(match.awayTeam.id) ? 'fill-current' : ''}`} />
                             </button>
@@ -816,14 +816,14 @@ export default function MatchDetailClient() {
                                 animate={{ opacity: 1, height: 'auto' }}
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.2 }}
-                                className="flex items-start justify-between gap-4 mt-3 text-xs text-white/70 overflow-hidden"
+                                className="flex items-start justify-between gap-4 mt-3 text-xs text-foreground/70 overflow-hidden"
                             >
                                 <div className="flex-1 space-y-0.5 text-right">
                                     {homeScorers.map(s => (
                                         <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
                                     ))}
                                 </div>
-                                <FaFutbol className="w-3 h-3 text-white/30 flex-shrink-0 mt-1" />
+                                <FaFutbol className="w-3 h-3 text-foreground/30 flex-shrink-0 mt-1" />
                                 <div className="flex-1 space-y-0.5">
                                     {awayScorers.map(s => (
                                         <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
@@ -834,12 +834,12 @@ export default function MatchDetailClient() {
                     </AnimatePresence>
 
                     {/* Tabs */}
-                    <div className={`flex gap-1 border-t border-white/10 overflow-x-auto scrollbar-hide transition-all duration-300 ease-out ${isCompact ? 'mt-1' : 'mt-4'}`}>
+                    <div className={`flex gap-1 border-t border-border overflow-x-auto scrollbar-hide transition-all duration-300 ease-out ${isCompact ? 'mt-1' : 'mt-4'}`}>
                         <button
                             onClick={() => setActiveTab('overview')}
                             className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'overview'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
                             <Eye className="w-2.5 h-2.5 inline mr-1" />
@@ -858,7 +858,7 @@ export default function MatchDetailClient() {
                                 onClick={() => setActiveTab('predictions')}
                                 className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'predictions'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
                                 <TrendingUp className="w-2.5 h-2.5 inline mr-1" />
@@ -880,7 +880,7 @@ export default function MatchDetailClient() {
                                 onClick={() => setActiveTab('timeline')}
                                 className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'timeline'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
                                 <Activity className="w-2.5 h-2.5 inline mr-1" />
@@ -901,7 +901,7 @@ export default function MatchDetailClient() {
                                 onClick={() => setActiveTab('boxscore')}
                                 className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'boxscore'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
                                 <Users className="w-2.5 h-2.5 inline mr-1" />
@@ -921,7 +921,7 @@ export default function MatchDetailClient() {
                                 onClick={() => setActiveTab('stats')}
                                 className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'stats'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
                                 <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
@@ -940,7 +940,7 @@ export default function MatchDetailClient() {
                                 onClick={() => setActiveTab('lineups')}
                                 className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'lineups'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
                                 <Users className="w-2.5 h-2.5 inline mr-1" />
@@ -957,7 +957,7 @@ export default function MatchDetailClient() {
                             onClick={() => setActiveTab('h2h')}
                             className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'h2h'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
                             <Trophy className="w-2.5 h-2.5 inline mr-1" />
@@ -973,7 +973,7 @@ export default function MatchDetailClient() {
                             onClick={() => setActiveTab('table')}
                             className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'table'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
                             <Table2 className="w-2.5 h-2.5 inline mr-1" />
@@ -990,7 +990,7 @@ export default function MatchDetailClient() {
                             onClick={() => setActiveTab('polls')}
                             className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'polls'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
                             <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
@@ -1032,24 +1032,24 @@ export default function MatchDetailClient() {
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-8">
+                                <div className="bg-muted border border-border rounded-[24px] p-8">
                                     <div className="text-center">
-                                        <Eye className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                        <Eye className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
                                         <h3 className="text-xl font-bold mb-2">Match Overview</h3>
-                                        <p className="text-white/60 mb-6">
+                                        <p className="text-foreground/60 mb-6">
                                             {isLive ? 'Match is currently live!' : isUpcoming ? 'Match starts soon' : 'Match has ended'}
                                         </p>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="text-sm text-white/40 mb-1">Venue</div>
+                                            <div className="bg-card rounded-xl p-4">
+                                                <div className="text-sm text-foreground/40 mb-1">Venue</div>
                                                 <div className="font-bold">{match.venue}</div>
                                             </div>
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="text-sm text-white/40 mb-1">Competition</div>
+                                            <div className="bg-card rounded-xl p-4">
+                                                <div className="text-sm text-foreground/40 mb-1">Competition</div>
                                                 <div className="font-bold">{match.competition}</div>
                                             </div>
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="text-sm text-white/40 mb-1">Status</div>
+                                            <div className="bg-card rounded-xl p-4">
+                                                <div className="text-sm text-foreground/40 mb-1">Status</div>
                                                 <div className="font-bold capitalize">{PERIOD_LABELS_FULL[displayPeriod] ?? getPeriodLabel(displayPeriod)}</div>
                                             </div>
                                         </div>
@@ -1107,10 +1107,10 @@ export default function MatchDetailClient() {
                                     events={events}
                                 />
                             ) : (
-                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                                    <BarChart3 className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                <div className="bg-muted border border-border rounded-[24px] p-12 text-center">
+                                    <BarChart3 className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
                                     <h3 className="text-xl font-bold mb-2">Match Statistics Unavailable</h3>
-                                    <p className="text-white/60">
+                                    <p className="text-foreground/60">
                                         Statistics will be available once the match starts and events are logged.
                                     </p>
                                 </div>
@@ -1153,10 +1153,10 @@ export default function MatchDetailClient() {
                                     showRecentMatches={true}
                                 />
                             ) : (
-                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                                    <Trophy className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                <div className="bg-muted border border-border rounded-[24px] p-12 text-center">
+                                    <Trophy className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
                                     <h3 className="text-xl font-bold mb-2">Head-to-Head Data Unavailable</h3>
-                                    <p className="text-white/60">
+                                    <p className="text-foreground/60">
                                         No historical data available for these teams yet.
                                     </p>
                                 </div>
