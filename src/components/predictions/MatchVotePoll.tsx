@@ -151,13 +151,13 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
 
     if (compact) {
         return (
-            <div className="bg-gray-800/50 rounded-lg p-4 space-y-3">
+            <div className="bg-muted rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                        <BarChart3 className="w-4 h-4 text-purple-500" />
+                    <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4 text-primary" />
                         Who will win?
                     </h4>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-foreground/60">
                         {pollData.totalVotes} vote{pollData.totalVotes !== 1 ? 's' : ''}
                     </span>
                 </div>
@@ -178,14 +178,14 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                     {option.label}
                                     {pollData.userVote === option.choice && " ✓"}
                                 </span>
-                                <span className="text-gray-400">{getPercentage(option.votes)}%</span>
+                                <span className="text-foreground/60">{getPercentage(option.votes)}%</span>
                             </div>
-                            <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-1.5 bg-border rounded-full overflow-hidden">
                                 <div
                                     className="h-full transition-all duration-500"
                                     style={{
                                         width: `${getPercentage(option.votes)}%`,
-                                        background: option.teamColor ? option.teamColor : '#6b7280'
+                                        background: option.teamColor ? option.teamColor : 'var(--muted-foreground)'
                                     }}
                                 />
                             </div>
@@ -195,25 +195,25 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
 
                 {/* Vote button if not voted yet */}
                 {mounted && isAuthenticated && !pollData.userVote && (
-                    <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/10">
+                    <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border">
                         <button
                             onClick={() => handleVote('home')}
                             disabled={voting}
-                            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
+                            className="bg-primary hover:bg-primary/90 disabled:bg-muted text-primary-foreground py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
                         >
                             Vote
                         </button>
                         <button
                             onClick={() => handleVote('draw')}
                             disabled={voting}
-                            className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-700 text-white py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
+                            className="bg-muted hover:bg-muted/70 disabled:bg-muted text-foreground py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
                         >
                             Vote
                         </button>
                         <button
                             onClick={() => handleVote('away')}
                             disabled={voting}
-                            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 text-white py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
+                            className="bg-red-600 hover:bg-red-700 disabled:bg-muted text-white py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
                         >
                             Vote
                         </button>

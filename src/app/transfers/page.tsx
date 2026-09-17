@@ -130,7 +130,7 @@ export default function TransfersPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="min-h-screen bg-background">
             {/* Animated Background */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
@@ -150,7 +150,7 @@ export default function TransfersPage() {
                             Transfer Center
                         </h1>
                     </div>
-                    <p className="text-slate-400 text-lg">
+                    <p className="text-foreground/60 text-lg">
                         Track all player movements, transfers, and rumors
                     </p>
                 </motion.div>
@@ -164,13 +164,13 @@ export default function TransfersPage() {
                 >
                     {/* Search Bar */}
                     <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40" />
                         <input
                             type="text"
                             placeholder="Search players or teams..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-800/50 border border-slate-700/50 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                            className="w-full pl-12 pr-4 py-4 bg-muted border border-border rounded-2xl text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                         />
                     </div>
 
@@ -178,7 +178,7 @@ export default function TransfersPage() {
                     <div className="flex flex-col md:flex-row gap-4">
                         {/* Transfer Type Filter */}
                         <div className="flex-1">
-                            <label className="block text-sm font-semibold text-slate-400 mb-2">Transfer Type</label>
+                            <label className="block text-sm font-semibold text-foreground/60 mb-2">Transfer Type</label>
                             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                                 {TRANSFER_TYPES.map((type) => (
                                     <motion.button
@@ -188,7 +188,7 @@ export default function TransfersPage() {
                                         onClick={() => setSelectedType(type.id)}
                                         className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-all text-sm ${selectedType === type.id
                                                 ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/50'
-                                                : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700/50'
+                                                : 'bg-muted text-foreground/70 hover:bg-muted/70 border border-border'
                                             }`}
                                     >
                                         {type.label}
@@ -199,7 +199,7 @@ export default function TransfersPage() {
 
                         {/* Status Filter */}
                         <div className="flex-1">
-                            <label className="block text-sm font-semibold text-slate-400 mb-2">Status</label>
+                            <label className="block text-sm font-semibold text-foreground/60 mb-2">Status</label>
                             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                                 {TRANSFER_STATUS.map((status) => {
                                     const Icon = status.icon || Filter;
@@ -211,7 +211,7 @@ export default function TransfersPage() {
                                             onClick={() => setSelectedStatus(status.id)}
                                             className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-all text-sm ${selectedStatus === status.id
                                                     ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/50'
-                                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700/50'
+                                                    : 'bg-muted text-foreground/70 hover:bg-muted/70 border border-border'
                                                 }`}
                                         >
                                             {status.icon && <Icon className="w-4 h-4" />}
@@ -229,7 +229,7 @@ export default function TransfersPage() {
                     <div className="space-y-4">
                         {[...Array(5)].map((_, i) => (
                             <div key={i} className="animate-pulse">
-                                <div className="bg-slate-800/50 rounded-2xl h-32" />
+                                <div className="bg-muted rounded-2xl h-32" />
                             </div>
                         ))}
                     </div>
@@ -239,9 +239,9 @@ export default function TransfersPage() {
                         animate={{ opacity: 1 }}
                         className="text-center py-20"
                     >
-                        <TrendingUp className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-slate-400 mb-2">No transfers found</h3>
-                        <p className="text-slate-500">Try adjusting your filters or search query</p>
+                        <TrendingUp className="w-16 h-16 text-foreground/30 mx-auto mb-4" />
+                        <h3 className="text-2xl font-bold text-foreground/60 mb-2">No transfers found</h3>
+                        <p className="text-foreground/40">Try adjusting your filters or search query</p>
                     </motion.div>
                 ) : (
                     <div className="space-y-4">
@@ -274,10 +274,10 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
             exit={{ opacity: 0, x: 20 }}
             transition={{ delay: index * 0.05 }}
         >
-            <div className="group relative bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20">
+            <div className="group relative bg-muted backdrop-blur-sm border border-border rounded-2xl p-6 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20">
                 {/* Status Badge */}
                 <div className="absolute top-4 right-4">
-                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-700 ${getStatusColor(transfer.status)}`}>
+                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full bg-background/80 border border-border ${getStatusColor(transfer.status)}`}>
                         <StatusIcon className="w-4 h-4" />
                         <span className="text-xs font-bold uppercase">{transfer.status}</span>
                     </div>
@@ -286,7 +286,7 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                     {/* Player Info */}
                     <div className="flex items-center gap-4 flex-1">
-                        <div className="relative w-16 h-16 rounded-full overflow-hidden bg-slate-700 flex-shrink-0">
+                        <div className="relative w-16 h-16 rounded-full overflow-hidden bg-muted flex-shrink-0">
                             {transfer.player?.image ? (
                                 <Image
                                     src={transfer.player.image}
@@ -296,15 +296,15 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                    <User className="w-8 h-8 text-slate-500" />
+                                    <User className="w-8 h-8 text-foreground/40" />
                                 </div>
                             )}
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-white group-hover:text-cyan-400 transition-colors">
+                            <h3 className="text-xl font-bold text-foreground group-hover:text-cyan-400 transition-colors">
                                 {transfer.player?.name || 'Unknown Player'}
                             </h3>
-                            <p className="text-slate-400 text-sm">{transfer.player?.position || 'Position TBD'}</p>
+                            <p className="text-foreground/60 text-sm">{transfer.player?.position || 'Position TBD'}</p>
                         </div>
                     </div>
 
@@ -313,7 +313,7 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
                         {/* From Team */}
                         {transfer.fromTeam ? (
                             <div className="flex items-center gap-2 flex-1">
-                                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-slate-700 flex-shrink-0">
+                                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted flex-shrink-0">
                                     <Image
                                         src={transfer.fromTeam.logo}
                                         alt={transfer.fromTeam.name}
@@ -321,10 +321,10 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
                                         className="object-cover"
                                     />
                                 </div>
-                                <span className="text-slate-300 font-medium text-sm hidden md:block">{transfer.fromTeam.name}</span>
+                                <span className="text-foreground/70 font-medium text-sm hidden md:block">{transfer.fromTeam.name}</span>
                             </div>
                         ) : (
-                            <div className="flex-1 text-slate-500 text-sm">Free Agent</div>
+                            <div className="flex-1 text-foreground/40 text-sm">Free Agent</div>
                         )}
 
                         {/* Arrow */}
@@ -337,8 +337,8 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
                         {/* To Team */}
                         {transfer.toTeam ? (
                             <div className="flex items-center gap-2 flex-1 justify-end">
-                                <span className="text-slate-300 font-medium text-sm hidden md:block">{transfer.toTeam.name}</span>
-                                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-slate-700 flex-shrink-0">
+                                <span className="text-foreground/70 font-medium text-sm hidden md:block">{transfer.toTeam.name}</span>
+                                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted flex-shrink-0">
                                     <Image
                                         src={transfer.toTeam.logo}
                                         alt={transfer.toTeam.name}
@@ -348,7 +348,7 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex-1 text-slate-500 text-sm text-right">TBD</div>
+                            <div className="flex-1 text-foreground/40 text-sm text-right">TBD</div>
                         )}
                     </div>
 
@@ -360,11 +360,11 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
                                 <span className="font-semibold">{transfer.fee}</span>
                             </div>
                         )}
-                        <div className="flex items-center gap-2 text-slate-400">
+                        <div className="flex items-center gap-2 text-foreground/60">
                             <Shield className="w-4 h-4" />
                             <span className="capitalize">{transfer.transferType}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-400">
+                        <div className="flex items-center gap-2 text-foreground/60">
                             <Calendar className="w-4 h-4" />
                             <span>{formatDate(transfer.announcedAt)}</span>
                         </div>
@@ -373,28 +373,28 @@ function TransferCard({ transfer, index, getStatusIcon, getStatusColor, formatDa
 
                 {/* Description */}
                 {transfer.description && (
-                    <div className="mt-4 pt-4 border-t border-slate-700/50">
-                        <p className="text-slate-400 text-sm">{transfer.description}</p>
+                    <div className="mt-4 pt-4 border-t border-border">
+                        <p className="text-foreground/60 text-sm">{transfer.description}</p>
                     </div>
                 )}
 
                 {/* Reliability Indicator (for rumors) */}
                 {transfer.status === 'rumor' && (
-                    <div className="mt-4 pt-4 border-t border-slate-700/50">
+                    <div className="mt-4 pt-4 border-t border-border">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs text-slate-500">Reliability</span>
+                            <span className="text-xs text-foreground/40">Reliability</span>
                             <div className="flex gap-1">
                                 {[...Array(10)].map((_, i) => (
                                     <div
                                         key={i}
-                                        className={`w-2 h-2 rounded-full ${i < transfer.reliability ? 'bg-yellow-400' : 'bg-slate-700'
+                                        className={`w-2 h-2 rounded-full ${i < transfer.reliability ? 'bg-yellow-400' : 'bg-border'
                                             }`}
                                     />
                                 ))}
                             </div>
                         </div>
                         {transfer.source && (
-                            <p className="text-xs text-slate-500 mt-2">Source: {transfer.source}</p>
+                            <p className="text-xs text-foreground/40 mt-2">Source: {transfer.source}</p>
                         )}
                     </div>
                 )}

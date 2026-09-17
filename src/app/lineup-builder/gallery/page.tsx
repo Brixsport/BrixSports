@@ -56,20 +56,20 @@ export default function LineupBuilderGalleryPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="min-h-screen bg-background">
             {/* Header */}
-            <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-40">
+            <div className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-40">
                 <div className="max-w-7xl mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <Link
                                 href="/lineup-builder"
-                                className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                                className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
                             >
                                 <ArrowLeft className="w-5 h-5" />
                                 Back to Builder
                             </Link>
-                            <div className="h-6 w-px bg-slate-700" />
+                            <div className="h-6 w-px bg-border" />
                             <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
                                 Lineup Gallery
                             </h1>
@@ -79,7 +79,7 @@ export default function LineupBuilderGalleryPage() {
                             <select
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value)}
-                                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                className="px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cyan-500"
                             >
                                 <option value="recent">Most Recent</option>
                                 <option value="popular">Most Popular</option>
@@ -95,14 +95,14 @@ export default function LineupBuilderGalleryPage() {
                 {loading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {[...Array(6)].map((_, i) => (
-                            <div key={i} className="animate-pulse bg-slate-800/50 rounded-2xl h-80" />
+                            <div key={i} className="animate-pulse bg-muted rounded-2xl h-80" />
                         ))}
                     </div>
                 ) : teams.length === 0 ? (
                     <div className="text-center py-20">
-                        <Trophy className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-slate-400 mb-2">No teams yet</h3>
-                        <p className="text-slate-500 mb-6">Be the first to create and share your dream team!</p>
+                        <Trophy className="w-16 h-16 text-foreground/30 mx-auto mb-4" />
+                        <h3 className="text-2xl font-bold text-foreground/60 mb-2">No teams yet</h3>
+                        <p className="text-foreground/40 mb-6">Be the first to create and share your dream team!</p>
                         <Link
                             href="/lineup-builder"
                             className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transition-all"
@@ -132,7 +132,7 @@ function TeamCard({ team, index }: { team: UserXI; index: number }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/50 transition-all group"
+            className="bg-muted backdrop-blur-sm border border-border rounded-2xl overflow-hidden hover:border-cyan-500/50 transition-all group"
         >
             {/* Team Preview */}
             <div className="relative h-48 bg-gradient-to-br from-blue-900 to-blue-800 p-4">
@@ -155,7 +155,7 @@ function TeamCard({ team, index }: { team: UserXI; index: number }) {
 
             {/* Team Info */}
             <div className="p-4">
-                <div className="flex items-center justify-between text-sm text-slate-400 mb-4">
+                <div className="flex items-center justify-between text-sm text-foreground/60 mb-4">
                     <span className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
                         {new Date(team.createdAt).toLocaleDateString()}
@@ -163,18 +163,18 @@ function TeamCard({ team, index }: { team: UserXI; index: number }) {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-red-500/20 hover:text-red-400 transition-all">
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-red-500/20 hover:text-red-400 transition-all">
                         <Heart className="w-4 h-4" />
                         <span className="font-semibold">{team.likes}</span>
                     </button>
-                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors">
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-background transition-colors">
                         <Eye className="w-4 h-4" />
                         <span className="font-semibold">{team.views}</span>
                     </button>
-                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors">
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-background transition-colors">
                         <MessageCircle className="w-4 h-4" />
                     </button>
-                    <button className="ml-auto p-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors">
+                    <button className="ml-auto p-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-background transition-colors">
                         <Share2 className="w-4 h-4" />
                     </button>
                 </div>

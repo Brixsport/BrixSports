@@ -69,7 +69,7 @@ export default function TableOfContents({ items, activeId, className = '' }: Tab
                         transition-all duration-200
                         ${isActive
                             ? 'bg-cyan-500/20 text-cyan-400 font-semibold'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                            : 'text-foreground/60 hover:text-foreground hover:bg-muted'
                         }
                         ${depth > 0 ? 'ml-' + (depth * 4) : ''}
                     `}
@@ -118,21 +118,21 @@ export default function TableOfContents({ items, activeId, className = '' }: Tab
     }
 
     return (
-        <div className={`bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden ${className}`}>
+        <div className={`bg-card backdrop-blur-sm border border-border rounded-2xl overflow-hidden ${className}`}>
             {/* Header */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-4 hover:bg-slate-800/50 transition-colors"
+                className="w-full flex items-center justify-between p-4 hover:bg-muted transition-colors"
             >
                 <div className="flex items-center gap-2">
                     <List className="w-5 h-5 text-cyan-400" />
-                    <h3 className="font-bold text-white">Table of Contents</h3>
+                    <h3 className="font-bold text-foreground">Table of Contents</h3>
                 </div>
                 <motion.div
                     animate={{ rotate: isOpen ? 180 : 0 }}
                     transition={{ duration: 0.2 }}
                 >
-                    <ChevronDown className="w-5 h-5 text-slate-400" />
+                    <ChevronDown className="w-5 h-5 text-foreground/60" />
                 </motion.div>
             </button>
 
@@ -144,7 +144,7 @@ export default function TableOfContents({ items, activeId, className = '' }: Tab
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.3 }}
-                        className="border-t border-slate-700/50"
+                        className="border-t border-border"
                     >
                         <div className="p-2 max-h-[500px] overflow-y-auto custom-scrollbar">
                             {items.map(item => renderItem(item))}
