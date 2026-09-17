@@ -1032,27 +1032,29 @@ export default function MatchDetailClient() {
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-muted border border-border rounded-[24px] p-8">
-                                    <div className="text-center">
-                                        <Eye className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
-                                        <h3 className="text-xl font-bold mb-2">Match Overview</h3>
-                                        <p className="text-foreground/60 mb-6">
-                                            {isLive ? 'Match is currently live!' : isUpcoming ? 'Match starts soon' : 'Match has ended'}
-                                        </p>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-                                            <div className="bg-card rounded-xl p-4">
-                                                <div className="text-sm text-foreground/40 mb-1">Venue</div>
-                                                <div className="font-bold">{match.venue}</div>
-                                            </div>
-                                            <div className="bg-card rounded-xl p-4">
-                                                <div className="text-sm text-foreground/40 mb-1">Competition</div>
-                                                <div className="font-bold">{match.competition}</div>
-                                            </div>
-                                            <div className="bg-card rounded-xl p-4">
-                                                <div className="text-sm text-foreground/40 mb-1">Status</div>
-                                                <div className="font-bold capitalize">{PERIOD_LABELS_FULL[displayPeriod] ?? getPeriodLabel(displayPeriod)}</div>
-                                            </div>
+                                // BACKLOG-390 #5: was decoration-first (large centered eye icon +
+                                // "Match Overview" heading + one status line) with the actually
+                                // useful Venue/Competition/Status facts pushed below the fold on a
+                                // completed match. Facts now lead; the status line is a small
+                                // caption beneath them instead of a full-height hero.
+                                <div className="bg-muted border border-border rounded-[24px] p-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-card rounded-xl p-4">
+                                            <div className="text-sm text-foreground/40 mb-1">Venue</div>
+                                            <div className="font-bold">{match.venue}</div>
                                         </div>
+                                        <div className="bg-card rounded-xl p-4">
+                                            <div className="text-sm text-foreground/40 mb-1">Competition</div>
+                                            <div className="font-bold">{match.competition}</div>
+                                        </div>
+                                        <div className="bg-card rounded-xl p-4">
+                                            <div className="text-sm text-foreground/40 mb-1">Status</div>
+                                            <div className="font-bold capitalize">{PERIOD_LABELS_FULL[displayPeriod] ?? getPeriodLabel(displayPeriod)}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-2 text-foreground/60 text-sm mt-6">
+                                        <Eye className="w-4 h-4 shrink-0" />
+                                        {isLive ? 'Match is currently live!' : isUpcoming ? 'Match starts soon' : 'Match has ended'}
                                     </div>
                                 </div>
                             )}
