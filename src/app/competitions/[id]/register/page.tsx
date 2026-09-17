@@ -22,13 +22,13 @@ export default async function RegisterPage({ params }: PageProps) {
 
     if (!competition.registrationOpen) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center px-4">
+            <div className="min-h-screen bg-gradient-to-br from-purple-50 via-purple-100/50 to-purple-50 dark:from-slate-900 dark:via-purple-900 dark:to-slate-900 flex items-center justify-center px-4">
                 <div className="text-center">
                     <div className="flex items-center justify-center gap-2 mb-4">
                         <BackButton fallbackHref={`/competitions/${params.id}`} />
-                        <h1 className="text-4xl font-bold text-white">Registration Closed</h1>
+                        <h1 className="text-4xl font-bold text-foreground">Registration Closed</h1>
                     </div>
-                    <p className="text-gray-300 text-lg">
+                    <p className="text-foreground/70 text-lg">
                         Registration for {competition.name} is currently closed.
                     </p>
                 </div>

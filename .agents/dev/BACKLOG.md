@@ -8176,6 +8176,18 @@ Quick sanity notes on a few, without a full read (not to be taken as a completed
 
 **BACKLOG-216 status update:** the 14-file self-contained-palette backlog and both dead-code deletions are now closed. Still open: the purple-gradient registration flow's own dedicated pass (`competitions/[id]/register/page.tsx`, `registration-success/page.tsx`, `CompetitionRegistration.tsx` — one shared pass, not three), and the `SimpleMatchOverlay.tsx` deletion decision (flagged above, Richard's call still pending). All live visual verification across every phase of this initiative remains outstanding.
 
+**Purple-gradient registration flow resolved, 2026-09-17, same session.** Unlike the livestream/docs exceptions, this flow was converted rather than left as a permanent-dark exception — it renders inside the root layout with `BottomNav` visible (`bg-background`, already theme-driven), not a true full-takeover page, so a fixed dark-purple backdrop would visibly clash against a light-mode nav directly below it. One shared color mapping applied across all 3 files (not three separate passes, since they're one continuous wizard-to-confirmation flow):
+
+- Page background: `bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900` (fixed dark) → `bg-gradient-to-br from-purple-50 via-purple-100/50 to-purple-50 dark:from-slate-900 dark:via-purple-900 dark:to-slate-900` — keeps the purple identity in both themes rather than collapsing it to the site's own blue `--primary` (hue 250 in `globals.css`), since this flow's purple is its own established sub-brand (same category as the red "Live" accent elsewhere), not a copy of the site accent.
+- Glass card surfaces: `bg-white/10 backdrop-blur-md` → `bg-card/80 border border-border backdrop-blur-md` (adds a border since the card floats on a lighter background in light mode and needs a visible edge it didn't need against a uniformly dark backdrop).
+- Form/input surfaces: `bg-white/5 border-gray-600` → `bg-muted border-border`; `text-white` body/label text → `text-foreground`(/`70`/`60`/`40` matching original gray-300/400/500 hierarchy); `placeholder-gray-500` → `placeholder-foreground/40`.
+- Secondary/neutral elements (inactive step circles, dividers, Back buttons): `bg-gray-700`/`border-gray-700`/`bg-gray-700 hover:bg-gray-600` → `bg-muted`/`border-border`/`bg-muted hover:bg-muted/70`.
+- **Left untouched, all 5 instances:** `text-white` on a solid saturated `bg-purple-500`/`bg-green-500` button (Next/Review/Submit/Add Player/View Competition) — same established exception as every other phase of this initiative, a solid mid-tone colored button with white text is legible in both themes without a token.
+- `tsc --noEmit`: 18 errors, exactly the pre-existing baseline, zero new, across all 3 files.
+- **Not done:** live visual verification against the deployed preview (same open constraint as the rest of this initiative).
+
+**BACKLOG-216 status update:** nothing outstanding on the self-contained-palette/registration-flow backlog. Remaining open item on this entry is only the `SimpleMatchOverlay.tsx` deletion decision (Richard's call pending) and live visual verification across all completed phases.
+
 ---
 
 ### ~~BUG-217~~ — `AuthContext.checkAuth()` Treats Network Failure the Same as Confirmed Logout, and Deletes a Still-Possibly-Valid Token on Any Non-2xx Response
