@@ -13507,12 +13507,23 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-390 — Design Critique Findings: Density, Touch Targets, Duplicate Filter Controls, Match Overview Padding
 
-**Status:** Item 1 SHIPPED (pending live verification against the deployed preview) — 2026-09-17. Items 2-6 still OPEN, not started, unranked, needs Richard's prioritization.
-**Priority:** Unset for items 2-6 — deliberately not ranked yet, these are recommendations to weigh, not confirmed work items.
+**Status:** Items 1 and 3 SHIPPED, live-verified. Items 2, 4, 5, 6 SHIPPED (commits `f9550b7`/`7401664`), pending live verification. All 6 items now built.
+**Priority:** N/A — all items acted on this session, per Richard's "so 390!!!" go-ahead.
 
 **Item 1 fix (`src/app/page.tsx`):** replaced the "Matches" date-filter card (bordered `bg-card` container, separate icon+"Matches" heading row, `flex-col sm:flex-row` stacking to two full rows on mobile) with a single compact inline row — icon+date+prev/next, no card/border/heading, no mobile stacking. No logic change (same `setSelectedDate`/`addDays` handlers). Matches the audit's own suggested direction ("an inline icon+date-stepper row would save ~150-200px").
 
 **Evidence:** `tsc --noEmit` unchanged (18 baseline). Commit `66bcdea`, pushed to `origin/feature/ui-redesign`. **Live-verified against the real deployed branch preview** (`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`, via the Browser pane, Vercel bypass-cookie method) after the redeploy completed: confirmed a single-line `‹ Sep 17, 2026 ›` row with no card/border/heading, and the Live Center banner + first match row are now visibly higher on the page than the pre-fix screenshot. Item 1 SHIPPED.
+
+**Item 3 fix (`src/app/search/page.tsx`):** the "All (0)/Teams (0)/Players (0)/Matches (0)/Competitions (0)" category row was a row of `bg-primary`/`bg-muted` pill buttons, visually identical to the sport-filter pill row directly beneath it (the exact duplicate-control finding). Replaced with the shared `UnderlineTabs` component (`src/components/ui/UnderlineTabs.tsx`) already used on match/team/player detail pages — flat uppercase text + animated underline + count badges, `overflow-x-auto scrollbar-hide` built in. Sport-filter row deliberately left as pill chips (now visually distinct by construction, not just convention).
+
+**Evidence:** `tsc --noEmit` unchanged (18 baseline). Commit `eef50fc`, pushed. **Live-verified against the real deployed branch preview**: confirmed `ALL`/`TEAMS`/`PLAYERS`/`MATCHES`/`COMPETITIONS` render as flat underline tabs with a blue underline on the active tab and small count badges, clearly distinct from the `Football`/`Basketball`/`Track` chip row below. **Note on verification method**: the curl-based polling loop used to detect this rebuild (grep for absence of an old class string) was unreliable here — the bypass-secret query param triggers a bare 15-byte "Redirecting..." response from `curl` (no cookie jar), so the loop's grep target was never present in either the old or new build and the check was a false positive throughout. Real confirmation came from a direct Browser-pane reload + screenshot after a fixed wait, not the loop. Future live-checks should wait a fixed ~60-90s then check via the browser directly, or use `curl -c/-b` to persist the bypass cookie, rather than trusting a bare stateless `curl` loop against a protected preview.
+
+**Item 3 follow-up, same session, Richard's direct feedback comparing `/search` against the homepage's own filter-pill style:** two more fixes, same underlying pattern.
+- `src/app/search/page.tsx`'s sport-filter chips (Football/Basketball/Track) had emoji icons and a one-off `text-sm font-medium` style, inconsistent with the homepage's status-filter pills. Emojis dropped, typography aligned to the homepage's `text-xs font-bold uppercase tracking-wider` + 44px touch target.
+- `src/components/GlobalSearch.tsx` (the dropdown the homepage's search icon opens) had its own separate, never-fixed pill-button implementation of the identical category-tab pattern (All/Teams/Players/Matches/Competitions) — the same duplicate-control class this item was originally filed against, just not caught because it's a different file from `/search`. Converted to the same `UnderlineTabs`, with count badges added for parity.
+- **New, Richard-identified product gap, not part of the original audit:** `GlobalSearch`'s dropdown had no path into the full `/search` page — no "View all results" link, so a user wanting the sport filter or a fuller result grid had no way to get there from the UI at all (`/search?q=...` was only reachable by typing the URL directly, or via the SEO sitelinks search box in `layout.tsx`). Added a "See all results for '{query}'" row at the bottom of the dropdown's results list, and a "Search all of Brixsport for '{query}'" fallback in the no-results state (useful when the dropdown's `selectedCategory` filter hides results the full page's default 'all' view would show) — both route to `/search?q=...` and close the dropdown. Only `q` is handed off; `/search`'s own category tab and sport filter are page-local state, not URL params, so no filter carries over (documented in code rather than silently implying it does).
+
+**Evidence:** `tsc --noEmit` unchanged (18 baseline), zero errors in either file.
 
 **Source:** an independent, fresh-eyes `general-purpose` subagent run via the `design-critique` skill against the real deployed branch preview, both dark and light modes, benchmarked informally against live sofascore.com. Full original report preserved in this session's conversation transcript; findings below are the actionable subset (the agent's report also praised several things already working well — score-hierarchy on match detail, restrained brand-blue usage, the cream-toned light background — not repeated here since those don't need action).
 
@@ -13535,5 +13546,18 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Not a finding needing action, noted for completeness:** team-row avatar fidelity is inconsistent (some teams get a real crest image, others a flat single-letter box) — confirmed to be a data-availability issue (not every team has a logo uploaded yet), not a design/code defect.
 
 **Found:** session 2026-09-16, design-critique subagent run at Richard's request following the token-contrast and card-shadow fixes above.
+
+---
+
+### BACKLOG-391 — Sport Filter as a Compact Dropdown Instead of a Full Tab Bar (Future, Not Started)
+
+**Status:** OPEN, deliberately deferred — Richard's explicit "nah don't worry, leave as is" after weighing it in conversation. Recorded so the reasoning isn't lost, not because it's scheduled.
+**Priority:** Unset.
+
+**Idea:** the homepage's sport row (`ALL/FOOTBALL/BASKETBALL/OTHER`, its own full-width tab bar) and status row (`ALL/LIVE/FINISHED/UPCOMING/FAVORITES` pills) are two separate full rows of chrome, and this same two-row pattern likely repeats wherever a page needs both a sport and a status/category filter — compounding the exact density problem `BACKLOG-390` item 1 addressed for the date card, just not yet measured page-by-page.
+
+**Direction discussed, not built:** don't collapse both rows — status (especially `LIVE`) is the single highest-value tap on a live-scores app, so hiding it behind an extra interaction adds friction to the thing people open the app to check. Sport is more of a set-once preference; collapsing *only* the sport row into a compact dropdown/pill (Richard's "Add Filter" reference screenshot) next to the status pills would recover a full row of height without burying the interaction people actually use most.
+
+**Explicitly not decided:** which other pages actually repeat this two-row pattern (not surveyed), and whether a collapsed sport filter's discoverability cost (a new user has to notice/tap it to learn basketball exists) is worth the space savings. Needs a page survey and Richard's go-ahead before any build, same as any other structural nav change.
 
 ---

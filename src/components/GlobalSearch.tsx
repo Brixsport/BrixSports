@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, TrendingUp, Clock, Users, Trophy, Calendar, Loader2 } from 'lucide-react';
+import { Search, X, TrendingUp, Clock, Users, Trophy, Calendar, Loader2, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useDebounce } from '@/hooks/useDebounce';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
 
 interface SearchResult {
     teams: any[];
@@ -136,6 +137,15 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
         performSearch(search);
     };
 
+    const handleViewAllResults = () => {
+        // /search's own category tabs and sport filter are page-local state,
+        // not URL params -- it only reads `q` on load, so that's all we hand
+        // off here rather than implying a category/sport carries over.
+        router.push(`/search?q=${encodeURIComponent(query)}`);
+        setShowResults(false);
+        onClose?.();
+    };
+
     const clearRecentSearches = () => {
         setRecentSearches([]);
         localStorage.removeItem('recentSearches');
@@ -150,6 +160,17 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
             (results.competitions?.length || 0)
         );
     };
+
+    // Same UnderlineTabs bar the /search results page uses -- was a row of
+    // pill buttons here too, its own separate implementation of the exact
+    // category-tab pattern BACKLOG-390 flagged.
+    const categoryTabs: UnderlineTab[] = [
+        { id: 'all', label: 'All', count: getTotalResults() },
+        { id: 'teams', label: 'Teams', icon: <Users className="w-3.5 h-3.5" />, count: results?.teams?.length || 0 },
+        { id: 'players', label: 'Players', icon: <TrendingUp className="w-3.5 h-3.5" />, count: results?.players?.length || 0 },
+        { id: 'matches', label: 'Matches', icon: <Calendar className="w-3.5 h-3.5" />, count: results?.matches?.length || 0 },
+        { id: 'competitions', label: 'Competitions', icon: <Trophy className="w-3.5 h-3.5" />, count: results?.competitions?.length || 0 },
+    ];
 
     return (
         <div ref={containerRef} className="relative w-full max-w-2xl">
@@ -179,20 +200,13 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
 
             {/* Category Filters */}
             {query.length >= 2 && (
-                <div className="flex gap-2 mt-3 overflow-x-auto pb-2 scrollbar-hide">
-                    {['all', 'teams', 'players', 'matches', 'competitions'].map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat as any)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === cat
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
-                                }`}
-                        >
-                            {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                        </button>
-                    ))}
-                </div>
+                <UnderlineTabs
+                    tabs={categoryTabs}
+                    activeId={selectedCategory}
+                    onChange={(id) => setSelectedCategory(id as typeof selectedCategory)}
+                    layoutId="globalSearchCategoryTabs"
+                    className="mt-3"
+                />
             )}
 
             {/* Search Results Dropdown */}
@@ -359,13 +373,31 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                         </div>
                                     </div>
                                 )}
+
+                                {/* BACKLOG-390 follow-up: this dropdown had no escape hatch into
+                                    the full /search page (sport filter, larger result grid) --
+                                    was two fully disconnected search experiences. */}
+                                <button
+                                    onClick={handleViewAllResults}
+                                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-semibold text-primary hover:bg-muted rounded-lg transition-colors"
+                                >
+                                    See all results for &quot;{query}&quot;
+                                    <ArrowRight className="w-4 h-4" />
+                                </button>
                             </div>
                         ) : query.length >= 2 && !loading ? (
                             /* No Results */
                             <div className="p-8 text-center">
                                 <Search className="w-12 h-12 text-foreground/20 mx-auto mb-3" />
                                 <p className="text-foreground/60">No results found for "{query}"</p>
-                                <p className="text-sm text-foreground/40 mt-1">Try a different search term</p>
+                                <p className="text-sm text-foreground/40 mt-1 mb-4">Try a different search term</p>
+                                <button
+                                    onClick={handleViewAllResults}
+                                    className="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-primary hover:bg-muted rounded-lg transition-colors"
+                                >
+                                    Search all of Brixsport for &quot;{query}&quot;
+                                    <ArrowRight className="w-4 h-4" />
+                                </button>
                             </div>
                         ) : null}
                     </motion.div>

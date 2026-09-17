@@ -123,18 +123,18 @@ function SearchContent() {
                         layoutId="searchCategoryTabs"
                     />
 
-                    {/* Sport Filter */}
+                    {/* Sport Filter -- matches the homepage's status-filter pill style, no emojis */}
                     <div className="flex gap-2 mt-3">
                         {['Football', 'Basketball', 'Track'].map(sport => (
                             <button
                                 key={sport}
                                 onClick={() => setSelectedSport(selectedSport === sport ? null : sport)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedSport === sport
+                                className={`px-4 min-h-11 flex items-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${selectedSport === sport
                                     ? 'bg-primary text-primary-foreground'
                                     : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                     }`}
                             >
-                                {sport === 'Football' ? '⚽' : sport === 'Basketball' ? '🏀' : '🏃'} {sport}
+                                {sport}
                             </button>
                         ))}
                     </div>
