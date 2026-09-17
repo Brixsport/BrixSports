@@ -249,9 +249,16 @@ export default function LineupBuilderPage() {
         if (!pitchRef.current) return;
         try {
             setSaving(true);
+            // Was a hardcoded '#050505' -- every downloaded lineup image rendered on a
+            // near-black background regardless of theme. --background already stores a full
+            // oklch(...) string (see globals.css), so this reads the real, currently-applied
+            // value directly rather than re-wrapping it.
+            const exportBackground = getComputedStyle(document.documentElement)
+                .getPropertyValue('--background')
+                .trim();
             const dataUrl = await htmlToImage.toPng(pitchRef.current, {
                 cacheBust: true,
-                backgroundColor: '#050505',
+                backgroundColor: exportBackground || '#050505',
                 pixelRatio: 4,
                 quality: 1.0,
             });

@@ -385,7 +385,10 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
                         className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
                         style={{
-                            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${confidence}%, #ffffff20 ${confidence}%, #ffffff20 100%)`
+                            // Was a hardcoded #ffffff20 unfilled-track color -- fixed-white,
+                            // washed out against a light background. var(--border) matches the
+                            // track's own className fallback (bg-border) in both themes.
+                            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${confidence}%, var(--border) ${confidence}%, var(--border) 100%)`
                         }}
                     />
                     <div className="flex justify-between text-xs text-foreground/40">

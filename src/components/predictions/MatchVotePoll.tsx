@@ -280,7 +280,11 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                     if (!voting) e.currentTarget.style.borderColor = `${match.homeTeam.color}80`;
                                 }}
                                 onMouseLeave={(e) => {
-                                    if (!voting) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                                    // Was a hardcoded white, invisible-ish in dark mode but a real
+                                    // fixed-white fringe in light mode. Resets to the same transparent
+                                    // team-color used on mount instead, matching this element's own
+                                    // "invisible until hover" design intent in both themes.
+                                    if (!voting) e.currentTarget.style.borderColor = `${match.homeTeam.color}00`;
                                 }}
                             >
                                 <div className="flex items-center gap-3 md:gap-4">
@@ -327,7 +331,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                     if (!voting) e.currentTarget.style.borderColor = `${match.awayTeam.color}80`;
                                 }}
                                 onMouseLeave={(e) => {
-                                    if (!voting) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                                    if (!voting) e.currentTarget.style.borderColor = `${match.awayTeam.color}00`;
                                 }}
                             >
                                 <div className="flex items-center gap-3 md:gap-4">
