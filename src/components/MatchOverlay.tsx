@@ -782,22 +782,22 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col overflow-hidden"
+      className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-md flex flex-col overflow-hidden"
     >
       <div className="flex flex-col min-h-full" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className={`sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2' : 'pt-6 pb-0'}`}>
+        <div className={`sticky top-0 z-10 bg-card/95 backdrop-blur-xl border-b border-border transition-all duration-300 ${isScrolled ? 'py-2' : 'pt-6 pb-0'}`}>
           <div className="max-w-5xl mx-auto px-4">
             {/* Top Bar */}
             <div className={`flex items-center justify-between ${isScrolled ? 'mb-2' : 'mb-6'}`}>
               <button
                 onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors"
+                className="w-8 h-8 flex items-center justify-center hover:bg-muted/70 rounded-full transition-colors"
               >
-                <X size={18} className="text-white/80" />
+                <X size={18} className="text-foreground/80" />
               </button>
 
-              <span className="text-[10px] font-bold tracking-[0.2em] text-white/40 uppercase">
+              <span className="text-[10px] font-bold tracking-[0.2em] text-foreground/40 uppercase">
                 {match.competition}
               </span>
 
@@ -824,9 +824,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     console.error('Share failed:', err);
                   }
                 }}
-                className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors"
+                className="w-8 h-8 flex items-center justify-center hover:bg-muted/70 rounded-full transition-colors"
               >
-                <Share2 size={18} className="text-white/80" />
+                <Share2 size={18} className="text-foreground/80" />
               </button>
             </div>
 
@@ -836,7 +836,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {/* Home Team */}
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 justify-end min-w-0">
                   <div className="flex flex-col items-end min-w-0">
-                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-right truncate w-full flex items-center justify-end gap-1.5">
+                    <h3 className="font-bold text-sm sm:text-xl text-foreground leading-tight text-right truncate w-full flex items-center justify-end gap-1.5">
                       {homeRedCardsCount > 0 && (
                         <span className="flex gap-0.5">
                           {Array.from({ length: homeRedCardsCount }).map((_, i) => (
@@ -848,20 +848,20 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
                       {teamRatings.home > 0 && (
-                        <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-bold text-white/70">
+                        <span className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-bold text-foreground/70">
                           {teamRatings.home.toFixed(1)} OVR
                         </span>
                       )}
                       <button
                         onClick={(e) => { e.stopPropagation(); if (homeTeam) handleToggleFollow(homeTeam); }}
-                        className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1"
+                        className="text-xs text-foreground/40 hover:text-primary transition-colors flex items-center gap-1"
                       >
                         <Heart size={12} fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
                         <span className="hidden sm:inline">{isFavoriteTeam(homeTeam?.id || '') ? 'Following' : 'Follow'}</span>
                       </button>
                     </div>
                   </div>
-                  <div className="w-10 h-10 sm:w-16 sm:h-16 relative rounded-full overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 shadow-lg shadow-black/50">
+                  <div className="w-10 h-10 sm:w-16 sm:h-16 relative rounded-full overflow-hidden bg-muted border border-border flex-shrink-0 shadow-lg shadow-black/50">
                     {isValidImagePath(homeTeam?.logo) && homeTeam && (
                       <Image src={homeTeam.logo} alt={homeTeam.name} fill className="object-cover p-1" />
                     )}
@@ -870,12 +870,12 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
                 {/* Score Center */}
                 <div className="flex flex-col items-center px-2 sm:px-6 relative z-10">
-                  <div className="flex items-center gap-2 sm:gap-4 bg-white/5 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border border-white/10 shadow-inner backdrop-blur-sm">
-                    <span className={`text-2xl sm:text-5xl font-black tabular-nums tracking-tighter ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/60'}`}>
+                  <div className="flex items-center gap-2 sm:gap-4 bg-muted px-4 py-2 sm:px-6 sm:py-3 rounded-xl border border-border shadow-inner backdrop-blur-sm">
+                    <span className={`text-2xl sm:text-5xl font-black tabular-nums tracking-tighter ${match.homeScore > match.awayScore ? 'text-foreground' : 'text-foreground/60'}`}>
                       {match.homeScore}
                     </span>
-                    <span className="text-white/20 text-xl sm:text-3xl font-light">:</span>
-                    <span className={`text-2xl sm:text-5xl font-black tabular-nums tracking-tighter ${match.awayScore > match.homeScore ? 'text-white' : 'text-white/60'}`}>
+                    <span className="text-foreground/20 text-xl sm:text-3xl font-light">:</span>
+                    <span className={`text-2xl sm:text-5xl font-black tabular-nums tracking-tighter ${match.awayScore > match.homeScore ? 'text-foreground' : 'text-foreground/60'}`}>
                       {match.awayScore}
                     </span>
                   </div>
@@ -883,18 +883,18 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                   {/* Status Pill — BACKLOG-154: was a fourth hand-rolled red-dot/label
                       implementation, now consumes the same LiveMatchStatus component
                       as the homepage cards so the live styling can't drift again. */}
-                  <div className="mt-[-10px] bg-[#0a0a0a] px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 shadow-lg relative z-20">
+                  <div className="mt-[-10px] bg-card px-3 py-1 rounded-full border border-border flex items-center gap-1.5 shadow-lg relative z-20">
                     {match.status === 'LIVE' ? (
                       <div className="flex items-center gap-1">
                         <LiveMatchStatus matchId={match.id} sport={match.sport} variant="default" fallbackPeriod={matchTime.period} />
                         {matchTime.announcedStoppage && matchTime.announcedStoppage > 0 && (
-                          <span className="ml-1 px-1 py-0.5 bg-white/10 rounded text-[9px] text-white font-bold border border-white/20">
+                          <span className="ml-1 px-1 py-0.5 bg-muted rounded text-[9px] text-foreground font-bold border border-border">
                             +{matchTime.announcedStoppage}
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-white/60">
+                      <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-foreground/60">
                         {getStatusText()}
                       </span>
                     )}
@@ -903,13 +903,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
                 {/* Away Team */}
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 justify-start min-w-0">
-                  <div className="w-10 h-10 sm:w-16 sm:h-16 relative rounded-full overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 shadow-lg shadow-black/50">
+                  <div className="w-10 h-10 sm:w-16 sm:h-16 relative rounded-full overflow-hidden bg-muted border border-border flex-shrink-0 shadow-lg shadow-black/50">
                     {isValidImagePath(awayTeam?.logo) && awayTeam && (
                       <Image src={awayTeam.logo} alt={awayTeam.name} fill className="object-cover p-1" />
                     )}
                   </div>
                   <div className="flex flex-col items-start min-w-0">
-                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-left truncate w-full flex items-center gap-1.5">
+                    <h3 className="font-bold text-sm sm:text-xl text-foreground leading-tight text-left truncate w-full flex items-center gap-1.5">
                       {awayTeam?.name}
                       {awayRedCardsCount > 0 && (
                         <span className="flex gap-0.5">
@@ -921,13 +921,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
                       {teamRatings.away > 0 && (
-                        <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-bold text-white/70">
+                        <span className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-bold text-foreground/70">
                           {teamRatings.away.toFixed(1)} OVR
                         </span>
                       )}
                       <button
                         onClick={(e) => { e.stopPropagation(); if (awayTeam) handleToggleFollow(awayTeam); }}
-                        className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1"
+                        className="text-xs text-foreground/40 hover:text-primary transition-colors flex items-center gap-1"
                       >
                         <Heart size={12} fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
                         <span className="hidden sm:inline">{isFavoriteTeam(awayTeam?.id || '') ? 'Following' : 'Follow'}</span>
@@ -940,17 +940,17 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
             {/* Metadata Row */}
             {!isScrolled && (
-              <div className="flex items-center justify-center gap-4 text-[10px] sm:text-xs text-white/40 mb-6 font-medium tracking-wide">
+              <div className="flex items-center justify-center gap-4 text-[10px] sm:text-xs text-foreground/40 mb-6 font-medium tracking-wide">
                 <div className="flex items-center gap-1.5">
                   <Users size={12} />
                   <span>{viewerCount} watching</span>
                 </div>
-                <div className="w-1 h-1 bg-white/20 rounded-full" />
+                <div className="w-1 h-1 bg-foreground/20 rounded-full" />
                 <div className="flex items-center gap-1.5">
                   <MapPin size={12} />
                   <span>{match.venue}</span>
                 </div>
-                <div className="w-1 h-1 bg-white/20 rounded-full" />
+                <div className="w-1 h-1 bg-foreground/20 rounded-full" />
                 <div className="flex items-center gap-1.5">
                   <Calendar size={12} />
                   <span>{new Date(match.startTime).toLocaleDateString()}</span>
@@ -959,7 +959,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
             )}
 
             {/* Tabs */}
-            <div className="flex gap-6 overflow-x-auto scrollbar-hide border-b border-white/5 pb-0.5">
+            <div className="flex gap-6 overflow-x-auto scrollbar-hide border-b border-border/50 pb-0.5">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -968,9 +968,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 >
                   <tab.icon
                     size={16}
-                    className={`transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-white/40 group-hover:text-white/60'}`}
+                    className={`transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-foreground/40 group-hover:text-foreground/60'}`}
                   />
-                  <span className={`transition-colors ${activeTab === tab.id ? 'text-white' : 'text-white/40 group-hover:text-white/60'}`}>
+                  <span className={`transition-colors ${activeTab === tab.id ? 'text-foreground' : 'text-foreground/40 group-hover:text-foreground/60'}`}>
                     {tab.label}
                   </span>
 
@@ -1003,7 +1003,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-6"
               >
-                <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                <div className="bg-muted rounded-xl border border-border overflow-hidden">
                   <LivestreamPlayer
                     streamUrl={match.streamUrl}
                     streamType={match.streamType || 'youtube'}
@@ -1050,7 +1050,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {loadingPlayers ? (
                   <div className="py-12 text-center">
                     <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-white/60 text-sm">Loading lineups...</p>
+                    <p className="text-foreground/60 text-sm">Loading lineups...</p>
                   </div>
                 ) : (isLineupPublished(match.lineups?.home) || isLineupPublished(match.lineups?.away)) ? (
                   <ResponsiveLineup
@@ -1142,9 +1142,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                   />
                 ) : (
                   <div className="py-12 text-center">
-                    <Users className="mx-auto mb-3 text-white/20" size={48} />
-                    <p className="text-white/60 text-sm">No lineups available yet</p>
-                    <p className="text-white/40 text-xs mt-1">Lineups will be published before the match starts</p>
+                    <Users className="mx-auto mb-3 text-foreground/20" size={48} />
+                    <p className="text-foreground/60 text-sm">No lineups available yet</p>
+                    <p className="text-foreground/40 text-xs mt-1">Lineups will be published before the match starts</p>
                   </div>
                 )}
               </motion.div>
@@ -1173,9 +1173,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
                 {!match.stats && (
                   <div className="py-12 text-center">
-                    <BarChart3 className="mx-auto mb-3 text-white/20" size={48} />
-                    <p className="text-white/60 text-sm">No statistics available yet</p>
-                    <p className="text-white/40 text-xs mt-1">Statistics will be available during the match</p>
+                    <BarChart3 className="mx-auto mb-3 text-foreground/20" size={48} />
+                    <p className="text-foreground/60 text-sm">No statistics available yet</p>
+                    <p className="text-foreground/40 text-xs mt-1">Statistics will be available during the match</p>
                   </div>
                 )}
               </motion.div>
@@ -1216,14 +1216,14 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {loadingStandings ? (
                   <div className="py-12 text-center">
                     <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-white/60 text-sm">Loading standings...</p>
+                    <p className="text-foreground/60 text-sm">Loading standings...</p>
                   </div>
                 ) : standings.length > 0 ? (
-                  <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                  <div className="bg-muted rounded-xl border border-border overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full">
-                        <thead className="bg-white/5">
-                          <tr className="text-xs font-semibold text-white/60">
+                        <thead className="bg-muted">
+                          <tr className="text-xs font-semibold text-foreground/60">
                             <th className="px-4 py-3 text-left">Pos</th>
                             <th className="px-4 py-3 text-left">Team</th>
                             <th className="px-4 py-3 text-center">P</th>
@@ -1245,7 +1245,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                             return (
                               <tr
                                 key={standing.id}
-                                className={`border-t border-white/5 ${isHighlighted ? 'bg-primary/10 border-primary/20' : 'hover:bg-white/5'} transition-colors`}
+                                className={`border-t border-border/50 ${isHighlighted ? 'bg-primary/10 border-primary/20' : 'hover:bg-muted'} transition-colors`}
                               >
                                 <td className="px-4 py-3">
                                   <span className={`font-semibold ${index === 0 ? 'text-primary' : ''}`}>
@@ -1296,9 +1296,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                   </div>
                 ) : (
                   <div className="py-12 text-center">
-                    <Table className="mx-auto mb-3 text-white/20" size={48} />
-                    <p className="text-white/60 text-sm">No standings available</p>
-                    <p className="text-white/40 text-xs mt-1">Standings data not available for this competition</p>
+                    <Table className="mx-auto mb-3 text-foreground/20" size={48} />
+                    <p className="text-foreground/60 text-sm">No standings available</p>
+                    <p className="text-foreground/40 text-xs mt-1">Standings data not available for this competition</p>
                   </div>
                 )}
               </motion.div>
@@ -1309,14 +1309,14 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
               <motion.div key="predict" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                 {match.homeTeam && match.awayTeam ? (
                   <MatchPredictionCard match={{ id: match.id, homeTeam: match.homeTeam, awayTeam: match.awayTeam, startTime: match.startTime, competition: match.competition, sport: match.sport }} />
-                ) : ( <div className="py-12 text-center"><p className="text-white/40 text-sm">Team data not available</p></div> )}
+                ) : ( <div className="py-12 text-center"><p className="text-foreground/40 text-sm">Team data not available</p></div> )}
               </motion.div>
             )}
             {activeTab === 'poll' && match.status === 'UPCOMING' && (
               <motion.div key="poll" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                 {match.homeTeam && match.awayTeam ? (
                   <MatchVotePoll match={{ id: match.id, homeTeam: match.homeTeam, awayTeam: match.awayTeam, startTime: match.startTime, sport: match.sport }} />
-                ) : ( <div className="py-12 text-center"><p className="text-white/40 text-sm">Team data not available</p></div> )}
+                ) : ( <div className="py-12 text-center"><p className="text-foreground/40 text-sm">Team data not available</p></div> )}
               </motion.div>
             )} */}
 
@@ -1349,10 +1349,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 // InfoCard Component for Overview Tab
 function InfoCard({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
   return (
-    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+    <div className="bg-muted rounded-xl p-4 border border-border">
       <div className="flex items-center gap-2 mb-2">
         <Icon size={16} className="text-primary" />
-        <span className="text-xs font-semibold text-white/60">{label}</span>
+        <span className="text-xs font-semibold text-foreground/60">{label}</span>
       </div>
       <p className="font-semibold">{value}</p>
     </div>
@@ -1378,33 +1378,33 @@ function StatRow({ label, values, suffix = '', showBar = false, homeTeam = 'Home
   const awayPercent = total > 0 ? (awayValue / total) * 100 : 0;
 
   return (
-    <div className="bg-white/5 border-b border-white/5 last:border-b-0 py-4 px-4">
+    <div className="bg-muted border-b border-border/50 last:border-b-0 py-4 px-4">
       {/* Label */}
       <div className="text-center mb-3">
-        <span className="text-xs text-white/60 font-medium">{label}</span>
+        <span className="text-xs text-foreground/60 font-medium">{label}</span>
       </div>
 
       {/* Values and Percentages Row */}
       <div className="flex justify-between items-center mb-2">
         <div className="flex flex-col items-start">
-          <span className="text-base font-bold tabular-nums text-white">{homeValue}{suffix}</span>
+          <span className="text-base font-bold tabular-nums text-foreground">{homeValue}{suffix}</span>
           {showBar && (
-            <span className="text-[10px] text-white/50 font-medium mt-0.5">{homePercent.toFixed(1)}%</span>
+            <span className="text-[10px] text-foreground/50 font-medium mt-0.5">{homePercent.toFixed(1)}%</span>
           )}
-          <span className="text-[10px] text-white/40 mt-1">{homeTeam}</span>
+          <span className="text-[10px] text-foreground/40 mt-1">{homeTeam}</span>
         </div>
         <div className="flex flex-col items-end">
-          <span className="text-base font-bold tabular-nums text-white">{awayValue}{suffix}</span>
+          <span className="text-base font-bold tabular-nums text-foreground">{awayValue}{suffix}</span>
           {showBar && (
-            <span className="text-[10px] text-white/50 font-medium mt-0.5">{awayPercent.toFixed(1)}%</span>
+            <span className="text-[10px] text-foreground/50 font-medium mt-0.5">{awayPercent.toFixed(1)}%</span>
           )}
-          <span className="text-[10px] text-white/40 mt-1">{awayTeam}</span>
+          <span className="text-[10px] text-foreground/40 mt-1">{awayTeam}</span>
         </div>
       </div>
 
       {/* Progress bar (only for possession and xG) */}
       {showBar && (
-        <div className="h-2 bg-white/10 rounded-full flex overflow-hidden mt-2">
+        <div className="h-2 bg-border rounded-full flex overflow-hidden mt-2">
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${homePercent}%` }}
@@ -1414,7 +1414,7 @@ function StatRow({ label, values, suffix = '', showBar = false, homeTeam = 'Home
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${awayPercent}%` }}
-            className="bg-white/30 h-full"
+            className="bg-muted-foreground h-full"
             transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
           />
         </div>

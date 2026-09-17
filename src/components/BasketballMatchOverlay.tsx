@@ -131,33 +131,33 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-md overflow-y-auto"
             onClick={onClose}
             onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > 50)}
         >
             <div className="min-h-screen flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
-                <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2 shadow-xl' : 'py-4'}`}>
+                <div className={`sticky top-0 z-10 bg-card border-b border-border transition-all duration-300 ${isScrolled ? 'py-2 shadow-xl' : 'py-4'}`}>
                     <div className="max-w-5xl mx-auto px-4">
                         <div className={`flex items-center justify-between ${isScrolled ? 'mb-2' : 'mb-4'} transition-all duration-300`}>
                             <div className="flex items-center gap-3">
-                                <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                                <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors">
                                     <X size={20} />
                                 </button>
                                 {isScrolled && (
                                     <div className="flex items-center gap-3">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                                            <div className="w-6 h-6 relative rounded overflow-hidden bg-muted">
                                                 {isValidImagePath(match.homeTeam?.logo) && match.homeTeam && (
                                                     <Image src={match.homeTeam.logo} alt={match.homeTeam.name} fill className="object-cover" />
                                                 )}
                                             </div>
-                                            <span className={`text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white'}`}>{match.homeScore}</span>
+                                            <span className={`text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-foreground'}`}>{match.homeScore}</span>
                                         </div>
-                                        <span className="text-white/20 text-sm">-</span>
+                                        <span className="text-foreground/20 text-sm">-</span>
                                         <div className="flex items-center gap-2">
-                                            <span className={`text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white'}`}>{match.awayScore}</span>
-                                            <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                                            <span className={`text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-foreground'}`}>{match.awayScore}</span>
+                                            <div className="w-6 h-6 relative rounded overflow-hidden bg-muted">
                                                 {isValidImagePath(match.awayTeam?.logo) && match.awayTeam && (
                                                     <Image src={match.awayTeam.logo} alt={match.awayTeam.name} fill className="object-cover" />
                                                 )}
@@ -178,7 +178,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                             } catch (e) { return ''; }
                                         })()}
                                     </span>
-                                    <div className="flex items-center gap-2 text-xs text-white/40 mt-1">
+                                    <div className="flex items-center gap-2 text-xs text-foreground/40 mt-1">
                                         <MapPin size={12} />
                                         <span>{match.venue}</span>
                                         <span>•</span>
@@ -198,7 +198,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 className="flex-1 flex flex-col items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
                                 onClick={() => match.homeTeam && onSelectTeam?.(match.homeTeam)}
                             >
-                                <div className="w-16 h-16 relative rounded-xl overflow-hidden bg-white/5">
+                                <div className="w-16 h-16 relative rounded-xl overflow-hidden bg-muted">
                                     {isValidImagePath(match.homeTeam?.logo) && (
                                         <Image
                                             src={match.homeTeam!.logo}
@@ -210,18 +210,18 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 </div>
                                 <div className="text-center">
                                     <h3 className="font-bold text-lg">{match.homeTeam?.name}</h3>
-                                    <p className="text-xs text-white/40">{match.homeTeam?.shortName}</p>
+                                    <p className="text-xs text-foreground/40">{match.homeTeam?.shortName}</p>
                                 </div>
                             </div>
 
                             {/* Score */}
                             <div className="px-8 flex flex-col items-center gap-2">
                                 <div className="flex items-center gap-4">
-                                    <span className={`text-5xl font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
+                                    <span className={`text-5xl font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-foreground/60'}`}>
                                         {match.homeScore}
                                     </span>
-                                    <span className="text-white/20 text-2xl">-</span>
-                                    <span className={`text-5xl font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
+                                    <span className="text-foreground/20 text-2xl">-</span>
+                                    <span className={`text-5xl font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-foreground/60'}`}>
                                         {match.awayScore}
                                     </span>
                                 </div>
@@ -229,7 +229,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                     only one of the four match-status surfaces that didn't.
                                     Now shares LiveMatchStatus with the homepage cards and
                                     MatchOverlay.tsx instead of a third hand-rolled pill. */}
-                                <div className="px-3 py-1 bg-white/10 rounded-full flex items-center gap-1.5">
+                                <div className="px-3 py-1 bg-muted rounded-full flex items-center gap-1.5">
                                     {match.status === 'LIVE' ? (
                                         <LiveMatchStatus matchId={match.id} sport="basketball" variant="default" />
                                     ) : (
@@ -245,7 +245,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 className="flex-1 flex flex-col items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
                                 onClick={() => match.awayTeam && onSelectTeam?.(match.awayTeam)}
                             >
-                                <div className="w-16 h-16 relative rounded-xl overflow-hidden bg-white/5">
+                                <div className="w-16 h-16 relative rounded-xl overflow-hidden bg-muted">
                                     {isValidImagePath(match.awayTeam?.logo) && (
                                         <Image
                                             src={match.awayTeam!.logo}
@@ -257,7 +257,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 </div>
                                 <div className="text-center">
                                     <h3 className="font-bold text-lg">{match.awayTeam?.name}</h3>
-                                    <p className="text-xs text-white/40">{match.awayTeam?.shortName}</p>
+                                    <p className="text-xs text-foreground/40">{match.awayTeam?.shortName}</p>
                                 </div>
                             </div>
                         </div>
@@ -269,8 +269,8 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab.id
-                                        ? 'bg-primary text-black'
-                                        : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted text-foreground/60 hover:bg-muted/70 hover:text-foreground'
                                         }`}
                                 >
                                     <tab.icon size={14} />
@@ -293,7 +293,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 exit={{ opacity: 0, y: -20 }}
                                 className="space-y-6"
                             >
-                                <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                                <div className="bg-muted rounded-2xl border border-border overflow-hidden">
                                     <LivestreamPlayer
                                         streamUrl={match.streamUrl}
                                         streamType={match.streamType || 'youtube'}
@@ -313,37 +313,37 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 exit={{ opacity: 0, y: -20 }}
                                 className="space-y-6"
                             >
-                                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                    <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">Match Summary</h3>
+                                <div className="bg-muted rounded-2xl border border-border p-6">
+                                    <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-4">Match Summary</h3>
                                     <div className="grid grid-cols-3 gap-4 text-center">
                                         <div>
                                             <p className="text-2xl font-bold text-primary">{match.homeScore}</p>
-                                            <p className="text-xs text-white/40 mt-1">Points</p>
+                                            <p className="text-xs text-foreground/40 mt-1">Points</p>
                                         </div>
                                         <div>
                                             <p className="text-2xl font-bold">{match.homeScore + match.awayScore}</p>
-                                            <p className="text-xs text-white/40 mt-1">Total Points</p>
+                                            <p className="text-xs text-foreground/40 mt-1">Total Points</p>
                                         </div>
                                         <div>
                                             <p className="text-2xl font-bold text-primary">{match.awayScore}</p>
-                                            <p className="text-xs text-white/40 mt-1">Points</p>
+                                            <p className="text-xs text-foreground/40 mt-1">Points</p>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                    <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">Match Info</h3>
+                                <div className="bg-muted rounded-2xl border border-border p-6">
+                                    <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-4">Match Info</h3>
                                     <div className="space-y-3 text-sm">
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Competition</span>
+                                            <span className="text-foreground/60">Competition</span>
                                             <span className="font-semibold">{match.competition}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Venue</span>
+                                            <span className="text-foreground/60">Venue</span>
                                             <span className="font-semibold">{match.venue}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Date</span>
+                                            <span className="text-foreground/60">Date</span>
                                             <span className="font-semibold">
                                                 {new Date(match.startTime).toLocaleDateString('en-US', {
                                                     weekday: 'long',
@@ -354,7 +354,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-white/60">Status</span>
+                                            <span className="text-foreground/60">Status</span>
                                             <span className="font-semibold">{match.status}</span>
                                         </div>
                                     </div>
@@ -369,9 +369,9 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -20 }}
-                                className="bg-white/5 rounded-2xl border border-white/10 p-6"
+                                className="bg-muted rounded-2xl border border-border p-6"
                             >
-                                <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-6">Match Statistics</h3>
+                                <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-6">Match Statistics</h3>
                                 <div className="space-y-6">
                                     <StatBar
                                         label="Points Scored"
@@ -431,51 +431,51 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 {loading ? (
                                     <div className="py-20 text-center">
                                         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                                        <p className="text-white/40">Loading lineups...</p>
+                                        <p className="text-foreground/40">Loading lineups...</p>
                                     </div>
                                 ) : matchDetails?.match?.lineups ? (
                                     <>
                                         {/* Home Team Lineup */}
-                                        <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                            <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">
+                                        <div className="bg-muted rounded-2xl border border-border p-6">
+                                            <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-4">
                                                 {match.homeTeam?.name} Lineup
                                             </h3>
 
                                             {/* Starters */}
                                             {matchDetails.match.lineups.home.starters.length > 0 && (
                                                 <div className="mb-6">
-                                                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-3">Starters</p>
+                                                    <p className="text-xs font-bold uppercase tracking-wider text-foreground/40 mb-3">Starters</p>
                                                     <div className="space-y-2">
                                                         {matchDetails.match.lineups.home.starters.map((player: any) => (
                                                             <div
                                                                 key={player.id}
-                                                                className="bg-white/5 rounded-lg p-3 flex items-center justify-between hover:bg-white/10 transition-colors cursor-pointer"
+                                                                className="bg-muted rounded-lg p-3 flex items-center justify-between hover:bg-muted/70 transition-colors cursor-pointer"
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-white/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">
                                                                     <div className="text-center">
                                                                         <p className="font-bold text-primary">{player.points || 0}</p>
-                                                                        <p className="text-white/40">PTS</p>
+                                                                        <p className="text-foreground/40">PTS</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.rebounds || 0}</p>
-                                                                        <p className="text-white/40">REB</p>
+                                                                        <p className="text-foreground/40">REB</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.assists || 0}</p>
-                                                                        <p className="text-white/40">AST</p>
+                                                                        <p className="text-foreground/40">AST</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.steals || 0}</p>
-                                                                        <p className="text-white/40">STL</p>
+                                                                        <p className="text-foreground/40">STL</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.blocks || 0}</p>
-                                                                        <p className="text-white/40">BLK</p>
+                                                                        <p className="text-foreground/40">BLK</p>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -487,38 +487,38 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                             {/* Bench */}
                                             {matchDetails.match.lineups.home.bench.length > 0 && (
                                                 <div>
-                                                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-3">Bench</p>
+                                                    <p className="text-xs font-bold uppercase tracking-wider text-foreground/40 mb-3">Bench</p>
                                                     <div className="space-y-2">
                                                         {matchDetails.match.lineups.home.bench.map((player: any) => (
                                                             <div
                                                                 key={player.id}
-                                                                className="bg-white/5 rounded-lg p-3 flex items-center justify-between hover:bg-white/10 transition-colors cursor-pointer opacity-75"
+                                                                className="bg-muted rounded-lg p-3 flex items-center justify-between hover:bg-muted/70 transition-colors cursor-pointer opacity-75"
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-white/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">
                                                                     <div className="text-center">
                                                                         <p className="font-bold text-primary">{player.points || 0}</p>
-                                                                        <p className="text-white/40">PTS</p>
+                                                                        <p className="text-foreground/40">PTS</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.rebounds || 0}</p>
-                                                                        <p className="text-white/40">REB</p>
+                                                                        <p className="text-foreground/40">REB</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.assists || 0}</p>
-                                                                        <p className="text-white/40">AST</p>
+                                                                        <p className="text-foreground/40">AST</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.steals || 0}</p>
-                                                                        <p className="text-white/40">STL</p>
+                                                                        <p className="text-foreground/40">STL</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.blocks || 0}</p>
-                                                                        <p className="text-white/40">BLK</p>
+                                                                        <p className="text-foreground/40">BLK</p>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -529,46 +529,46 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                         </div>
 
                                         {/* Away Team Lineup */}
-                                        <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                            <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">
+                                        <div className="bg-muted rounded-2xl border border-border p-6">
+                                            <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-4">
                                                 {match.awayTeam?.name} Lineup
                                             </h3>
 
                                             {/* Starters */}
                                             {matchDetails.match.lineups.away.starters.length > 0 && (
                                                 <div className="mb-6">
-                                                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-3">Starters</p>
+                                                    <p className="text-xs font-bold uppercase tracking-wider text-foreground/40 mb-3">Starters</p>
                                                     <div className="space-y-2">
                                                         {matchDetails.match.lineups.away.starters.map((player: any) => (
                                                             <div
                                                                 key={player.id}
-                                                                className="bg-white/5 rounded-lg p-3 flex items-center justify-between hover:bg-white/10 transition-colors cursor-pointer"
+                                                                className="bg-muted rounded-lg p-3 flex items-center justify-between hover:bg-muted/70 transition-colors cursor-pointer"
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-white/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">
                                                                     <div className="text-center">
                                                                         <p className="font-bold text-primary">{player.points || 0}</p>
-                                                                        <p className="text-white/40">PTS</p>
+                                                                        <p className="text-foreground/40">PTS</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.rebounds || 0}</p>
-                                                                        <p className="text-white/40">REB</p>
+                                                                        <p className="text-foreground/40">REB</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.assists || 0}</p>
-                                                                        <p className="text-white/40">AST</p>
+                                                                        <p className="text-foreground/40">AST</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.steals || 0}</p>
-                                                                        <p className="text-white/40">STL</p>
+                                                                        <p className="text-foreground/40">STL</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.blocks || 0}</p>
-                                                                        <p className="text-white/40">BLK</p>
+                                                                        <p className="text-foreground/40">BLK</p>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -580,38 +580,38 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                             {/* Bench */}
                                             {matchDetails.match.lineups.away.bench.length > 0 && (
                                                 <div>
-                                                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-3">Bench</p>
+                                                    <p className="text-xs font-bold uppercase tracking-wider text-foreground/40 mb-3">Bench</p>
                                                     <div className="space-y-2">
                                                         {matchDetails.match.lineups.away.bench.map((player: any) => (
                                                             <div
                                                                 key={player.id}
-                                                                className="bg-white/5 rounded-lg p-3 flex items-center justify-between hover:bg-white/10 transition-colors cursor-pointer opacity-75"
+                                                                className="bg-muted rounded-lg p-3 flex items-center justify-between hover:bg-muted/70 transition-colors cursor-pointer opacity-75"
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-white/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">
                                                                     <div className="text-center">
                                                                         <p className="font-bold text-primary">{player.points || 0}</p>
-                                                                        <p className="text-white/40">PTS</p>
+                                                                        <p className="text-foreground/40">PTS</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.rebounds || 0}</p>
-                                                                        <p className="text-white/40">REB</p>
+                                                                        <p className="text-foreground/40">REB</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.assists || 0}</p>
-                                                                        <p className="text-white/40">AST</p>
+                                                                        <p className="text-foreground/40">AST</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.steals || 0}</p>
-                                                                        <p className="text-white/40">STL</p>
+                                                                        <p className="text-foreground/40">STL</p>
                                                                     </div>
                                                                     <div className="text-center">
                                                                         <p className="font-bold">{player.blocks || 0}</p>
-                                                                        <p className="text-white/40">BLK</p>
+                                                                        <p className="text-foreground/40">BLK</p>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -622,8 +622,8 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="bg-white/5 rounded-2xl border border-white/10 p-12 text-center">
-                                        <p className="text-white/40">No lineup data available for this match</p>
+                                    <div className="bg-muted rounded-2xl border border-border p-12 text-center">
+                                        <p className="text-foreground/40">No lineup data available for this match</p>
                                     </div>
                                 )}
                             </motion.div>
@@ -646,7 +646,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 {loading ? (
                                     <div className="py-20 text-center">
                                         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                                        <p className="text-white/40">Loading timeline...</p>
+                                        <p className="text-foreground/40">Loading timeline...</p>
                                     </div>
                                 ) : (
                                     // Deliberately the literal lowercase 'basketball', not
@@ -677,14 +677,14 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 {loading ? (
                                     <div className="py-20 text-center">
                                         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                                        <p className="text-white/40">Loading standings...</p>
+                                        <p className="text-foreground/40">Loading standings...</p>
                                     </div>
                                 ) : (
-                                    <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                                    <div className="bg-muted rounded-2xl border border-border overflow-hidden">
                                         <div className="overflow-x-auto">
                                             <table className="w-full">
-                                                <thead className="bg-white/5">
-                                                    <tr className="text-xs font-bold uppercase tracking-wider text-white/60">
+                                                <thead className="bg-muted">
+                                                    <tr className="text-xs font-bold uppercase tracking-wider text-foreground/60">
                                                         <th className="px-4 py-3 text-left">Pos</th>
                                                         <th className="px-4 py-3 text-left">Team</th>
                                                         <th className="px-4 py-3 text-center">P</th>
@@ -705,7 +705,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                                         return (
                                                             <tr
                                                                 key={standing.id}
-                                                                className={`border-t border-white/5 ${isHighlighted ? 'bg-primary/10 border-primary/20' : 'hover:bg-white/5'
+                                                                className={`border-t border-border/50 ${isHighlighted ? 'bg-primary/10 border-primary/20' : 'hover:bg-muted'
                                                                     } transition-colors`}
                                                             >
                                                                 <td className="px-4 py-3">
@@ -768,8 +768,8 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -20 }}
                             >
-                                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                    <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-6">
+                                <div className="bg-muted rounded-2xl border border-border p-6">
+                                    <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-6">
                                         MVP Leaderboard - {match.competition}
                                     </h3>
                                     <div className="space-y-2">
@@ -777,16 +777,16 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                             <div
                                                 key={leader.player}
                                                 onClick={() => handlePlayerClick(leader.player)}
-                                                className="bg-white/5 rounded-2xl border border-white/10 p-6 flex items-center justify-between hover:border-primary/50 transition-all cursor-pointer group"
+                                                className="bg-muted rounded-2xl border border-border p-6 flex items-center justify-between hover:border-primary/50 transition-all cursor-pointer group"
                                             >
                                                 <div className="flex items-center gap-4">
                                                     <span className={`text-lg font-bold w-8 ${index === 0 ? 'text-primary' :
-                                                        index === 1 ? 'text-white' :
-                                                            index === 2 ? 'text-orange-400' : 'text-white/60'
+                                                        index === 1 ? 'text-foreground' :
+                                                            index === 2 ? 'text-orange-400' : 'text-foreground/60'
                                                         }`}>
                                                         {index + 1}
                                                     </span>
-                                                    <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-white/5">
+                                                    <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-muted">
                                                         <Image
                                                             src={leader.teamLogo}
                                                             alt={leader.team}
@@ -796,17 +796,17 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                                     </div>
                                                     <div>
                                                         <p className="font-bold text-sm">{leader.player}</p>
-                                                        <p className="text-xs text-white/40">{leader.team}</p>
+                                                        <p className="text-xs text-foreground/40">{leader.team}</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-6">
                                                     <div className="text-center">
                                                         <p className="text-2xl font-bold text-primary">{leader.mvpCount}</p>
-                                                        <p className="text-xs text-white/40">MVP{leader.mvpCount > 1 ? 's' : ''}</p>
+                                                        <p className="text-xs text-foreground/40">MVP{leader.mvpCount > 1 ? 's' : ''}</p>
                                                     </div>
                                                     <div className="text-center">
                                                         <p className="text-lg font-bold">{leader.rating.toFixed(1)}</p>
-                                                        <p className="text-xs text-white/40">Rating</p>
+                                                        <p className="text-xs text-foreground/40">Rating</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -819,14 +819,14 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                         {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7) */}
                         {/* {activeTab === 'predict' && match.status === 'UPCOMING' && (
                             <motion.div key="predict" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                                <div className="bg-muted rounded-2xl border border-border p-6">
                                     <MatchPredictionCard match={{ id: match.id, homeTeam: match.homeTeam || { id: '', name: 'Home', shortName: 'HOM', logo: '', color: '#000' }, awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' }, startTime: match.startTime, competition: match.competition, sport: 'Basketball' }} />
                                 </div>
                             </motion.div>
                         )}
                         {activeTab === 'poll' && match.status === 'UPCOMING' && (
                             <motion.div key="poll" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                                <div className="bg-muted rounded-2xl border border-border p-6">
                                     <MatchVotePoll match={{ id: match.id, homeTeam: match.homeTeam || { id: '', name: 'Home', shortName: 'HOM', logo: '', color: '#000' }, awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' }, startTime: match.startTime, sport: 'Basketball' }} />
                                 </div>
                             </motion.div>
@@ -846,7 +846,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                     <MessageSquare className="text-primary" size={20} />
                                     <div>
                                         <h3 className="font-bold">Live Chat</h3>
-                                        <p className="text-xs text-white/60">Join the conversation</p>
+                                        <p className="text-xs text-foreground/60">Join the conversation</p>
                                     </div>
                                 </div>
 

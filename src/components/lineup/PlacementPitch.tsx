@@ -249,17 +249,17 @@ function PlacementSlot({
                 <motion.button
                     animate={isHovering ? { scale: 1.1 } : { scale: 1 }}
                     onClick={onClick}
-                    className={`${is5Aside ? 'w-16 h-16' : 'w-12 h-12'} rounded-full border-2 border-dashed flex items-center justify-center transition-all cursor-pointer border-white/30 bg-white/5 hover:border-primary hover:bg-primary/10`}
+                    className={`${is5Aside ? 'w-16 h-16' : 'w-12 h-12'} rounded-full border-2 border-dashed flex items-center justify-center transition-all cursor-pointer border-border bg-muted hover:border-primary hover:bg-primary/10`}
                 >
-                    <span className={`${is5Aside ? 'text-xs' : 'text-[10px]'} font-black uppercase text-white/60`}>
+                    <span className={`${is5Aside ? 'text-xs' : 'text-[10px]'} font-black uppercase text-foreground/60`}>
                         +
                     </span>
                 </motion.button>
             ) : (
                 <div
-                    className={`${is5Aside ? 'w-12 h-12' : 'w-8 h-8'} rounded-full border border-dashed border-white/10 flex items-center justify-center`}
+                    className={`${is5Aside ? 'w-12 h-12' : 'w-8 h-8'} rounded-full border border-dashed border-border flex items-center justify-center`}
                 >
-                    <span className="text-[8px] font-black uppercase text-white/20">{role}</span>
+                    <span className="text-[8px] font-black uppercase text-foreground/20">{role}</span>
                 </div>
             )}
         </div>

@@ -148,7 +148,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             case 'RED_CARD':
                 // Neutral container -- the card rectangle itself (see getEventIcon)
                 // already carries the color, matching Figma's flat card badge.
-                return 'bg-white/5';
+                return 'bg-muted';
             case 'SUBSTITUTION':
                 return 'bg-green-500/15 text-green-400';
             case 'EYE_POINT':
@@ -160,12 +160,12 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             case 'PENALTY_MISSED':
                 return 'bg-red-500/15 text-red-400';
             default:
-                return 'bg-white/10 text-white/60';
+                return 'bg-muted text-foreground/60';
         }
     };
 
     const getEventColor = (type: string) => {
-        const baseStyle = "bg-white/5 border border-white/10 backdrop-blur-sm transition-all hover:bg-white/10";
+        const baseStyle = "bg-muted border border-border backdrop-blur-sm transition-all hover:bg-muted/70";
         switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
             case 'FIELD_GOAL':
@@ -294,9 +294,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     <div>
                         <span className="font-bold text-lg block mb-1">{goalText}</span>
                         <div className="text-sm opacity-90">
-                            {playerNumber && <span className="font-mono bg-white/10 px-1 rounded mr-2">#{playerNumber}</span>}
+                            {playerNumber && <span className="font-mono bg-muted px-1 rounded mr-2">#{playerNumber}</span>}
                             {event.relatedPlayer && (
-                                <span className="text-white/70">Assist by {displayName(event.relatedPlayer)}</span>
+                                <span className="text-foreground/70">Assist by {displayName(event.relatedPlayer)}</span>
                             )}
                         </div>
                     </div>
@@ -305,7 +305,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 return (
                     <div>
                         <span className="font-bold">Great vision!</span> Assist by {playerName}
-                        {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                        {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                     </div>
                 );
             case 'YELLOW_CARD':
@@ -320,7 +320,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     <div>
                         <span className="font-bold text-yellow-500 text-base block mb-0.5">Caution</span>
                         <span>{yellowText}</span>
-                        {event.detail && <div className="text-sm text-white/60 mt-1 italic">Reason: {event.detail}</div>}
+                        {event.detail && <div className="text-sm text-foreground/60 mt-1 italic">Reason: {event.detail}</div>}
                     </div>
                 );
             case 'RED_CARD':
@@ -334,7 +334,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     <div>
                         <span className="font-bold text-red-500 text-lg block mb-1">SENT OFF!</span>
                         {redText}
-                        {event.detail && <div className="text-sm text-white/60 mt-1">Reason: {event.detail}</div>}
+                        {event.detail && <div className="text-sm text-foreground/60 mt-1">Reason: {event.detail}</div>}
                     </div>
                 );
             case 'SUBSTITUTION':
@@ -446,9 +446,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     if (events.length === 0) {
         return (
             <div className="text-center py-20">
-                <Activity className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">No events yet</h3>
-                <p className="text-white/40">Match events will appear here as they happen</p>
+                <Activity className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">No events yet</h3>
+                <p className="text-foreground/40">Match events will appear here as they happen</p>
             </div>
         );
     }
@@ -462,9 +462,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     if (hasUnknownMinuteEvents) {
         return (
             <div className="text-center py-20">
-                <Clock className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">Timeline not available</h3>
-                <p className="text-white/40">Match timeline will be displayed here once available</p>
+                <Clock className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">Timeline not available</h3>
+                <p className="text-foreground/40">Match timeline will be displayed here once available</p>
             </div>
         );
     }
@@ -472,12 +472,12 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     return (
         <div className="space-y-8">
             {/* All / Key events segmented filter (Figma) */}
-            <div className="inline-flex bg-white/5 border border-white/10 rounded-full p-1">
+            <div className="inline-flex bg-muted border border-border rounded-full p-1">
                 {(['all', 'key'] as const).map(f => (
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
-                        className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${filter === f ? 'bg-primary text-black' : 'text-white/60 hover:text-white'
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${filter === f ? 'bg-primary text-primary-foreground' : 'text-foreground/60 hover:text-foreground'
                             }`}
                     >
                         {f === 'all' ? 'All' : 'Key events'}
@@ -493,11 +493,11 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 <div key={period}>
                     {/* Period Header */}
                     <div className="flex items-center gap-4 mb-6">
-                        <div className="h-px flex-1 bg-white/10" />
-                        <div className="px-4 py-1.5 bg-white/5 rounded-full border border-white/10 backdrop-blur-sm">
-                            <span className="font-semibold text-xs text-white/60 uppercase tracking-wider">{period}</span>
+                        <div className="h-px flex-1 bg-muted" />
+                        <div className="px-4 py-1.5 bg-muted rounded-full border border-border backdrop-blur-sm">
+                            <span className="font-semibold text-xs text-foreground/60 uppercase tracking-wider">{period}</span>
                         </div>
-                        <div className="h-px flex-1 bg-white/10" />
+                        <div className="h-px flex-1 bg-muted" />
                     </div>
 
                     {/* Events */}
@@ -612,12 +612,12 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {(eyePoints ?? []).map((award) => (
-                            <div key={award.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                            <div key={award.id} className="flex items-center gap-3 p-3 bg-muted rounded-lg">
                                 <Award className="w-5 h-5 text-purple-500" />
                                 <div>
                                     <div className="font-semibold">{displayName(award.player)}</div>
                                     {award.reason && (
-                                        <div className="text-sm text-white/60">{award.reason}</div>
+                                        <div className="text-sm text-foreground/60">{award.reason}</div>
                                     )}
                                 </div>
                             </div>
@@ -645,8 +645,8 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
     if (events.length === 0) {
         return (
             <div className="text-center py-12">
-                <Activity className="w-12 h-12 text-white/20 mx-auto mb-3" />
-                <p className="text-white/40">No key events in this match yet</p>
+                <Activity className="w-12 h-12 text-foreground/20 mx-auto mb-3" />
+                <p className="text-foreground/40">No key events in this match yet</p>
             </div>
         );
     }
@@ -702,7 +702,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                 return (
                     <div
                         key={event.id}
-                        className={`flex items-center bg-white/5 border border-white/10 rounded-2xl px-6 py-4 ${isHomeTeam ? 'justify-start' : 'justify-end'
+                        className={`flex items-center bg-muted border border-border rounded-2xl px-6 py-4 ${isHomeTeam ? 'justify-start' : 'justify-end'
                             }`}
                     >
                         <div className={`flex items-center gap-2 ${mirrorsOrder && !isHomeTeam ? 'flex-row-reverse' : ''}`}>
@@ -711,17 +711,17 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                             </span>
                             {normType === 'GOAL' && (
                                 <>
-                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-white text-xs font-bold">
+                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-border text-xs font-bold">
                                         {scoreAtEvent.home}-{scoreAtEvent.away}
                                     </span>
-                                    <FaFutbol className="w-3.5 h-3.5 flex-shrink-0 text-white/80" />
+                                    <FaFutbol className="w-3.5 h-3.5 flex-shrink-0 text-foreground/80" />
                                     <span className="font-bold truncate max-w-[160px]">{playerName}</span>
                                     {/* Assist name is secondary info -- capped at a small fixed
                                         width so it can't eat into the scorer's own name space
                                         (both truncating equally made the scorer's name
                                         illegible on anything but a short one). */}
                                     {event.relatedPlayer && (
-                                        <span className="text-white/50 text-sm truncate max-w-[72px] flex-shrink-0">({displayName(event.relatedPlayer)})</span>
+                                        <span className="text-foreground/50 text-sm truncate max-w-[72px] flex-shrink-0">({displayName(event.relatedPlayer)})</span>
                                     )}
                                 </>
                             )}

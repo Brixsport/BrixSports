@@ -297,7 +297,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                             onClick={() => setFilter(key as EventFilter)}
                             className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 ${filter === key
                                 ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground/60 hover:bg-white/10'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/70'
                                 }`}
                         >
                             <Icon size={14} />
@@ -347,7 +347,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                                         <div
                                             className={`flex-1 max-w-2xl p-4 rounded-xl border ${getEventColor(
                                                 event.type
-                                            )} backdrop-blur-sm cursor-pointer hover:bg-white/5 transition-all`}
+                                            )} backdrop-blur-sm cursor-pointer hover:bg-muted transition-all`}
                                             onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
                                         >
                                             <div className="flex items-start gap-3">
