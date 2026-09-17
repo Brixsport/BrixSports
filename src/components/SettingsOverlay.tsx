@@ -295,7 +295,7 @@ function PreferenceToggle({ icon, title, description, active, onToggle }: any) {
       >
         <motion.div
           animate={{ x: active ? 26 : 4 }}
-          className={`absolute top-1 w-4 h-4 rounded-full ${active ? 'bg-black' : 'bg-white/40'}`}
+          className={`absolute top-1 w-4 h-4 rounded-full ${active ? 'bg-background dark:bg-primary-foreground' : 'bg-background dark:bg-foreground'}`}
         />
       </button>
     </div>

@@ -85,7 +85,7 @@ export function Coachmark({
             >
                 <h4 className="font-bold text-sm mb-1">{title}</h4>
                 <p className="text-xs mb-3">{body}</p>
-                <Button size="sm" disabled={dismissing} onClick={dismiss} className="w-full bg-black text-white hover:bg-black/80">
+                <Button size="sm" disabled={dismissing} onClick={dismiss} className="w-full bg-background text-foreground hover:bg-background/80">
                     Got it
                 </Button>
             </PopoverContent>

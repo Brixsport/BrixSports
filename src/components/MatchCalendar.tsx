@@ -119,7 +119,7 @@ export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: 
                                     {Array.from({ length: Math.min(fixtureCount, 3) }).map((_, i) => (
                                         <div
                                             key={i}
-                                            className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-primary'
+                                            className={`w-1 h-1 rounded-full ${isSelected ? 'bg-primary-foreground' : 'bg-primary'
                                                 }`}
                                         />
                                     ))}

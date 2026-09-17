@@ -178,7 +178,7 @@ export function SimpleMatchOverlay({ match, onClose, onSelectTeam }: SimpleMatch
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition-all ${activeTab === tab.id
-                                        ? 'bg-white text-black shadow-lg shadow-white/10'
+                                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/10'
                                         : 'text-foreground/40 hover:text-foreground hover:bg-muted'
                                         }`}
                                 >
