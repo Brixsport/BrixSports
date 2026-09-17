@@ -430,7 +430,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="p-2 hover:bg-muted/50 rounded-lg transition-colors"
+                className="w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors"
               >
                 <Search size={18} className="text-foreground/60" />
               </button>
@@ -439,7 +439,7 @@ export default function Home() {
                   e.stopPropagation();
                   setIsSettingsOpen(true);
                 }}
-                className="p-2 hover:bg-muted/50 rounded-lg transition-colors relative"
+                className="w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors relative"
               >
                 <Bell size={18} className="text-foreground/60" />
                 {notifications.length > 0 && (
@@ -473,7 +473,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="md:hidden p-2 hover:bg-muted/50 rounded-lg transition-colors"
+                className="md:hidden w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors"
               >
                 {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
@@ -501,21 +501,24 @@ export default function Home() {
       {/* Main Content */}
       <main className="pt-28 pb-12">
         <div className="max-w-7xl mx-auto px-4">
-          {/* Status Filter Tabs */}
-          <div className="flex items-center gap-2 mb-6 overflow-x-auto scrollbar-hide">
-            {['ALL', 'LIVE', 'FINISHED', 'UPCOMING', 'FAVORITES'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-foreground/60 hover:bg-muted/70 hover:text-foreground'
-                  }`}
-              >
-                {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
-                {tab}
-              </button>
-            ))}
+          {/* Status Filter Tabs -- BACKLOG-390 #2 (44px touch target) + #4 (scroll-edge fade) */}
+          <div className="relative mb-6">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+              {['ALL', 'LIVE', 'FINISHED', 'UPCOMING', 'FAVORITES'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 min-h-11 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all flex items-center shrink-0 ${activeTab === tab
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-foreground/60 hover:bg-muted/70 hover:text-foreground'
+                    }`}
+                >
+                  {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
           </div>
 
           {/* Date Navigation - compact inline row (BACKLOG-390 #1: was a full card+heading, ~150-200px taller) */}
@@ -551,11 +554,11 @@ export default function Home() {
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-6 bg-gradient-to-r from-red-500/10 to-primary/10 border border-red-500/20 rounded-2xl p-4 hover:border-red-500/40 transition-all cursor-pointer group"
+                className="mb-6 bg-gradient-to-r from-red-500/20 to-primary/15 dark:from-red-500/10 dark:to-primary/10 border border-red-500/30 dark:border-red-500/20 rounded-2xl p-4 hover:border-red-500/40 transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center">
+                    <div className="w-10 h-10 bg-red-500/25 dark:bg-red-500/20 rounded-xl flex items-center justify-center">
                       <Play size={20} className="text-red-500 fill-red-500" />
                     </div>
                     <div>
