@@ -7,6 +7,7 @@ import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from '
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import Link from 'next/link';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
 
 interface SearchResults {
     teams: any[];
@@ -82,6 +83,18 @@ function SearchContent() {
         return results?.[category]?.length || 0;
     };
 
+    // BACKLOG-390 #3: was a row of pill buttons visually identical to the
+    // sport-filter row below it, reading as one confusing duplicate. Now the
+    // same UnderlineTabs bar used on match/team/player detail pages -- a
+    // distinct style from the sport pills, and scrolls on overflow for free.
+    const categoryTabs: UnderlineTab[] = [
+        { id: 'all', label: 'All', count: getTotalResults() },
+        { id: 'teams', label: 'Teams', icon: <Users className="w-3.5 h-3.5" />, count: getCategoryCount('teams') },
+        { id: 'players', label: 'Players', icon: <TrendingUp className="w-3.5 h-3.5" />, count: getCategoryCount('players') },
+        { id: 'matches', label: 'Matches', icon: <Calendar className="w-3.5 h-3.5" />, count: getCategoryCount('matches') },
+        { id: 'competitions', label: 'Competitions', icon: <Trophy className="w-3.5 h-3.5" />, count: getCategoryCount('competitions') },
+    ];
+
     return (
         <>
             {/* Header */}
@@ -103,57 +116,12 @@ function SearchContent() {
                     </div>
 
                     {/* Category Tabs */}
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        <button
-                            onClick={() => setActiveTab('all')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'all'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
-                                }`}
-                        >
-                            All ({getTotalResults()})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('teams')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'teams'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
-                                }`}
-                        >
-                            <Users className="w-4 h-4 inline mr-2" />
-                            Teams ({getCategoryCount('teams')})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('players')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'players'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
-                                }`}
-                        >
-                            <TrendingUp className="w-4 h-4 inline mr-2" />
-                            Players ({getCategoryCount('players')})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('matches')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'matches'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
-                                }`}
-                        >
-                            <Calendar className="w-4 h-4 inline mr-2" />
-                            Matches ({getCategoryCount('matches')})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('competitions')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'competitions'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground/60 hover:bg-muted/80'
-                                }`}
-                        >
-                            <Trophy className="w-4 h-4 inline mr-2" />
-                            Competitions ({getCategoryCount('competitions')})
-                        </button>
-                    </div>
+                    <UnderlineTabs
+                        tabs={categoryTabs}
+                        activeId={activeTab}
+                        onChange={(id) => setActiveTab(id as typeof activeTab)}
+                        layoutId="searchCategoryTabs"
+                    />
 
                     {/* Sport Filter */}
                     <div className="flex gap-2 mt-3">
