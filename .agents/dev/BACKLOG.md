@@ -13555,6 +13555,27 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
+### BACKLOG-392 — Competitions List Shows the Same League Multiple Times, One Row Per Season (Root Cause: Schema Has No League Parent Entity)
+
+**Status:** OPEN, not started — root-caused this session, not scoped or built. Richard's own read ("this issue actually spawns from wrong sys/db design") confirmed against the real schema before filing, not assumed.
+**Priority:** Unset — this is a real data-model gap, not a display bug, and needs its own scoped plan before any work starts.
+
+**Problem, confirmed via `src/db/schema.ts:227-245`:** the `competitions` table has `name` and `season` as plain columns on the same row (`season: text('season').notNull()`) with no parent "league"/series entity grouping seasons of the same competition together. "BUSA League Football" 2025/2026 and 2026/2027 are two fully independent rows that happen to share a `name` string — nothing in the schema ties them together as the same league across time. Any UI that lists competitions by name (confirmed live on the deployed preview's competitions list) will therefore always show one card per season, reading as duplicate leagues rather than one league with a season history.
+
+**Why this is a schema problem, not a component problem:** a display-level fix (e.g. grouping by `name` client-side) would be a band-aid — it can't correctly handle a league renamed between seasons, doesn't give a real `leagueId` for foreign keys elsewhere to reference, and every existing query/join that reads `competitions` (standings, brackets, stats, the admin competitions list, etc.) would still be working against the same ungrouped shape underneath.
+
+**What a real fix needs (scoped, not built):**
+1. A `leagues` parent table (or a `leagueSlug`/`leagueId` grouping key added to `competitions`) — a real design decision on which shape fits the existing foreign-key graph better.
+2. A migration for every existing `competitions` row, grouping same-name rows into one league (name-matching historical data is not guaranteed reliable — needs a real audit, not an assumed 1:1 name match).
+3. Every consumer of `competitions` (list pages, standings/bracket joins, admin competition management, stats pages) audited for what breaks when a competition's identity becomes league+season instead of one flat row.
+4. A UI redesign for the competitions list: group by league, season picked via a selector rather than one card per season.
+
+**Deliberately not started:** this touches live production data (a real migration, not additive), a foreign-key-graph decision, and an unknown number of downstream consumers — exactly the kind of change that needs its own dedicated session and Richard's explicit go-ahead per this project's schema-migration convention (`db:push` to staging first, verify, then prod), not something to fold into a UI-polish session.
+
+**Found:** 2026-09-17, spotted live by Richard on the competitions list during this session's BACKLOG-390 verification pass; root-caused against the actual schema before filing.
+
+---
+
 ### BACKLOG-391 — Sport Filter as a Compact Dropdown Instead of a Full Tab Bar (Future, Not Started)
 
 **Status:** OPEN, deliberately deferred — Richard's explicit "nah don't worry, leave as is" after weighing it in conversation. Recorded so the reasoning isn't lost, not because it's scheduled.
