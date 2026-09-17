@@ -8197,7 +8197,9 @@ Quick sanity notes on a few, without a full read (not to be taken as a completed
 
 **BACKLOG-369 still not live-verified — real constraint, not skipped:** `MultiLoggerStatus.tsx`'s panel only renders when `activeLoggers.length > 0`, which needs a genuine two-logger session on the same live match to observe (same setup gap `BACKLOG-151` already flagged: "no dual-logger test ever run"). Minting one admin token doesn't create that state. Left open rather than forcing a synthetic DOM state into a 🟡 Caution-tier live-logging component.
 
-**BACKLOG-216 status update:** nothing outstanding on the self-contained-palette/registration-flow backlog's own scope. Remaining open items across this initiative: the `SimpleMatchOverlay.tsx` deletion decision (Richard's call pending), a real dual-logger session to close out `BACKLOG-369`, and — new, lower-priority — a future session picking up the news/blog feature-completeness gap (`RelatedArticles`/`TableOfContents` wiring) and the admin-layout 135%-font-scale overflow noted above.
+**`SimpleMatchOverlay.tsx` deletion decision resolved, 2026-09-17, Richard's "go with your recommendation."** Deleted — re-confirmed zero importers anywhere in `src` immediately before deletion, same standard applied to `MatchComponents.tsx`/`UpcomingMatchView.tsx`/`CreatePoll.tsx`/`MatchPoll.tsx` this session. `tsc --noEmit`: 18 errors, unchanged baseline.
+
+**BACKLOG-216 status update:** nothing outstanding on this entry's own scope. Remaining open items across this initiative: a real dual-logger session to close out `BACKLOG-369`, and — new, lower-priority — a future session picking up the news/blog feature-completeness gap (`RelatedArticles`/`TableOfContents` wiring) and the admin-layout 135%-font-scale overflow noted above.
 
 ---
 
