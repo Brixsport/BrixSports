@@ -162,7 +162,7 @@ function SearchContent() {
                                 key={sport}
                                 onClick={() => setSelectedSport(selectedSport === sport ? null : sport)}
                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedSport === sport
-                                    ? 'bg-purple-600 text-white'
+                                    ? 'bg-primary text-primary-foreground'
                                     : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                     }`}
                             >

@@ -412,16 +412,16 @@ export default function Home() {
 
               {/* Desktop Links */}
               <div className="hidden md:flex items-center gap-1">
-                <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
+                <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   Teams
                 </Link>
                 <UpdateTooltip message="New: build and share your matchday starting XI">
-                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
+                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors relative">
                     Lineup Builder
                     <NewFeatureBadge className="absolute -top-1 -right-1" />
                   </Link>
                 </UpdateTooltip>
-                <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
+                <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   News
                 </Link>
               </div>
@@ -430,7 +430,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                className="p-2 hover:bg-muted/50 rounded-lg transition-colors"
               >
                 <Search size={18} className="text-foreground/60" />
               </button>
@@ -439,7 +439,7 @@ export default function Home() {
                   e.stopPropagation();
                   setIsSettingsOpen(true);
                 }}
-                className="p-2 hover:bg-white/5 rounded-lg transition-colors relative"
+                className="p-2 hover:bg-muted/50 rounded-lg transition-colors relative"
               >
                 <Bell size={18} className="text-foreground/60" />
                 {notifications.length > 0 && (
@@ -449,7 +449,7 @@ export default function Home() {
               <div className="hidden sm:flex items-center gap-2">
                 {isAuthenticated && user ? (
                   <button
-                    className="flex items-center gap-2 bg-muted hover:bg-white/10 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
+                    className="flex items-center gap-2 bg-muted hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
                     onClick={() => router.push('/profile')}
                   >
                     {user.avatar ? (
@@ -463,7 +463,7 @@ export default function Home() {
                   </button>
                 ) : (
                   <button
-                    className="flex items-center gap-2 bg-muted hover:bg-white/10 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
+                    className="flex items-center gap-2 bg-muted hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
                     onClick={() => router.push('/login')}
                   >
                     <User size={16} />
@@ -473,7 +473,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="md:hidden p-2 hover:bg-white/5 rounded-lg transition-colors"
+                className="md:hidden p-2 hover:bg-muted/50 rounded-lg transition-colors"
               >
                 {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
@@ -509,7 +509,7 @@ export default function Home() {
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-foreground/60 hover:bg-white/10 hover:text-foreground'
+                  : 'bg-muted text-foreground/60 hover:bg-muted/70 hover:text-foreground'
                   }`}
               >
                 {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
@@ -633,7 +633,7 @@ export default function Home() {
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 onClick={() => router.push(`/matches/${match.id}`)}
-                                className={`p-4 cursor-pointer hover:bg-white/5 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-border' : ''
+                                className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-border' : ''
                                   }`}
                               >
                                 <div className="flex items-center justify-between">

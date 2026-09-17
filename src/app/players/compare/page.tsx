@@ -21,7 +21,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 export default function PlayerComparePage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+            <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
                 <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             </div>
         }>
@@ -249,14 +249,14 @@ function PlayerCompareContent() {
     const hasComparison = player1 && player2 && comparisonData;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white">
+        <div className="min-h-screen bg-background text-foreground">
             {/* Header */}
-            <div className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10">
+            <div className="sticky top-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border">
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
                         <Link
                             href="/"
-                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+                            className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
                         >
                             <ArrowLeft size={20} />
                             <span className="text-sm font-bold">Back</span>
@@ -267,7 +267,7 @@ function PlayerCompareContent() {
                                 <select
                                     value={season || ''}
                                     onChange={(e) => changeSeason(e.target.value)}
-                                    className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm font-bold focus:outline-none focus:border-primary/50"
+                                    className="px-3 py-2 rounded-xl bg-muted border border-border text-sm font-bold focus:outline-none focus:border-primary/50"
                                 >
                                     <option value="">All Seasons</option>
                                     {comparisonData.availableSeasons.map((s: string) => (
@@ -279,7 +279,7 @@ function PlayerCompareContent() {
                                 <>
                                     <button
                                         onClick={swapPlayers}
-                                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-muted hover:bg-muted/70 transition-all"
                                         title="Swap players"
                                     >
                                         <Shuffle size={18} />
@@ -287,7 +287,7 @@ function PlayerCompareContent() {
                                     </button>
                                     <button
                                         onClick={shareComparison}
-                                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-black hover:bg-primary/90 transition-all"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
                                     >
                                         <Share2 size={18} />
                                         <span className="hidden sm:inline text-sm font-bold">Share</span>
@@ -309,7 +309,7 @@ function PlayerCompareContent() {
                             Player Comparison
                         </h1>
                     </div>
-                    <p className="text-white/60">
+                    <p className="text-foreground/60">
                         Compare statistics between any two players
                     </p>
                 </div>
@@ -352,7 +352,7 @@ function PlayerCompareContent() {
                             className="text-center py-20"
                         >
                             <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                            <p className="text-white/60">Loading comparison...</p>
+                            <p className="text-foreground/60">Loading comparison...</p>
                         </motion.div>
                     ) : comparisonError ? (
                         <motion.div
@@ -362,7 +362,7 @@ function PlayerCompareContent() {
                             exit={{ opacity: 0 }}
                             className="text-center py-20"
                         >
-                            <p className="text-white/60">{comparisonError}</p>
+                            <p className="text-foreground/60">{comparisonError}</p>
                         </motion.div>
                     ) : hasComparison ? (
                         <motion.div
@@ -384,27 +384,27 @@ function PlayerCompareContent() {
                                 dropped "Higher Rated" -- it read players.rating, a field that's never
                                 live-updated (defaults to 7.0), so the API no longer sends it. */}
                             {comparisonData.summary && (
-                                <div className="mt-8 bg-white/5 border border-white/10 rounded-[32px] p-6">
-                                    <h3 className="text-sm font-black uppercase tracking-widest text-white/60 mb-4">
+                                <div className="mt-8 bg-muted border border-border rounded-[32px] p-6">
+                                    <h3 className="text-sm font-black uppercase tracking-widest text-foreground/60 mb-4">
                                         Comparison Summary
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                                         {(comparisonData.player1.team?.sport || 'Football') === 'Basketball' ? (
                                             <>
-                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                    <span className="text-white/60">Better Scorer</span>
+                                                <div className="flex items-center justify-between p-3 bg-card rounded-xl">
+                                                    <span className="text-foreground/60">Better Scorer</span>
                                                     <span className="font-bold text-primary">
                                                         {comparisonData.summary.betterScorer}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                    <span className="text-white/60">Better Playmaker</span>
+                                                <div className="flex items-center justify-between p-3 bg-card rounded-xl">
+                                                    <span className="text-foreground/60">Better Playmaker</span>
                                                     <span className="font-bold text-primary">
                                                         {comparisonData.summary.betterPlaymaker}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                    <span className="text-white/60">Better Rebounder</span>
+                                                <div className="flex items-center justify-between p-3 bg-card rounded-xl">
+                                                    <span className="text-foreground/60">Better Rebounder</span>
                                                     <span className="font-bold text-primary">
                                                         {comparisonData.summary.betterRebounder}
                                                     </span>
@@ -412,20 +412,20 @@ function PlayerCompareContent() {
                                             </>
                                         ) : (
                                             <>
-                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                    <span className="text-white/60">Better Goal Scorer</span>
+                                                <div className="flex items-center justify-between p-3 bg-card rounded-xl">
+                                                    <span className="text-foreground/60">Better Goal Scorer</span>
                                                     <span className="font-bold text-primary">
                                                         {comparisonData.summary.betterGoalScorer}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                    <span className="text-white/60">Better Playmaker</span>
+                                                <div className="flex items-center justify-between p-3 bg-card rounded-xl">
+                                                    <span className="text-foreground/60">Better Playmaker</span>
                                                     <span className="font-bold text-primary">
                                                         {comparisonData.summary.betterPlaymaker}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                    <span className="text-white/60">More Experienced</span>
+                                                <div className="flex items-center justify-between p-3 bg-card rounded-xl">
+                                                    <span className="text-foreground/60">More Experienced</span>
                                                     <span className="font-bold text-primary">
                                                         {comparisonData.summary.moreExperienced}
                                                     </span>
@@ -472,15 +472,15 @@ function PlayerSelector({
     onClear: () => void;
 }) {
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
+        <div className="bg-muted border border-border rounded-[32px] p-6">
             <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-white/60">
+                <h3 className="text-sm font-black uppercase tracking-widest text-foreground/60">
                     Player {playerSlot}
                 </h3>
                 {selectedPlayer && (
                     <button
                         onClick={onClear}
-                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all"
+                        className="p-2 rounded-lg bg-card hover:bg-card/70 transition-all"
                         title="Clear selection"
                     >
                         <X size={16} />
@@ -496,7 +496,7 @@ function PlayerSelector({
                 >
                     {/* Selected Player Card */}
                     <Link href={`/players/${selectedPlayer.id}`}>
-                        <div className="p-6 bg-white/5 rounded-2xl hover:bg-white/10 transition-all cursor-pointer border border-white/10">
+                        <div className="p-6 bg-card rounded-2xl hover:bg-card/70 transition-all cursor-pointer border border-border">
                             <div className="mx-auto mb-4 w-fit">
                                 <PlayerAvatar
                                     image={selectedPlayer.image}
@@ -508,7 +508,7 @@ function PlayerSelector({
                             <h4 className="text-xl font-black uppercase tracking-tight mb-1">
                                 {selectedPlayer.name}
                             </h4>
-                            <p className="text-sm text-white/60 mb-2">
+                            <p className="text-sm text-foreground/60 mb-2">
                                 {selectedPlayer.position} • {selectedPlayer.team?.name}
                             </p>
                             {selectedPlayer.rating && (
@@ -526,13 +526,13 @@ function PlayerSelector({
                 <div>
                     {/* Search Box */}
                     <div className="relative mb-4">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground/40" />
                         <input
                             type="text"
                             placeholder="Search for a player..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-primary transition-all"
+                            className="w-full pl-12 pr-4 py-3 bg-card border border-border rounded-xl text-foreground placeholder-foreground/40 focus:outline-none focus:border-primary transition-all"
                         />
                     </div>
 
@@ -543,12 +543,12 @@ function PlayerSelector({
                                 <button
                                     key={result.id}
                                     onClick={() => onSelect(result.id)}
-                                    className="w-full p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all flex items-center gap-3 text-left"
+                                    className="w-full p-3 bg-card hover:bg-card/70 rounded-xl transition-all flex items-center gap-3 text-left"
                                 >
                                     <PlayerAvatar image={result.image} name={result.name} size="sm" />
                                     <div className="flex-1 min-w-0">
                                         <div className="font-semibold truncate">{result.name}</div>
-                                        <div className="text-xs text-white/60 truncate">
+                                        <div className="text-xs text-foreground/60 truncate">
                                             {result.position} • {result.team?.name}
                                         </div>
                                     </div>
@@ -566,21 +566,21 @@ function PlayerSelector({
                     )}
 
                     {searching && (
-                        <div className="text-center py-8 text-white/60 text-sm">
+                        <div className="text-center py-8 text-foreground/60 text-sm">
                             Searching...
                         </div>
                     )}
 
                     {!searching && searchQuery && searchResults.length === 0 && (
-                        <div className="text-center py-8 text-white/60 text-sm">
+                        <div className="text-center py-8 text-foreground/60 text-sm">
                             No players found
                         </div>
                     )}
 
                     {!searchQuery && (
                         <div className="text-center py-12">
-                            <Users className="w-12 h-12 text-white/20 mx-auto mb-3" />
-                            <p className="text-sm text-white/60">
+                            <Users className="w-12 h-12 text-foreground/20 mx-auto mb-3" />
+                            <p className="text-sm text-foreground/60">
                                 Search for a player to select
                             </p>
                         </div>

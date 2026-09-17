@@ -109,7 +109,7 @@ export default function CompetitionsShowcase() {
                                                 <Trophy className="w-8 h-8 text-white" />
                                             </div>
                                             <div className="flex-1">
-                                                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors">
+                                                <h3 className="text-xl font-bold text-foreground mb-2 group-hover:text-purple-300 transition-colors">
                                                     {comp.name}
                                                 </h3>
                                                 <div className="flex flex-wrap gap-2 mb-3">
@@ -250,7 +250,7 @@ export default function CompetitionsShowcase() {
                     {competitions.completed.length > 4 && (
                         <div className="text-center mt-6">
                             <Link href="/competitions?filter=completed">
-                                <button className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all">
+                                <button className="px-6 py-3 bg-muted hover:bg-muted/70 text-foreground font-semibold rounded-lg transition-all">
                                     View All Completed Competitions
                                 </button>
                             </Link>

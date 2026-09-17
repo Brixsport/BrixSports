@@ -166,7 +166,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
         >
           <button
             onClick={reset}
-            className="group flex items-center gap-2 px-8 py-4 bg-primary hover:bg-primary/90 text-black font-bold rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-primary/25"
+            className="group flex items-center gap-2 px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-primary/25"
           >
             <RefreshCcw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" />
             Try Again

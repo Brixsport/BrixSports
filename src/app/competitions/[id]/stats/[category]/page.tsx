@@ -82,7 +82,7 @@ export default function StatCategoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
       </div>
     );
@@ -90,10 +90,10 @@ export default function StatCategoryPage() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-6">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
-          <p className="text-white/40 font-black uppercase tracking-widest text-sm mb-4">Competition not found</p>
+          <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
+          <p className="text-foreground/40 font-black uppercase tracking-widest text-sm mb-4">Competition not found</p>
           <button
             onClick={() => router.push('/competitions')}
             className="text-primary text-sm font-bold uppercase tracking-widest hover:underline"
@@ -108,13 +108,13 @@ export default function StatCategoryPage() {
   const title = CATEGORY_TITLES[category] || category;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
+    <div className="min-h-screen bg-background text-foreground p-4 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
-        <header className="space-y-4 border-b border-white/5 pb-8">
+        <header className="space-y-4 border-b border-border/50 pb-8">
           <button
             onClick={() => router.push(`/competitions/${competitionId}?tab=stats`)}
             aria-label="Back to Stats"
-            className="shrink-0 p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+            className="shrink-0 p-2 -ml-2 rounded-full hover:bg-muted/70 transition-colors text-foreground/60 hover:text-foreground"
           >
             <ArrowLeft size={20} />
           </button>
@@ -129,7 +129,7 @@ export default function StatCategoryPage() {
               <h1 className="font-display text-2xl md:text-4xl tracking-tighter italic uppercase leading-none mb-2">
                 {competition?.name || ''}
               </h1>
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+              <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
                 {competition?.season || 'Current Season'} • {competition?.status || 'Active'}
               </span>
             </div>
@@ -139,20 +139,20 @@ export default function StatCategoryPage() {
         </header>
 
         {leaders.length > 0 ? (
-          <div className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-3 border-b border-white/10">
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Player Name</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Stat</span>
+          <div className="bg-muted border border-border rounded-[32px] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-border">
+              <span className="text-[9px] font-black uppercase tracking-widest text-foreground/40">Player Name</span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-foreground/40">Stat</span>
             </div>
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-border/50">
               {leaders.map((leader) => (
                 <div
                   key={leader.player.id}
                   onClick={() => router.push(`/players/${leader.player.id}`)}
-                  className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors cursor-pointer"
+                  className="flex items-center justify-between px-6 py-3 hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className={`text-sm font-display italic w-5 shrink-0 text-right ${leader.rank <= 3 ? 'text-primary' : 'text-white/20'}`}>
+                    <span className={`text-sm font-display italic w-5 shrink-0 text-right ${leader.rank <= 3 ? 'text-primary' : 'text-foreground/20'}`}>
                       {leader.rank}
                     </span>
                     <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
@@ -160,13 +160,13 @@ export default function StatCategoryPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-bold truncate">{leader.player.name}</p>
-                      <p className="text-[10px] text-white/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
+                      <p className="text-[10px] text-foreground/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-lg font-display italic text-primary">{leader.highlightedStat}</span>
                     {typeof leader.player.rating === 'number' && (
-                      <span className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-full text-[10px] font-bold text-white/70">
+                      <span className="flex items-center gap-1 bg-card px-2 py-0.5 rounded-full text-[10px] font-bold text-foreground/70">
                         {leader.player.rating.toFixed(1)}
                         <Star size={10} className="fill-primary text-primary" />
                       </span>
@@ -177,9 +177,9 @@ export default function StatCategoryPage() {
             </div>
           </div>
         ) : (
-          <div className="p-24 text-center bg-white/5 border border-white/10 rounded-[40px]">
-            <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
-            <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No data yet</p>
+          <div className="p-24 text-center bg-muted border border-border rounded-[40px]">
+            <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
+            <p className="text-foreground/20 font-black uppercase tracking-widest text-xs italic">No data yet</p>
           </div>
         )}
       </div>

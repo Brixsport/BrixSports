@@ -255,7 +255,7 @@ function ResetPasswordForm() {
             <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full relative group overflow-hidden bg-gradient-to-r from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#3b82f6] text-white font-bold py-3.5 px-6 rounded-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#3b82f6]/25"
+                className="w-full relative group overflow-hidden bg-gradient-to-r from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#3b82f6] text-white font-bold py-3.5 px-6 rounded-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] disabled:from-[#3b82f6]/50 disabled:to-[#2563eb]/50 disabled:cursor-not-allowed shadow-lg shadow-[#3b82f6]/25"
             >
                 <span className="relative z-10 flex items-center justify-center gap-2">
                     {isLoading ? (

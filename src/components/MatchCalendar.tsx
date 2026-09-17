@@ -48,12 +48,12 @@ export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: 
     };
 
     return (
-        <div className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-6">
+        <div className="bg-muted backdrop-blur-sm rounded-2xl border border-border p-6">
             {/* Calendar Header */}
             <div className="flex items-center justify-between mb-6">
                 <button
                     onClick={handlePreviousMonth}
-                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                    className="p-2 hover:bg-muted/70 rounded-lg transition-colors"
                 >
                     <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -64,7 +64,7 @@ export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: 
 
                 <button
                     onClick={handleNextMonth}
-                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                    className="p-2 hover:bg-muted/70 rounded-lg transition-colors"
                 >
                     <ChevronRight className="w-5 h-5" />
                 </button>
@@ -73,7 +73,7 @@ export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: 
             {/* Weekday Headers */}
             <div className="grid grid-cols-7 gap-2 mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="text-center text-sm font-semibold text-white/60 py-2">
+                    <div key={day} className="text-center text-sm font-semibold text-foreground/60 py-2">
                         {day}
                     </div>
                 ))}
@@ -100,12 +100,12 @@ export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: 
                             whileTap={{ scale: 0.95 }}
                             onClick={() => handleDateClick(day)}
                             className={`aspect-square rounded-lg p-2 transition-all relative ${isSelected
-                                    ? 'bg-primary text-white'
+                                    ? 'bg-primary text-primary-foreground'
                                     : isCurrentDay
-                                        ? 'bg-white/10 text-white border-2 border-primary'
+                                        ? 'bg-muted text-foreground border-2 border-primary'
                                         : fixtureCount > 0
-                                            ? 'bg-white/5 text-white hover:bg-white/10'
-                                            : 'text-white/40 hover:bg-white/5'
+                                            ? 'bg-muted/50 text-foreground hover:bg-muted/70'
+                                            : 'text-foreground/40 hover:bg-muted/50'
                                 }`}
                         >
                             <div className="text-sm font-medium">
@@ -131,14 +131,14 @@ export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: 
             </div>
 
             {/* Legend */}
-            <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-center gap-6 text-sm">
+            <div className="mt-6 pt-4 border-t border-border flex items-center justify-center gap-6 text-sm">
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-primary" />
-                    <span className="text-white/60">Has Matches</span>
+                    <span className="text-foreground/60">Has Matches</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full border-2 border-primary" />
-                    <span className="text-white/60">Today</span>
+                    <span className="text-foreground/60">Today</span>
                 </div>
             </div>
         </div>
