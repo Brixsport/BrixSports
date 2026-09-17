@@ -30,7 +30,7 @@ interface UnderlineTabsProps {
  */
 export function UnderlineTabs({ tabs, activeId, onChange, layoutId, className }: UnderlineTabsProps) {
     return (
-        <div className={cn('flex gap-1 border-b border-white/10 overflow-x-auto scrollbar-hide', className)}>
+        <div className={cn('flex gap-1 border-b border-border overflow-x-auto scrollbar-hide', className)}>
             {tabs.map((tab) => {
                 const active = activeId === tab.id;
                 return (
@@ -41,7 +41,7 @@ export function UnderlineTabs({ tabs, activeId, onChange, layoutId, className }:
                         aria-current={active ? 'true' : undefined}
                         className={cn(
                             'px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap flex items-center gap-1.5 md:gap-2 shrink-0',
-                            active ? 'text-primary' : 'text-white/60 hover:text-white'
+                            active ? 'text-primary' : 'text-foreground/60 hover:text-foreground'
                         )}
                     >
                         {tab.icon}
@@ -50,7 +50,7 @@ export function UnderlineTabs({ tabs, activeId, onChange, layoutId, className }:
                             <span
                                 className={cn(
                                     'px-1.5 py-0.5 rounded-full text-[9px] leading-none',
-                                    active ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'
+                                    active ? 'bg-primary/20 text-primary' : 'bg-muted text-foreground/40'
                                 )}
                             >
                                 {tab.count}

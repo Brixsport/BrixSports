@@ -55,7 +55,7 @@ export function BackButton({ fallbackHref, className, label = 'Back', forceShow 
             onClick={handleClick}
             aria-label={label}
             className={cn(
-                'shrink-0 p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white',
+                'shrink-0 p-2 -ml-2 rounded-full hover:bg-muted transition-colors text-foreground/60 hover:text-foreground',
                 className
             )}
         >

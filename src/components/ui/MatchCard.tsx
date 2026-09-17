@@ -97,7 +97,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                 <motion.div
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="group bg-muted hover:bg-white/10 backdrop-blur-sm border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all cursor-pointer"
+                    className="group bg-muted hover:bg-muted/70 backdrop-blur-sm border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all cursor-pointer"
                 >
                     {/* Competition Badge */}
                     {showCompetition && (
@@ -242,7 +242,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
         <Link href={`/matches/${match.id}`}>
             <motion.div
                 whileHover={{ scale: 1.02 }}
-                className="group bg-muted hover:bg-white/10 backdrop-blur-sm border border-gray-700 hover:border-purple-500/50 rounded-2xl p-6 transition-all cursor-pointer"
+                className="group bg-muted hover:bg-muted/70 backdrop-blur-sm border border-gray-700 hover:border-purple-500/50 rounded-2xl p-6 transition-all cursor-pointer"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
