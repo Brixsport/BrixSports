@@ -13496,8 +13496,10 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-390 — Design Critique Findings: Density, Touch Targets, Duplicate Filter Controls, Match Overview Padding
 
-**Status:** OPEN, not started — recorded per Richard's explicit "note all for now, ensure not to leave anything" instruction. Structural/UX judgment calls, not bugs; needs Richard's prioritization before any is picked up.
-**Priority:** Unset — deliberately not ranked yet, these are recommendations to weigh, not confirmed work items.
+**Status:** Item 1 SHIPPED (pending live verification against the deployed preview) — 2026-09-17. Items 2-6 still OPEN, not started, unranked, needs Richard's prioritization.
+**Priority:** Unset for items 2-6 — deliberately not ranked yet, these are recommendations to weigh, not confirmed work items.
+
+**Item 1 fix (`src/app/page.tsx`):** replaced the "Matches" date-filter card (bordered `bg-card` container, separate icon+"Matches" heading row, `flex-col sm:flex-row` stacking to two full rows on mobile) with a single compact inline row — icon+date+prev/next, no card/border/heading, no mobile stacking. No logic change (same `setSelectedDate`/`addDays` handlers). Matches the audit's own suggested direction ("an inline icon+date-stepper row would save ~150-200px"). Not yet measured against the live deployed preview — evidence to follow once pushed and redeployed.
 
 **Source:** an independent, fresh-eyes `general-purpose` subagent run via the `design-critique` skill against the real deployed branch preview, both dark and light modes, benchmarked informally against live sofascore.com. Full original report preserved in this session's conversation transcript; findings below are the actionable subset (the agent's report also praised several things already working well — score-hierarchy on match detail, restrained brand-blue usage, the cream-toned light background — not repeated here since those don't need action).
 

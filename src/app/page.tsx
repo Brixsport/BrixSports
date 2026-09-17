@@ -518,39 +518,27 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Date Filter - SofaScore Style */}
-          <div className="mb-6 bg-card border border-border rounded-lg px-4 py-3">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-              {/* Left side - Title */}
-              <div className="flex items-center gap-3">
-                <Calendar size={18} className="text-primary" />
-                <h3 className="font-bold text-sm">Matches</h3>
-              </div>
-
-              {/* Right side - Date Navigation */}
-              <div className="flex items-center gap-2 bg-muted rounded-lg p-1 w-full sm:w-auto">
-                <button
-                  onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
-                  className="p-2 hover:bg-white/10 rounded transition-colors"
-                  aria-label="Previous day"
-                >
-                  <ChevronLeft size={18} className="text-foreground/60" />
-                </button>
-                <div className="px-3 sm:px-4 text-xs sm:text-sm font-semibold text-foreground min-w-[100px] sm:min-w-[120px] text-center">
-                  {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
-                </div>
-                <button
-                  onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, 1) : addDays(new Date(), 1))}
-                  className="p-2 hover:bg-white/10 rounded transition-colors"
-                  aria-label="Next day"
-                >
-                  <ChevronRight size={18} className="text-foreground/60" />
-                </button>
-              </div>
+          {/* Date Navigation - compact inline row (BACKLOG-390 #1: was a full card+heading, ~150-200px taller) */}
+          <div className="flex items-center justify-center gap-1 mb-4">
+            <button
+              onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
+              aria-label="Previous day"
+            >
+              <ChevronLeft size={18} className="text-foreground/60" />
+            </button>
+            <div className="flex items-center gap-1.5 px-3 text-xs sm:text-sm font-semibold text-foreground min-w-[120px] justify-center">
+              <Calendar size={14} className="text-primary" />
+              {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
             </div>
+            <button
+              onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, 1) : addDays(new Date(), 1))}
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
+              aria-label="Next day"
+            >
+              <ChevronRight size={18} className="text-foreground/60" />
+            </button>
           </div>
-
-
 
           {/* Live Now Section */}
           <div className="mb-8">
