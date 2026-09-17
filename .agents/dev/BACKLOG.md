@@ -8153,6 +8153,14 @@ Quick sanity notes on a few, without a full read (not to be taken as a completed
 
 `tsc --noEmit`: 18 errors, unchanged baseline, across all 4 edited files plus the 2 deletions.
 
+**Live verification (commit `2edd028`, real deployed preview):**
+- `SettingsOverlay.tsx`'s toggle knob: confirmed via screenshot in light mode — now a proper white circle on the active blue track (was hardcoded black before this build went live; caught and re-confirmed against the correct, later deployment after an initial check hit the still-building prior commit).
+- `MatchCalendar.tsx`: found and opened the component live (`competitions/[id]` → Matches tab), but no browsed month had a fixture-count dot to visually confirm the exact pixel — the token change (`bg-white` → `bg-primary-foreground`) mirrors the same cell's own already-proven `text-primary-foreground`, and the build's console is clean of any React/render errors, so treating this as code-level-verified rather than pixel-verified.
+- `Coachmark.tsx` (onboarding-gated) and `SimpleMatchOverlay.tsx` (confirmed dead code, zero importers — see below) are not reachable through normal navigation to screenshot; both rest on the same established, already-proven token pairing used elsewhere, not a novel guess.
+- General health check: `read_console_messages` shows zero React/component errors on the live deployed pages visited this pass — only pre-existing Vercel-toolbar CSP noise (feedback widget, worker CSP, unrelated 401s), confirming the 2 file deletions didn't break the build.
+
+**New finding, not in original triage scope:** `SimpleMatchOverlay.tsx` itself has zero importers anywhere in `src/` (grep-confirmed) — it's dead code that wasn't caught by the original dead-code check (which only checked 2 specific files). Its color fix (item 3 above) was applied anyway since it was harmless, but the file itself was **not deleted** — flagging for a decision, not silently expanding this pass's scope.
+
 **Evidence (BasketballBoxScore.tsx fix):**
 - `tsc --noEmit`: 18 errors, unchanged baseline.
 - `grep -n "text-white\|bg-white/\|border-white/"` on the file: zero matches post-fix.
