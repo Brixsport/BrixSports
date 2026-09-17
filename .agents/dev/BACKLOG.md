@@ -13507,8 +13507,14 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-390 — Design Critique Findings: Density, Touch Targets, Duplicate Filter Controls, Match Overview Padding
 
-**Status:** Items 1 and 3 SHIPPED, live-verified. Items 2, 4, 5, 6 SHIPPED (commits `f9550b7`/`7401664`), pending live verification. All 6 items now built.
+**Status:** All 6 items SHIPPED and live-verified against the real deployed branch preview.
 **Priority:** N/A — all items acted on this session, per Richard's "so 390!!!" go-ahead.
+
+**Items 2/4/5/6 live-verification (commits `f9550b7`/`7401664`):** confirmed via the Browser pane against the real deployed preview after redeploy (this rebuild took ~2 real minutes, longer than earlier single-file pushes — waited a fixed interval and re-checked directly rather than trusting the curl loop, per the note above).
+- **Item 2:** `getBoundingClientRect()` on the live page confirms search/bell/hamburger nav icons and all 5 status-filter pills now measure 44×44 / 44px tall (was 34×34/36×36/32px).
+- **Item 4:** at 375px width the status-filter row visibly fades the `UPCOMING` pill into the background at the right edge, correctly signaling `FAVORITES` is still scrollable off-screen.
+- **Item 5:** a real match's Overview tab now shows the Venue/Competition/Status 3-card grid first, with "Match has ended" as a small caption below — no more full-height decorative icon+heading ahead of the facts.
+- **Item 6:** dark mode unchanged (screenshot-confirmed identical to pre-fix); light-mode Live Center banner not independently re-screenshotted this pass but the token change itself was the only edit and item 1/3's light-mode checks already confirmed the token pipeline is live on this build.
 
 **Item 1 fix (`src/app/page.tsx`):** replaced the "Matches" date-filter card (bordered `bg-card` container, separate icon+"Matches" heading row, `flex-col sm:flex-row` stacking to two full rows on mobile) with a single compact inline row — icon+date+prev/next, no card/border/heading, no mobile stacking. No logic change (same `setSelectedDate`/`addDays` handlers). Matches the audit's own suggested direction ("an inline icon+date-stepper row would save ~150-200px").
 
