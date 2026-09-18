@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share2, Heart, AlertCircle, MessageSquare, Table } from 'lucide-react';
+import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share2, Heart, AlertCircle, Table } from 'lucide-react';
 import { Team, Player, Match, MatchEvent } from '@/types';
 import { useFavorites } from '@/hooks/useFavorites';
 import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
@@ -13,7 +13,8 @@ import LiveMatchTimeline from './LiveMatchTimeline';
 // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
 // import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
 // import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
-import { LivestreamChat } from '@/components/livestream/LivestreamChat';
+// BACKSCOPED: 2026-09-18 — BACKLOG-398. See the chat tab entry below for why.
+// import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
 import { ResponsiveLineup } from '@/components/lineup/ResponsiveLineup';
@@ -562,9 +563,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     //   { id: 'predict', label: 'Predict', icon: Target },
     //   { id: 'poll', label: 'Poll', icon: BarChart3 },
     // ] : []),
-    ...(['UPCOMING', 'LIVE'].includes(match.status) ? [
-      { id: 'chat', label: 'Chat', icon: MessageSquare },
-    ] : []),
+    // BACKSCOPED: 2026-09-18 — BACKLOG-398 (Richard's call). Chat identity is
+    // only half-fixed: the HTTP-fallback send path derives identity from the
+    // verified session, but the primary WS-direct emit path still sends a
+    // client-built {userId, userName, userAvatar} straight to a separate
+    // ws-server deployment whose identity enforcement lives outside this repo
+    // and was never confirmed. Reinstate when: ws-server enforces server-side
+    // identity, or this gets its own access/fix.
+    // ...(['UPCOMING', 'LIVE'].includes(match.status) ? [
+    //   { id: 'chat', label: 'Chat', icon: MessageSquare },
+    // ] : []),
   ];
 
   // Helper function to extract player IDs from lineup
@@ -1320,25 +1328,15 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
               </motion.div>
             )} */}
 
-            {/* Chat Tab */}
+            {/* BACKSCOPED: 2026-09-18 — BACKLOG-398, same reason as the tab
+                entry above.
             {activeTab === 'chat' && ['UPCOMING', 'LIVE'].includes(match.status) && (
-              <motion.div
-                key="chat"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="-mx-4 -my-6"
-              >
-
+              <motion.div key="chat" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="-mx-4 -my-6">
                 <div className="h-[calc(100vh-300px)] min-h-[500px]">
-                  <LivestreamChat
-                    matchId={match.id}
-                    enabled={true}
-                    className="h-full"
-                  />
+                  <LivestreamChat matchId={match.id} enabled={true} className="h-full" />
                 </div>
               </motion.div>
-            )}
+            )} */}
           </AnimatePresence>
         </div>
       </div>

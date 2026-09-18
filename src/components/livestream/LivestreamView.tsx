@@ -2,8 +2,17 @@
 
 import { useState } from 'react';
 import { LivestreamPlayer } from './LivestreamPlayer';
-import { LivestreamChat } from './LivestreamChat';
-import { ArrowLeft, Share2, MessageSquare, X, TrendingUp, Users, Clock, Play } from 'lucide-react';
+// BACKSCOPED 2026-09-18 (Richard's call, BACKLOG-398): chat identity is only
+// half-fixed -- the HTTP-fallback send path derives identity from the
+// verified session, but the primary WS-direct emit path (this component)
+// still sends a client-built {userId, userName, userAvatar} straight to a
+// separate ws-server deployment whose identity enforcement lives outside
+// this repo and was never confirmed. Any authenticated Fan can impersonate
+// anyone, including an admin, in every viewer's chat until that repo is
+// fixed. Reinstate when: ws-server enforces server-side identity, or this
+// gets its own access/fix. See BACKLOG-398 for full detail.
+// import { LivestreamChat } from './LivestreamChat';
+import { ArrowLeft, Share2, TrendingUp, Users, Clock, Play } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -54,7 +63,8 @@ interface LivestreamViewProps {
 export function LivestreamView({ match, livestream, onExit }: LivestreamViewProps) {
     const router = useRouter();
     const [viewerCount, setViewerCount] = useState(livestream.livestreamViewers || 0);
-    const [showChat, setShowChat] = useState(true);
+    // BACKSCOPED 2026-09-18 (BACKLOG-398, see the LivestreamChat import above
+    // for why): const [showChat, setShowChat] = useState(true);
     const [activeTab, setActiveTab] = useState<'stats' | 'events'>('stats');
     const [seekTime, setSeekTime] = useState<number | null>(null);
 
@@ -126,23 +136,24 @@ export function LivestreamView({ match, livestream, onExit }: LivestreamViewProp
                             <span className="hidden sm:inline text-sm">Share</span>
                         </button>
 
-                        <button
-                            onClick={() => setShowChat(!showChat)}
-                            className={cn(
-                                "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors lg:hidden",
-                                showChat ? "bg-red-600 hover:bg-red-700" : "bg-gray-800 hover:bg-gray-700"
-                            )}
-                        >
-                            {showChat ? <X className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
-                            <span className="hidden sm:inline text-sm">Chat</span>
-                        </button>
+                        {/* BACKSCOPED 2026-09-18 (BACKLOG-398): mobile chat
+                            toggle, no chat to toggle while it's backscoped.
+                            <button onClick={() => setShowChat(!showChat)} ...>
+                              {showChat ? <X .../> : <MessageSquare .../>}
+                              Chat
+                            </button> */}
                     </div>
                 </div>
             </div>
 
             {/* Main Content */}
             <div className="max-w-[1920px] mx-auto p-4 lg:p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+                {/* BACKSCOPED 2026-09-18 (BACKLOG-398): was
+                    "grid-cols-1 lg:grid-cols-[1fr_380px]" -- the 380px column
+                    reserved the Chat sidebar. Single-column now that column
+                    has nothing in it; restore the two-column grid alongside
+                    the Chat column below when chat is reinstated. */}
+                <div className="grid grid-cols-1 gap-6">
                     {/* Left Column - Video Player & Match Details */}
                     <div className="space-y-6">
                         {/* Video Player */}
@@ -313,19 +324,13 @@ export function LivestreamView({ match, livestream, onExit }: LivestreamViewProp
                         </div>
                     </div>
 
-                    {/* Right Column - Chat */}
-                    <div className={cn(
-                        "lg:block",
-                        showChat ? "block" : "hidden"
-                    )}>
-                        <div className="sticky top-24 h-[calc(100vh-7rem)]">
-                            <LivestreamChat
-                                matchId={match.id}
-                                enabled={true}
-                                className="h-full"
-                            />
+                    {/* BACKSCOPED 2026-09-18 (BACKLOG-398): Right Column - Chat
+                        <div className={cn("lg:block", showChat ? "block" : "hidden")}>
+                            <div className="sticky top-24 h-[calc(100vh-7rem)]">
+                                <LivestreamChat matchId={match.id} enabled={true} className="h-full" />
+                            </div>
                         </div>
-                    </div>
+                    */}
                 </div>
             </div>
         </div>
