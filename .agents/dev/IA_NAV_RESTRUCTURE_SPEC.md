@@ -77,15 +77,31 @@ one, made globally reachable instead of homepage-only.
   in place per `BACKLOG-395`'s configurable `.limit()` fix), no new design system, no filter
   UI beyond what already exists. Linked from the new "More" sheet.
 
+## Desktop top bar — corrected scope (Richard flagged this after first draft)
+
+`src/app/page.tsx:413-427` (the `hidden md:flex` "Desktop Links" block, separate from the
+mobile hamburger at :848-851) renders Teams/Lineup Builder/News as permanent inline links.
+Lineup Builder there carries the identical `UpdateTooltip` + `NewFeatureBadge` treatment
+flagged in H3.
+
+First draft of this spec left desktop untouched on the theory that "desktop has room, so
+the squeeze problem doesn't apply." That conflates two different things — **position**
+(does it fit in the bar: yes, desktop has room, no change needed there) and **promotion**
+(badge + tooltip actively flagging it as a hot new feature). The frequency argument from the
+IA assessment above (low-use, untested-at-load, shouldn't be pushed on users) doesn't
+depend on screen size — it's inconsistent to strip the badge/tooltip in mobile's "More" sheet
+while the identical badge/tooltip stays live on desktop.
+
+**Corrected scope:** Lineup Builder's link stays inline in the desktop top bar (position —
+desktop genuinely has the room, this isn't H2's squeeze problem). Drops `NewFeatureBadge`
+and the `UpdateTooltip` wrapper there too, same as its mobile "More" row — one consistent
+rule (untested 🔴 feature doesn't get promotional treatment anywhere), not a device-specific
+exception.
+
 ## Explicitly not in this spec
 
 - **M1 (bell icon opens Settings, not Notifications)** — tracked separately as Later-bucket
   item 24, nav-adjacent but a wiring bug, not an IA question.
-- Desktop nav — H3's promotional treatment exists there too, but Richard's own framing
-  above specifically contrasts mobile (no room, hence this restructure) against desktop
-  ("unlike desktop in the top navbar" — implying desktop's top nav already has the room and
-  isn't the problem). Leaving desktop's Lineup Builder treatment untouched unless flagged
-  separately.
 
 ## Implementation notes (for when this is built)
 
@@ -108,3 +124,6 @@ one, made globally reachable instead of homepage-only.
    works end to end when tapped (demoted in nav weight, not removed).
 4. `/players` loads a real list, paginates, and each row links to the existing
    `/players/[id]` detail page.
+5. Desktop top bar (`page.tsx:413-427`): Lineup Builder link still present and functional,
+   `NewFeatureBadge`/`UpdateTooltip` gone — confirm Teams/News in the same block are
+   unaffected (they never had the promotional wrapper to begin with).
