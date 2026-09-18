@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Home, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -18,18 +17,8 @@ import Link from 'next/link';
 // );
 
 export default function NotFoundPage() {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  if (!isClient) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-orange-950/30 to-slate-950 flex flex-col items-center justify-center px-4 py-8 overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8 overflow-hidden">
       {/* Background Effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         {/* Court lines effect */}
@@ -67,17 +56,12 @@ export default function NotFoundPage() {
       </div>
 
       <div className="relative z-10 max-w-4xl w-full text-center">
-        {/* 3D Scene */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8 }}
-          className="relative w-full h-[250px] sm:h-[300px] md:h-[400px] mb-6 md:mb-8 rounded-xl md:rounded-2xl overflow-hidden shadow-2xl"
-        >
-          {/* BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031) */}
-          {/* <BasketballRimScene /> */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
-        </motion.div>
+        {/* BACKSCOPED: 2026-06-11 — Three.js scene container removed. Reinstate
+            when: lightweight replacement built (see BACKLOG-031). The empty
+            container + its dark overlay gradient (a leftover meant to sit under
+            the now-gone 3D scene) were removed entirely, not just commented --
+            with no scene inside it, the overlay rendered as a bare hardcoded-dark
+            gradient smear on the page, breaking visibly in light mode. */}
 
         {/* 404 Code */}
         <motion.div
@@ -100,7 +84,7 @@ export default function NotFoundPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="text-3xl md:text-4xl font-bold text-white mt-4 mb-4"
+          className="text-3xl md:text-4xl font-bold text-foreground mt-4 mb-4"
         >
           AIR BALL!
         </motion.h2>
@@ -110,7 +94,7 @@ export default function NotFoundPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="text-white/60 text-lg mb-2 max-w-lg mx-auto"
+          className="text-muted-foreground text-lg mb-2 max-w-lg mx-auto"
         >
           That page rimmed out! Nothing but net... wait, no net at all.
         </motion.p>
@@ -119,7 +103,7 @@ export default function NotFoundPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
-          className="text-white/40 text-base mb-8 max-w-md mx-auto"
+          className="text-muted-foreground/70 text-base mb-8 max-w-md mx-auto"
         >
           The page you're looking for is like a missed free throw - it's just not there.
         </motion.p>
@@ -133,7 +117,7 @@ export default function NotFoundPage() {
         >
           <button
             onClick={() => window.history.back()}
-            className="group flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all border border-white/10 hover:border-white/20"
+            className="group flex items-center gap-2 px-6 py-3 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold rounded-xl transition-all border border-border"
           >
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
             Go Back
@@ -149,7 +133,7 @@ export default function NotFoundPage() {
 
           <Link
             href="/search"
-            className="group flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all border border-white/10 hover:border-white/20"
+            className="group flex items-center gap-2 px-6 py-3 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold rounded-xl transition-all border border-border"
           >
             <Search className="w-5 h-5 group-hover:scale-110 transition-transform" />
             Search
@@ -161,7 +145,7 @@ export default function NotFoundPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
-          className="mt-12 text-white/30 text-sm italic"
+          className="mt-12 text-muted-foreground/70 text-sm italic"
         >
           "You miss 100% of the pages you don't look for." - Michael Jordan (probably)
         </motion.p>

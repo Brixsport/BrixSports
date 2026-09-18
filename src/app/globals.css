@@ -76,7 +76,12 @@
   --card-foreground: oklch(0.15 0 0);
   --popover: oklch(0.995 0.002 85);
   --popover-foreground: oklch(0.15 0 0);
-  --primary: oklch(0.6 0.2 250);
+  /* BACKLOG-399: darkened from 0.6 -> 0.48 (light mode only) -- primary-foreground
+     text on --primary buttons measured 3.67:1, below the 4.5:1 WCAG AA text
+     requirement. Dark mode's --primary/--primary-foreground pairing (0.7/0.1,
+     light button + dark text) is a different pairing already passing at 7.59:1
+     and is untouched. */
+  --primary: oklch(0.48 0.2 250);
   /* Premium Blue */
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.92 0.02 250);
@@ -96,7 +101,7 @@
   --chart-5: oklch(0.4 0.15 200);
   --sidebar: oklch(0.95 0.005 85);
   --sidebar-foreground: oklch(0.15 0 0);
-  --sidebar-primary: oklch(0.6 0.2 250);
+  --sidebar-primary: oklch(0.48 0.2 250);
   --sidebar-primary-foreground: oklch(0.98 0 0);
   --sidebar-accent: oklch(0.92 0.003 85);
   --sidebar-accent-foreground: oklch(0.6 0.2 250);
