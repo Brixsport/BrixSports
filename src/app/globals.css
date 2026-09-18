@@ -91,8 +91,13 @@
   --accent: oklch(0.6 0.2 250 / 0.1);
   --accent-foreground: oklch(0.6 0.2 250);
   --destructive: oklch(0.6 0.2 25);
-  --border: oklch(0.85 0 0);
-  --input: oklch(0.85 0 0);
+  /* BACKLOG-399 H4: border/card was 1.56:1, border/background was 1.37:1 --
+     both fail WCAG 1.4.11's 3:1 non-text-contrast requirement against BOTH
+     surfaces it sits on (card 0.995, background 0.95), not just one. Darkened
+     enough to clear 3:1 against the lighter (harder) of the two, card, which
+     bounds the background ratio too since background is darker than card. */
+  --border: oklch(0.58 0 0);
+  --input: oklch(0.58 0 0);
   --ring: oklch(0.6 0.2 250);
   --chart-1: oklch(0.6 0.2 250);
   --chart-2: oklch(0.5 0.2 250);
@@ -105,7 +110,7 @@
   --sidebar-primary-foreground: oklch(0.98 0 0);
   --sidebar-accent: oklch(0.92 0.003 85);
   --sidebar-accent-foreground: oklch(0.6 0.2 250);
-  --sidebar-border: oklch(0.85 0 0);
+  --sidebar-border: oklch(0.58 0 0);
   --sidebar-ring: oklch(0.6 0.2 250);
 }
 
@@ -125,8 +130,13 @@
   --accent: oklch(0.7 0.18 250 / 0.15);
   --accent-foreground: oklch(0.7 0.18 250);
   --destructive: oklch(0.6 0.2 25);
-  --border: oklch(0.2 0 0);
-  --input: oklch(0.2 0 0);
+  /* BACKLOG-399 H4: border/card was 1.11:1, border/background 1.14:1 -- worse
+     than light mode, both fail 3:1. Card (0.13) is the tighter constraint
+     here (closer to border's original 0.2 than background's 0.1 is), so
+     lightened enough to clear 3:1 against card -- background, being further
+     away, clears with margin. */
+  --border: oklch(0.42 0 0);
+  --input: oklch(0.42 0 0);
   --ring: oklch(0.7 0.18 250);
   --chart-1: oklch(0.7 0.18 250);
   --chart-2: oklch(0.6 0.15 250);
@@ -139,7 +149,7 @@
   --sidebar-primary-foreground: oklch(0.1 0 0);
   --sidebar-accent: oklch(0.18 0 0);
   --sidebar-accent-foreground: oklch(0.7 0.18 250);
-  --sidebar-border: oklch(0.2 0 0);
+  --sidebar-border: oklch(0.42 0 0);
   --sidebar-ring: oklch(0.7 0.18 250);
 }
 
