@@ -177,6 +177,14 @@ function CompetitionHubContent() {
     fetchAllData();
   }, [competitionId, reloadKey]);
 
+  // A first load that failed retries by itself when the connection returns.
+  useEffect(() => {
+    if (!loadFailed) return;
+    const retryOnReconnect = () => setReloadKey((k) => k + 1);
+    window.addEventListener('online', retryOnReconnect);
+    return () => window.removeEventListener('online', retryOnReconnect);
+  }, [loadFailed]);
+
   // 2. When selectedComp changes, fetch its standings/matches/brackets
   useEffect(() => {
     if (!selectedComp) return;

@@ -53,6 +53,14 @@ export default function TeamDetailClient() {
         fetchTeamData();
     }, [teamId]);
 
+    // A first load that failed retries by itself when the connection returns.
+    useEffect(() => {
+        if (!loadFailed) return;
+        const retryOnReconnect = () => { fetchTeamData(); };
+        window.addEventListener('online', retryOnReconnect);
+        return () => window.removeEventListener('online', retryOnReconnect);
+    }, [loadFailed, teamId]);
+
     // BACKLOG-375: `statsCompetitionId` is optional -- omitted on the initial load so
     // the API resolves its own default (most recent season with real data). Passed
     // explicitly only when the selector below is changed, so re-selecting the same
