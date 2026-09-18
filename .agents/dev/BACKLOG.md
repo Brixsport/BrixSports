@@ -13670,3 +13670,156 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Not done:** any code change, any page survey of which other pages share this SWR-revert-to-not-found pattern, any design decision on stale-data labeling. Filed to make sure this doesn't get lost, not to scope it prematurely.
 
 **Reinstate/pick up when:** a dedicated engineering+product session can scope the platform-wide offline-first caching pass Richard asked for.
+
+---
+
+### BACKLOG-395 — 4 API Routes Violate CLAUDE.md's "Every List Endpoint MUST Have `.limit()`" Rule
+
+**Status:** OPEN — filed 2026-09-17 (`db-inspector` background agent, part of the full-platform pre-promotion audit), not fixed.
+**Priority:** High — a direct, unambiguous violation of a hard project rule (`CLAUDE.md` Architecture Rules: "Every list endpoint MUST have a .limit() clause — no unbounded queries ever"), not a judgment call.
+
+**Problem, code-audited (live-DB row-count impact not yet measured — the agent that found this had no DB query access, static-code-only):**
+- `src/app/api/admin/ads/route.ts:19` — `db.select().from(advertisements).orderBy(...)` with no `.limit()` at all.
+- `src/app/api/football/teams/route.ts:13` — `db.select().from(teams).where(eq(teams.sport,'Football')).all()` — `.all()` with no limit.
+- `src/app/api/basketball/teams/route.ts:9` — `db.select().from(teams).all()` — same pattern, no limit.
+- `src/app/api/basketball/players/route.ts:42` — `db.select({id,name}).from(teams).all()` — same pattern (fetches every team just to build a filter list).
+
+**Separately, a real but lower-severity pagination bug:** `src/app/api/competitions/route.ts:137` hardcodes `.limit(500)` and ignores the route's own accepted `limit`/`offset` query params, filtering in memory afterward instead of pushing pagination to the DB — silently truncates past 500 rows rather than actually paginating.
+
+**Not a new class of bug** — `BACKLOG-283` already fixed this exact pattern on `/api/admin/users` and `/api/admin/organizations` (configurable limits, safety caps); these 4 routes were evidently missed by that pass or added after it.
+
+**Not done:** any fix. Not done: live row-count check (is any of these tables actually large enough today for this to be an active performance problem, or is it a correctness landmine waiting for real data growth) — worth a quick DB check before prioritizing the fix, current team/ad counts are likely small enough that this hasn't bitten yet.
+
+**Fix shape, when picked up:** same pattern as `BACKLOG-283` — add a capped, configurable `.limit()` to all 4 unbounded queries; fix `/api/competitions` to push `limit`/`offset` into the query itself instead of hardcoding 500 and filtering post-fetch.
+
+---
+
+### BACKLOG-396 — Three Critical Flows Verified Intact Pre-Promotion (2 Low-Priority Follow-Ups Found, Neither Blocking)
+
+**Status:** VERIFIED CLEAN — `flow-checker` background agent, part of the full-platform pre-promotion audit, 2026-09-17. **Verdict: FLOWS INTACT — safe to deploy.**
+**Priority:** Informational entry recording the verdict, plus 2 real Low-priority follow-ups found along the way.
+
+**Full trace, all 3 flows confirmed structurally sound in current code** (Flow A: admin-only match creation, transaction-guarded logger assignment, bounded+field-shaped public list; Flow B: transaction-scoped dedup+atomic score increment closing the exact dual-logger race `BACKLOG-151` fixed, `after()`-based broadcast surviving Vercel's serverless return per the documented `BUG-108`/`116` root cause; Flow C: WS subscription with a 3-layer fallback — 10s poll while disconnected, 25s reconciliation poll even while connected, resync-on-reconnect, visible "Live updates paused" toast — plus confirmed no internal fields leak in the public match DTO). None of this session's UI/tab work on `MatchDetailClient.tsx` touched the underlying WS/fallback mechanism itself, only consumed the same hooks.
+
+**2 low-priority follow-ups, not merge blockers:**
+1. `src/app/api/matches/[id]/assign-logger/route.ts` — no explicit match-existence check before the insert transaction; relies on the FK constraint failing into a generic catch, producing an imprecise 500 instead of a 404. Error still surfaces (not silent), just imprecise.
+2. `src/lib/auth.ts:65-68` — `jwt.verify` failures (including `TokenExpiredError`) are all caught generically and return a uniform 401 "Unauthorized," not the distinct expiry message `CLAUDE.md`'s own Auth rule asks for ("Token expiry must return 401 with a clear message").
+
+**Also reconfirmed, not regressed:** the Live Event Readiness Checklist's existing OPEN/UNVERIFIED items (120-min logger session, double-submission stress test, <5s public latency) are unchanged by this branch's code — still open for the same reasons already documented in `CLAUDE.md`, not newly broken.
+
+**Not done:** fixing either of the 2 follow-ups above — recorded for a future pass, genuinely low priority.
+
+---
+
+### ⛔ BACKLOG-397 — Full-Platform Security Audit: BLOCKED — Password-Hash Leak, Client-Passed Audit Field, Unbounded Mass-Assignment
+
+**Status:** OPEN, BLOCKING — `security` background agent, full-platform pre-promotion audit, 2026-09-17. **Verdict: BLOCKED — must fix before this branch merges to dev/main.**
+**Priority:** CRITICAL — real, live, unauthenticated exposure paths, not theoretical.
+
+**CRITICAL #1 — Unauthenticated FPL API leaks password hashes.** `src/app/api/fpl/teams/route.ts` GET has zero auth check. Its Drizzle relation (`fplTeamsRelations.user` in `src/db/schema-fpl.ts:233-237`) does `with: { user: true }` with no column restriction, so the response includes the **entire `users` row — `password` column and `email` included** — for `?userId=`, `?teamId=`, or the no-param "all teams" branch (up to 100 full records). `curl` with no credentials against this route today returns real password hashes. `/fpl` the page is `notFound()`'d, but the API route itself has no gate — page removal is not an auth control, and `BACKSCOPE.md`'s existing "low risk, no UI" note for this feature only ever called out a POST `userId` issue, not this GET leak. **Fix:** add `getAuthUser` + ownership check; if `user` must be joined at all, restrict to `columns: { id, name, avatar }` — never select `password`/`email` in any relational join. Likely the same pattern recurs on `leagues`, `leagues/join`, `players`, `transfers` under `/api/fpl/*` — not independently confirmed this pass, worth a full sweep.
+
+**CRITICAL #2 — `approvedBy` accepted directly from the client body.** `src/app/api/matches/[id]/route.ts:741`: `if (body.approvedBy) updateData.approvedBy = body.approvedBy;` inside the admin-gated PATCH handler — a direct violation of `CLAUDE.md`'s explicit rule that audit fields must always come from the verified session, never the client. `approvedBy` is also one of the 8 explicitly NDPR-banned public fields; a future regression that forgets to strip it from a public response (confirmed correctly stripped on the two current match-detail read routes) would then leak attacker-controlled content. **Fix:** `updateData.approvedBy = authUser.id` whenever `approvalStatus` is set server-side; drop `body.approvedBy` entirely.
+
+**CRITICAL #3 — Unbounded mass-assignment on match creation.** `src/app/api/matches/route.ts` POST: `const { stats, lineups, ...matchData } = body;` then spread straight into the insert — no allow-list, so any field including `approvalStatus`/`managerNotes`/`approvedBy`/`loggerId` can be set at creation time, bypassing the assign-logger transaction's own validation. Not a new-in-isolation finding — `src/app/api/admin/competitions/[id]/draws/[drawId]/publish/route.ts:41`'s own comment already documents this exact route as a known, unfixed mass-assignment risk. **Fix:** build a `MATCH_CREATE_FIELDS` allow-list mirroring the GET route's already-correct `MATCH_LIST_FIELDS` pattern (`route.ts:18-58`).
+
+**MEDIUM — live unauthenticated writes, re-confirmed not newly regressed:** `src/app/api/fpl/teams/route.ts` POST/PATCH and `src/app/api/polls/route.ts` POST/PATCH have no `getAuthUser` call, taking `userId`/`createdBy` straight from the request body — both directly `curl`-reachable today despite their front-end pages being removed. This is `BACKSCOPE.md`'s own already-documented Tier 4 gap (session 47D), re-verified still live this pass. `src/app/api/predictions/route.ts` **was** correctly fixed and is the reference-correct pattern (`getAuthUser` required, `userId = authUser.id`, explicit "never client-supplied" comment) — apply the same shape here, or delete the routes until Phase 7 reinstates the features.
+
+**MEDIUM — hardcoded plaintext admin credential + unguarded destructive seed script.** `src/db/seed.ts:262`: `email: 'admin@brix.com', password: 'admin'` (own comment admits "should be hashed"). Same file runs unguarded `db.delete()` on `teams`/`players`/`matches`/`loggers` with no environment check, and lives under `src/db/` rather than the gitignored `/dev/` this project mandates for all DB scripts. **Fix:** move to `/dev/`, add a non-prod guard, hash the password or source from env.
+
+**LOW, not blocking:** `publishedByName` in two lineup-lock 409 responses can be a real admin's email (both routes already admin/logger-gated, so not a public leak, just worth tightening to name-only); inconsistent `finally` usage across DB handlers (no real leak risk, Turso's HTTP client is stateless — style note against the letter of the rule, not a functional bug); two `/api/admin/*` routes correctly carve out a scoped `logger` branch alongside `admin` (informational, not a gap); stale `BUG-037` (`/api/user/xi` unauthenticated) should be closed — ground-truth code confirms it was actually fixed under `BACKLOG-324`, already RESOLVED, not still open as currently listed.
+
+**Cross-referenced, confirmed still correctly resolved, not re-broken:** `BACKLOG-324`/`BUG-037`, `BACKLOG-222` (`/api/predictions`, used as the reference-correct pattern above), `BACKLOG-220`/`BACKLOG-323` (lineup lock/atomic-write). None of BUG-002/003/004/006 or the 🔴 volatility list's original citations were newly touched.
+
+**Not done:** any fix. This is the audit's headline finding — recommend treating the 3 CRITICAL items as a hard blocker on the `dev`/`main` promotion until fixed, given they're live and unauthenticated today, not merely theoretical.
+
+---
+
+### ⛔ BACKLOG-398 — Full-Codebase Code Review: Livestream Chat Identity Is Fully Spoofable (Critical) + 4 Medium/Low Findings
+
+**Status:** OPEN — `code-reviewer` background agent, full-platform pre-promotion audit, 2026-09-17.
+**Priority:** CRITICAL for the chat finding — a second, independent critical vulnerability from a different code path than `BACKLOG-397`'s security-agent findings.
+
+**CRITICAL — chat message identity is fully client-controlled, spoofable, broadcast unmodified to every viewer.** `src/components/livestream/LivestreamChat.tsx:116-136` builds `{ userId, userName, userAvatar, message }` entirely client-side and sends it as-is (socket emit or `POST /api/chat/send`). `src/app/api/chat/send/route.ts:11-37` only checks `getAuthUser(request)` for session *presence* — it never cross-checks the message's claimed `userId`/`userName` against the actual verified session's `user.id`/`user.name`. **Failure scenario:** any authenticated Fan sends `{ userId: 'admin-id', userName: 'BrixSports Admin', message: '...' }` and every viewer in that match's livestream chat sees it as a real admin message, indistinguishable from genuine. Same class of bug CLAUDE.md already bans for audit fields (`createdBy`/`updatedBy` must come from the verified session, never client input), just not previously applied to chat. **Not independently checked:** whether the `ws-server`'s direct socket path (outside this repo) enforces the same identity check — worth a follow-up.
+
+**MEDIUM:**
+- `src/app/api/matches/[id]/route.ts:721` — `loggerId` can be set to an arbitrary string by any logger currently assigned to that match, with no admin-role gate (unlike the neighboring `homeScore`/`awayScore`/`approvalStatus` fields on the same route, which are correctly gated). Not a privilege-escalation path (real event-logging authorization runs through `matchLoggerAssignments`, untouched by this field) but a real silent data-integrity gap on an admin-attribution field.
+- 2 more unbounded-query routes found independently (`football/teams`, `basketball/teams` — full `.all()` scans, no `.limit()`) — same rule violation as `BACKLOG-395`, different specific routes; consolidate the fix into one pass.
+- 4 files read secrets via `process.env` directly instead of `src/lib/env.ts` (`api/cloudinary/sign/route.ts`, `api/notifications/send/route.ts`, `api/internal/logger-assignment-check/route.ts`, `api/chat/send/route.ts`) — bypasses `validateEnv()`'s fail-fast guarantee; a misconfigured `WS_API_KEY` in particular could silently misbehave rather than loudly failing at boot.
+- `MatchDetailClient.tsx` (this branch's own subject file) is ~1200 lines mixing data-fetching, 6 WS listeners, 3 polling effects, and all rendering in one component, with 7 near-identical tab-button JSX blocks that should be one mapped component. Not urgent, but worth extracting before the next contributor has to touch it.
+
+**LOW:** `admin/users` PATCH returns `{success:true}` even for a non-existent `userId` (cosmetic false-positive toast); team logos have no `onError`/null-guard fallback in `MatchDetailClient.tsx`; the CLAUDE.md `try/catch/finally` rule is aspirational given this project's stateless-per-request Turso HTTP client has nothing to release — a style note against the letter of the rule, not a real leak.
+
+**Verdict:** ship-ready once the chat-spoofing CRITICAL is resolved (or chat is explicitly gated/hidden pre-launch as an accepted risk) — everything else is fast-follow, not blocking.
+
+**Not done:** any fix.
+
+---
+
+### BACKLOG-399 — Static Product-Design Audit: `error.tsx` Leaks Raw Error Messages to Users (Critical, Violates CLAUDE.md Directly) + WCAG Gaps
+
+**Status:** OPEN — `general-purpose` background agent (static/spec-level half of the `product-team-review` pipeline), 2026-09-17. Full report: `.agents/dev/PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` (3 Critical / 6 High / 4 Medium / 5 Low — this entry pulls out the Critical items only, see the file for full detail with file:line references and a computed WCAG contrast table).
+**Priority:** Critical item #1 is a direct violation of an explicit, already-written CLAUDE.md rule, not a new standard being proposed.
+
+**Critical findings:**
+1. **`error.tsx` dumps raw `error.message`/`error.digest` straight to the end user** — directly violates `CLAUDE.md`'s own "Never return raw database errors to the client" / "all errors must surface... never appear to succeed when they didn't" error-handling rules (the spirit of the rule clearly covers any raw internal error text, not just DB errors specifically).
+2. **Primary-button text fails WCAG AA in light mode** — computed contrast 3.67:1 against the required 4.5:1, verified via a real contrast calculation against the actual `oklch` token values in `globals.css`, not assumed.
+3. **`not-found.tsx`/`error.tsx` are 100% hardcoded dark**, entirely outside the token system — missed completely by `BACKLOG-216`'s 76-file retrofit. A light-mode user who hits a 404 or a crash gets a forced-dark page with the (correctly light-themed) `BottomNav` rendering underneath it — a jarring, broken-looking mix, not a design choice.
+
+**High-priority items worth flagging (not Critical, see full report for detail):** no `/players` browse page exists anywhere in the app (zero discovery path for a scoped, real capability); `BottomNav` and the hamburger menu expose two different, non-overlapping navigation item sets; the 🔴-flagged, re-audit-pending Lineup Builder is the single most heavily promoted nav item in the app; border-token contrast fails WCAG 1.4.11 in both themes (as low as 1.11:1 against a 3:1 requirement); signup form has no label/input association or error announcement; no max-length validation anywhere on team/player name inputs.
+
+**Confirmed working well, not just an absence of complaints:** the semantic token system itself, `/predictions` correctly unlinked from nav (matches its backscoped status), 44px touch targets (this session's `BACKLOG-390` work), and good OAuth-cancel-vs-fail copy differentiation on `/login`.
+
+**Not done:** any fix. See the full audit file for the 6 High / 4 Medium / 5 Low items not reproduced here.
+
+---
+
+### BACKLOG-400 — Architecture/Tech-Debt/Testing Audit: Zero Automated Test Coverage on the Three Critical Flows, Plus a Fresh `SYSTEM_AUDIT.md`
+
+**Status:** OPEN — `general-purpose` background agent (`engineering:system-design`/`architecture`/`tech-debt`/`testing-strategy` skills), 2026-09-17. Full reports: `.agents/dev/SYSTEM_AUDIT_2026-09-17.md` (refresh of the stale 2026-06-08 version, does not overwrite it) and `.agents/dev/ENGINEERING_AUDIT_2026-09-17.md` (consolidated, prioritized).
+**Priority:** the zero-test-coverage finding is High — not a fire, but real exposure on a 225-file branch about to land.
+
+**Headline finding: this repo has zero automated test coverage anywhere** — no jest/vitest/playwright/cypress, no test files at all, protecting none of the Three Critical Flows a 225-file branch is about to merge on top of. Every "flow intact" verdict in this audit (including `BACKLOG-396`'s) is a manual code-trace, not a regression-guarded one. Recommended highest-leverage first step: one checked-in end-to-end smoke script (match creation -> logger assignment -> event log -> public score update), not a full test suite from zero.
+
+**Also flagged:**
+- Backscoped features' write APIs staying live/unauthenticated underneath a `notFound()` page is now a confirmed **recurring pattern** (FPL, polls, predictions before its own fix) — suggests a missing platform primitive ("kill the API too when a feature is backscoped"), not three independent oversights.
+- 3 duplicated per-sport API route trees (football/basketball/track), and Basketball/Track loggers separately duplicating football's hardened logic rather than sharing it — Track logger specifically has **zero persistence**, a real live-match blocker if Track is ever actually used live.
+- `BACKLOG.md` itself is now 13,600+ lines with no archival process — a process/tooling debt item, not a product bug.
+- **Confirmed resolved since the 2026-06-08 `SYSTEM_AUDIT.md`:** the `/match/[id]` duplicate route, the `PATCH /api/matches/[id]` auth gap, `/football`+`/basketball` public page duplication (deleted), `/xi` absorbed into `/lineup-builder`, Lineup Builder's `BUG-219`/`220`/`221`. **Confirmed still open:** the dual `next-auth`/custom-JWT auth system (`BACKLOG-009`, 3+ months unresolved), `TrackLogger.tsx`'s zero persistence.
+
+**Not done:** any fix, any test written. Both audit files have full file:line detail beyond what's summarized here.
+
+---
+
+---
+
+### BACKLOG-401 — Live Product Walkthrough: Real Bugs Found Across 8 Surfaces (Invalid Date, Broken Event Badges, Sport-Terminology Mismatch, Orphaned `/search` Route)
+
+**Status:** OPEN — live Browser-pane walkthrough (`product-team-review` step 5 substitute), 2026-09-17/18, personally driven then handed to a background agent that covered homepage/`/live`/match-detail/`/competitions`/`/teams`/a player profile/`/search`/`/profile`+`/settings` before hitting a session rate limit mid-check on `/login` (not a real failure — genuine platform bugs were found up to that point, all below). Full detail, per-surface, in `.agents/dev/PRODUCT_LIVE_WALKTHROUGH_2026-09-17.md`.
+**Priority:** several real, user-visible bugs — grouped by severity below.
+
+**HIGH:**
+1. **"Invalid Date" renders on a live public match card** (`/live`, the `Gba` competition match). Root cause confirmed via `/api/matches`: this record's `startTime` is `"1788963960000.0"` — a stringified epoch-milliseconds value with a trailing decimal, not an ISO datetime like every other record (`"2026-09-09T05:20"`). `new Date(...)` on that string fails to parse, falling through to the literal text "Invalid Date" on a public card. This is a **write-time data-shape bug** (something wrote a stringified epoch instead of ISO for this one record) — needs both a source-write-path fix/guard and a defensive client-side coercion so a malformed value degrades to blank rather than "Invalid Date."
+2. **"Recent Performances" on a player profile renders broken, meaningless event badges.** `/players/[id]` ("JORDAN", Storm, Basketball) shows each of 3 recent matches with a row of small chips reading "📋 -1′" repeated many times per match (11, 26, and 9 times across the three, counts not obviously mapped to anything real). Strong lead for whoever picks this up: looks like a loop iterating the wrong array, or a minute field defaulting to `-1` and being rendered once per some unrelated count rather than once per real event. Immediately visible on a public profile page with no interaction needed — should be prioritized.
+3. **No `<h1>` recurs across the homepage AND the match-detail page** (only a stray `H3` on the latter) — same accessibility gap in two of the highest-traffic routes. `/live` has one correctly — worth fixing once at a shared layout/page-title level rather than per-route.
+4. **Icon-only header controls with no accessible name recur on every route checked** (homepage, `/live`, match detail, all consistent with the earlier homepage finding) — same fix class (`aria-label`) needed site-wide, not just on the homepage.
+
+**MEDIUM:**
+5. **`/search` (the standalone route, not the header's inline overlay) is orphaned and hangs forever.** The real search UX is a header magnifying-glass icon opening an inline overlay that live-filters correctly with a working category breakdown — confirmed working well. The standalone `/search` route, by contrast, has **zero `<input>` elements** (confirmed via DOM query) and shows a permanent "Searching…" spinner that never resolves — a genuine dead end for anyone who bookmarks it, shares the link, or hits browser back/forward into it.
+6. **Sport-terminology mismatch**: a shared stat-tile component hardcoded to football vocabulary shows "TOTAL GOALS" on a basketball league page (`/teams?competition=BUSA LEAGUE BASKETBALL`, value `2322`, almost certainly the points total mislabeled). Likely affects any other non-football competition reusing the same component — worth a grep for sport-conditional label logic nearby.
+7. **Two real competitions share the identical display name "BUSA LEAGUE FOOTBALL"** with no disambiguator on `/teams`' competition-filter tabs (confirmed via DOM + `/api/competitions`: same name, different seasons — `2025/2026` vs `2026/2027`). `/competitions` shows season alongside the name so they're distinguishable there; `/teams`' tabs drop the season, making the two indistinguishable until after clicking.
+8. **Duplicated unit suffix on every player profile's Basic Info card**: "Height: 186cm cm" / "Weight: 81kg kg" — the stored value already includes its unit, and the display template appends a second hardcoded label on top. Small fix, high visibility (every player profile).
+9. **`loggerId` present in the public `/api/matches` list response shape** (`null` on records checked today, but the field's mere presence in the DTO means it will leak the moment any match has a logger assigned) — `loggerId` is one of CLAUDE.md's own explicitly banned public fields. Cross-reference: not the same route as `BACKLOG-397`'s findings, a separate leak surface, needs its own fix (strip the field from the public list DTO the same way the detail route already does per `flow-checker`'s `BACKLOG-396` trace).
+10. **One unlabeled `<select>`** (a season/competition dropdown on `/teams/[id]`'s Season Stats panel) and **6 unlabeled inputs on `/profile/settings`** (Full Name, Email Address, others below the fold) — visible label text present but not wired via `<label for>`/`aria-label`, so screen readers get an anonymous textbox.
+11. **The same "MOCK SHOWCASE (delete me)" test-fixture label recurs on a second surface** (a team detail page, not just the homepage) — confirmed on 2 independent surfaces now, worth a single data-cleanup pass across whichever fixture(s) carry it.
+
+**LOW:**
+- Team crest images with empty `logo: ""` fall back to the browser's native broken-image icon rather than a placeholder, visible on every match card/detail page site-wide (a data-completeness gap on these specific test teams, not a code defect, but worth noting since it'd show in a stakeholder screenshot).
+- Inconsistent casing in test-fixture team names ("TEAM c" vs "TEAM A/B/D") — data entry, not code.
+
+**Confirmed working well, methodology notes (not bugs, recorded so they aren't re-flagged by a later pass without re-checking):** the Stats tab on match detail initially looked blank in a screenshot but was confirmed correctly populated via DOM inspection (a hydration-timing artifact, not a real bug); a `/profile/settings` dark-mode screenshot that looked like blank input values was actually a viewport/screenshot-canvas width mismatch, confirmed via `getComputedStyle`, not a contrast bug; `/matches/[id]` holds up correctly in both themes and at 375/768/1440 breakpoints including a deliberately-working mobile tab-strip horizontal-scroll pattern; `/competitions` and `/teams` list pages are both fully clean on the accessibility sweep.
+
+**Not done:** finishing the walkthrough (`/login`, `/signup`, `/news`, `/lineup-builder`, `/transfers`, `/docs`, admin sections were not yet reached when the background agent hit a session rate limit — genuinely incomplete, not a "nothing more to find" conclusion). Any fix for any finding above.
+
+---
+
+**Full-platform pre-promotion audit status, 2026-09-17/18:** 6 of 7 background agents reported fully (`db-inspector` → `BACKLOG-395`, `flow-checker` → `BACKLOG-396`, `security` → `BACKLOG-397` **BLOCKED**, `code-reviewer` → `BACKLOG-398`, architecture/tech-debt → `BACKLOG-400`, static product-design → `BACKLOG-399`); the 7th (live walkthrough) got through 8 real surfaces with substantial findings (`BACKLOG-401`) before a session rate limit cut it off mid-`/login`-check — genuinely incomplete, worth resuming. **Two independent CRITICAL security findings from two different audit angles (`BACKLOG-397`'s API-level findings, `BACKLOG-398`'s chat-spoofing finding) both point the same direction: this branch should not merge to `dev`/`main` until at minimum the FPL password-hash leak, the `approvedBy` mass-assignment gap, the `/api/matches` POST mass-assignment, and the chat identity-spoofing bug are fixed.**
