@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { competitions, matches, standings, organizations } from '@/db/schema';
-import { sql, eq } from 'drizzle-orm';
+import { sql, eq, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -131,18 +131,31 @@ export async function GET(request: NextRequest) {
         const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
-        // Get competitions from database
+        // BACKLOG-395: previously hardcoded `.limit(500)` regardless of the
+        // route's own accepted limit/offset params, then filtered by sport in
+        // memory -- rows beyond 500 were silently invisible no matter what
+        // page was requested, a real truncation bug (same class as historic
+        // BUG-014), not just a missing-limit style violation.
+        // Fix, sport-filtered case (the common path): push the sport/
+        // isMultiSport condition into the DB WHERE clause so the fetch is
+        // actually bounded by what's needed, not an arbitrary top-500 slice
+        // of the whole table.
+        // Season is intentionally NOT pushed into this query -- see
+        // buildCompetitionGroups' own comment: allSeasonsGroups must see every
+        // season of a sport-filtered competition, not just the season the
+        // caller is currently viewing, so a season-scoped response can still
+        // tell the caller what other seasons exist.
+        // Remaining known gap: the no-sport-filter case still fetches a single
+        // capped page (now 2000, was 500) rather than truly paginating at the
+        // DB level -- full correctness there needs grouping to happen
+        // DB-side, a bigger change than this pass's scope. Flagged, not silently left.
         let query = db.select().from(competitions);
-
-        const allCompetitions = await query.limit(500);
-
-        // Filter by sport if provided
-        let filteredCompetitions = allCompetitions;
         if (sport) {
-            filteredCompetitions = filteredCompetitions.filter(c =>
-                c.isMultiSport || c.sport === sport
-            );
+            query = query.where(or(eq(competitions.sport, sport), eq(competitions.isMultiSport, true))) as typeof query;
         }
+
+        const safetyCap = Math.min(Math.max(1, parseInt(searchParams.get('_maxFetch') || '2000', 10) || 2000), 5000);
+        let filteredCompetitions = await query.limit(safetyCap);
         // Built from the sport-filtered set BEFORE the season filter narrows
         // `filteredCompetitions` below, so a season-scoped response still tells
         // the caller what other seasons of the same competition exist (BACKLOG-229)
