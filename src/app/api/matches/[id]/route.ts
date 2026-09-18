@@ -736,9 +736,12 @@ export async function PATCH(
         if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
         // Approval fields are admin-only — loggers must not write these
         if (authUser.role === 'admin') {
-            if (body.approvalStatus) updateData.approvalStatus = body.approvalStatus;
+            if (body.approvalStatus) {
+                updateData.approvalStatus = body.approvalStatus;
+                // BACKLOG-397: audit field must always come from the verified session, never the client.
+                updateData.approvedBy = authUser.id;
+            }
             if (body.managerNotes !== undefined) updateData.managerNotes = body.managerNotes;
-            if (body.approvedBy) updateData.approvedBy = body.approvedBy;
             if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
         }
 

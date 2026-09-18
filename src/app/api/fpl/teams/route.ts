@@ -3,6 +3,10 @@ import { db } from '@/db';
 import { fplTeams, fplTeamSelections, fplPlayerData, fplGameweeks, players, users } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { validateFormation } from '@/lib/utils/fpl-points';
+import { getAuthUser } from '@/lib/auth';
+
+// Public-safe user columns — never select password/email in any relational join.
+const SAFE_USER_COLUMNS = { id: true, name: true, avatar: true } as const;
 
 // GET /api/fpl/teams - Get user's FPL team(s)
 export async function GET(request: NextRequest) {
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
             const team = await db.query.fplTeams.findFirst({
                 where: eq(fplTeams.id, teamId),
                 with: {
-                    user: true,
+                    user: { columns: SAFE_USER_COLUMNS },
                 },
             });
 
@@ -29,6 +33,15 @@ export async function GET(request: NextRequest) {
         }
 
         if (userId) {
+            // Own teams only — a Fan's FPL team is personal (selections, budget), not public.
+            const authUser = await getAuthUser(request).catch(() => null);
+            if (!authUser) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            }
+            if (authUser.id !== userId && authUser.role !== 'admin') {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+
             // Get user's teams
             const teams = await db.query.fplTeams.findMany({
                 where: and(
@@ -36,7 +49,7 @@ export async function GET(request: NextRequest) {
                     eq(fplTeams.season, season)
                 ),
                 with: {
-                    user: true,
+                    user: { columns: SAFE_USER_COLUMNS },
                 },
                 orderBy: [desc(fplTeams.createdAt)],
             });
@@ -48,7 +61,7 @@ export async function GET(request: NextRequest) {
         const allTeams = await db.query.fplTeams.findMany({
             where: eq(fplTeams.season, season),
             with: {
-                user: true,
+                user: { columns: SAFE_USER_COLUMNS },
             },
             orderBy: [desc(fplTeams.totalPoints)],
             limit: 100,
@@ -64,8 +77,15 @@ export async function GET(request: NextRequest) {
 // POST /api/fpl/teams - Create new FPL team
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
-        const { userId, name, season = '2024/2025', initialSquad } = body;
+        const { name, season = '2024/2025', initialSquad } = body;
+        // Ownership is never client-supplied — always the verified session (CLAUDE.md audit-field rule).
+        const userId = authUser.id;
 
         if (!userId || !name) {
             return NextResponse.json(
@@ -173,7 +193,7 @@ export async function POST(request: NextRequest) {
         const newTeam = await db.query.fplTeams.findFirst({
             where: eq(fplTeams.id, teamId),
             with: {
-                user: true,
+                user: { columns: SAFE_USER_COLUMNS },
             },
         });
 
@@ -187,6 +207,11 @@ export async function POST(request: NextRequest) {
 // PATCH /api/fpl/teams - Update FPL team
 export async function PATCH(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { teamId, name, formation } = body;
 
@@ -200,6 +225,10 @@ export async function PATCH(request: NextRequest) {
 
         if (!team) {
             return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+        }
+
+        if (team.userId !== authUser.id && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const updates: any = {
@@ -216,7 +245,7 @@ export async function PATCH(request: NextRequest) {
         const updatedTeam = await db.query.fplTeams.findFirst({
             where: eq(fplTeams.id, teamId),
             with: {
-                user: true,
+                user: { columns: SAFE_USER_COLUMNS },
             },
         });
 

@@ -207,6 +207,23 @@ export async function GET(request: NextRequest) {
     }
 }
 
+// BACKLOG-397: explicit allow-list, not a raw `...matchData` spread -- an
+// unbounded spread let any field including approvalStatus/managerNotes/
+// approvedBy/loggerId be set at creation, bypassing both the admin-only
+// approval gate on PATCH and the assign-logger transaction's own validation.
+// Mirrors MATCH_LIST_FIELDS above: creation-time fields only, never the
+// admin-approval fields, never loggerId (assigned via its own endpoint),
+// never score/period/shootout fields (event-driven or PATCH-only).
+const MATCH_CREATE_FIELDS = [
+    'id', 'sport', 'homeTeamId', 'awayTeamId', 'status', 'startTime', 'venue',
+    'competition', 'competitionId', 'matchType', 'competitionLevel',
+    'friendlyType', 'friendlyDescription', 'highlightsUrl', 'livestreamUrl',
+    'livestreamType', 'livestreamEnabled', 'livestreamStartTime', 'round',
+    'matchday', 'groupName', 'livestreamEndTime', 'livestreamChatEnabled',
+    'livestreamChatUrl', 'penaltiesEnabledOverride', 'allowDrawsOverride',
+    'extraTimeEnabledOverride',
+] as const;
+
 export async function POST(request: NextRequest) {
     try {
         const authUser = await getAuthUser(request);
@@ -215,13 +232,17 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { stats, lineups, ...matchData } = body;
+        const { stats, lineups } = body;
+        const matchData: Record<string, unknown> = {};
+        for (const field of MATCH_CREATE_FIELDS) {
+            if (body[field] !== undefined) matchData[field] = body[field];
+        }
 
         // Ensure competition is never null/empty (database requires NOT NULL)
         // For friendly matches, use friendlyDescription or default to 'Friendly'
-        const competition = matchData.competition?.trim() ||
+        const competition = (matchData.competition as string | undefined)?.trim() ||
             (matchData.matchType === 'friendly'
-                ? (matchData.friendlyDescription?.trim() || 'Friendly')
+                ? ((matchData.friendlyDescription as string | undefined)?.trim() || 'Friendly')
                 : 'Unknown');
 
         matchData.competitionId = matchData.competitionId || null;
@@ -231,7 +252,7 @@ export async function POST(request: NextRequest) {
             competition,
             stats: stats ? JSON.stringify(stats) : null,
             lineups: lineups ? JSON.stringify(lineups) : null,
-        }).returning();
+        } as typeof matches.$inferInsert).returning();
 
         return NextResponse.json(newMatch[0], { status: 201 });
     } catch (error) {
