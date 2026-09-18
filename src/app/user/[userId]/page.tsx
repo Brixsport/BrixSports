@@ -155,7 +155,10 @@ export default function UserProfilePage() {
         );
     }
 
-    const isPrivate = profile.privacy.profileVisibility === 'private' && !isOwnProfile;
+    // Anything other than an explicit 'public' is restricted for non-owners ('friends'
+    // included, since there is no friend graph to check). The API already withholds the
+    // details; this only drives the "private" copy.
+    const isPrivate = profile.privacy.profileVisibility !== 'public' && !isOwnProfile;
 
     return (
         <div className="min-h-screen bg-background text-foreground">
@@ -213,10 +216,12 @@ export default function UserProfilePage() {
                                 )}
                             </div>
                             <div className="flex flex-wrap items-center gap-6 text-foreground/40">
-                                <span className="flex items-center gap-2 text-sm font-bold">
-                                    <Calendar size={14} />
-                                    Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                                </span>
+                                {profile.createdAt && (
+                                    <span className="flex items-center gap-2 text-sm font-bold">
+                                        <Calendar size={14} />
+                                        Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                                    </span>
+                                )}
                                 {profile.favoriteTeam && (
                                     <span className="flex items-center gap-2 text-sm font-bold text-primary">
                                         <Heart size={14} className="fill-primary" />

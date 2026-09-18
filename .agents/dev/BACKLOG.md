@@ -11961,15 +11961,28 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-405 — OPEN: `GET /api/users/[id]` Is Unauthenticated and Returns Email, Role and the Full Preferences Row for Any User ID
+### BACKLOG-405 — SHIPPED: `GET /api/users/[id]` Was Unauthenticated and Returned Email, Role and the Full Preferences Row for Any User ID
 
-**Status:** OPEN — found 2026-09-18 by source read while reviewing `BACKLOG-404`; not fixed (outside that task's scope). Not yet confirmed live.
+**Status:** SHIPPED — 2026-09-18, commit pending push. Found by source read while reviewing `BACKLOG-404`. **Live test NOT yet run** — not RESOLVED until an unauthenticated fetch on the deployed preview is confirmed to no longer return `email`/`role`.
 **Priority:** High — NDPR exposure (email + role to anonymous callers); a user's own `profileVisibility: 'private'` setting is not honored by this route.
 
 **What was found:** `src/app/api/users/[id]/route.ts` `GET` (L16-116) has no `getAuthUser()` call. It selects the full `users` row and returns it with only `password` nulled, so `email`, `role`, `favoriteTeamId`, `bio`, `avatar`, `coverImage` go to any caller, plus the full `user_preferences` row. The same file's `PATCH`, and the sibling `preferences` route's `GET`/`PATCH`/`DELETE`, all enforce self-or-admin — `GET` is the outlier. Same bug class as `BACKLOG-397`'s FPL relation leak (unrestricted select returned to an unauthenticated caller), but no secret column is involved here (the `users` table has no token columns; `password` is stripped).
 
-**Fix direction (not done):** own-or-admin gets the full row; everyone else, anonymous included, gets a curated DTO (name, avatar, bio, favorite team — nothing else) that honors `profileVisibility`. Grep the route's callers first (the public `/user/[userId]` page and this settings page are the likely two) so the curated shape does not break the public profile.
+**Callers checked before changing the shape** (grep of `src/`): only two real `GET` consumers — `src/app/profile/settings/page.tsx` (own data; needs `name`, and `email` for the disabled field) and `src/app/user/[userId]/page.tsx` (public profile; renders `name`, `avatar`, `coverImage`, `bio`, `createdAt`, favorite team `name`/`logo`, and the privacy flags — `email` was stored in its state but never rendered). `src/hooks/useUserProfile.ts` also calls it but the hook has no importers (dead code). Both real callers send no `Authorization` header and rely on the same-origin `authToken` cookie, which `getAuthUser` accepts.
 
-**Not verified:** no unauthenticated fetch against staging yet to confirm the leak end to end — source read only.
+**Fix (`src/app/api/users/[id]/route.ts`):**
+- `GET` now calls `getAuthUser()`. Owner or admin (`authUser.id === userId || role === 'admin'`): same full response as before, but via an explicit column list (`USER_OWNER_COLUMNS`) instead of a whole-row select plus `password: undefined`, and with `Cache-Control: private, no-store`.
+- Everyone else, anonymous included: `getPublicProfile()` — explicit `USER_PUBLIC_COLUMNS` (`id`, `name`, `avatar`, `coverImage`, `bio`, `favoriteTeamId`, `createdAt`), the three privacy flags only from `user_preferences`, and a favorite team curated to `id`/`name`/`logo`/`color` (was the full `teams` row). No `email`, `role`, other preferences, or favorite/follow counts.
+- Fails closed on visibility: anything other than an explicit `'public'` (including `'friends'`, since no friend graph exists to check) returns identity only (`id`, `name`, `avatar`) with `stats: null`. Previously the private check ran only in the client page while the server sent everything.
+- `src/app/user/[userId]/page.tsx`: `isPrivate` now `!== 'public'` (was `=== 'private'`), and the "Joined" line renders only when `createdAt` is present (the restricted response omits it, which would otherwise print "Joined Invalid Date").
+
+**Deliberately not done / assumptions:** name and avatar stay visible on a private profile (identity is needed to render the "private" page and already appears on public leaderboards); the client-side `isOwnProfile` (from localStorage) can disagree with the server's cookie-based owner check if a session has a token but no cookie — that user would see the curated view of their own profile, pre-existing auth-storage split, not addressed here; a user who chose `'friends'` now presents as private to everyone, which matches the setting's intent but is a visible behavior change.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `users/[id]/route.ts` or `user/[userId]/page.tsx`); caller grep as above.
+- Observed result: NOT live-tested.
+- Pending items: on the branch's Vercel preview — (1) unauthenticated `GET /api/users/<real id>?includeStats=true` returns no `email`, no `role`, no preferences beyond the three flags, and a favorite team with only `id`/`name`/`logo`/`color`; (2) the same call with a valid session cookie for that user returns the full response; (3) with a different non-admin user's cookie returns the curated response; (4) a user set to `private` returns `id`/`name`/`avatar` only, and `/user/<id>` renders the private state with no "Joined Invalid Date"; (5) `/user/<id>` for a public user still shows cover, joined date and favorite team; (6) `/profile/settings` still loads name and email for the signed-in user.
+**Files:** `src/app/api/users/[id]/route.ts`, `src/app/user/[userId]/page.tsx`.
 
 ---

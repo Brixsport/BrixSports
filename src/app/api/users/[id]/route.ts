@@ -9,9 +9,103 @@ import { users, userPreferences, userFavorites, userFollows, teams } from '@/db/
 import { eq, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
+// Explicit column lists (never a whole-row select): BACKLOG-405. `password` is
+// deliberately absent from both, so it never leaves the database layer.
+const USER_OWNER_COLUMNS = {
+    id: users.id,
+    email: users.email,
+    name: users.name,
+    avatar: users.avatar,
+    coverImage: users.coverImage,
+    bio: users.bio,
+    favoriteTeamId: users.favoriteTeamId,
+    role: users.role,
+    createdAt: users.createdAt,
+    updatedAt: users.updatedAt,
+};
+
+// What anyone other than the owner or an admin may see. No email, no role.
+const USER_PUBLIC_COLUMNS = {
+    id: users.id,
+    name: users.name,
+    avatar: users.avatar,
+    coverImage: users.coverImage,
+    bio: users.bio,
+    favoriteTeamId: users.favoriteTeamId,
+    createdAt: users.createdAt,
+};
+
+const PUBLIC_TEAM_COLUMNS = {
+    id: teams.id,
+    name: teams.name,
+    logo: teams.logo,
+    color: teams.color,
+};
+
+/**
+ * Curated profile for everyone except the owner/admin, anonymous included.
+ * Fails closed: anything other than an explicit 'public' visibility (this
+ * includes 'friends', since no friend graph exists to check against) gets
+ * identity only (id, name, avatar).
+ */
+async function getPublicProfile(userId: string, includeStats: boolean) {
+    const [user] = await db
+        .select(USER_PUBLIC_COLUMNS)
+        .from(users)
+        .where(eq(users.id, userId));
+
+    if (!user) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const [prefs] = await db
+        .select({
+            profileVisibility: userPreferences.profileVisibility,
+            showStats: userPreferences.showStats,
+            showActivity: userPreferences.showActivity,
+        })
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, userId));
+
+    const visibility = prefs?.profileVisibility ?? 'public';
+
+    if (visibility !== 'public') {
+        return NextResponse.json({
+            user: { id: user.id, name: user.name, avatar: user.avatar },
+            preferences: { profileVisibility: visibility },
+            stats: null,
+        });
+    }
+
+    let stats = null;
+    if (includeStats) {
+        let favoriteTeam = null;
+        if (user.favoriteTeamId) {
+            [favoriteTeam = null] = await db
+                .select(PUBLIC_TEAM_COLUMNS)
+                .from(teams)
+                .where(eq(teams.id, user.favoriteTeamId));
+        }
+        stats = { favoriteTeam };
+    }
+
+    return NextResponse.json({
+        user,
+        preferences: {
+            profileVisibility: 'public',
+            showStats: prefs?.showStats ?? true,
+            showActivity: prefs?.showActivity ?? true,
+        },
+        stats,
+    });
+}
+
 /**
  * GET user profile with stats
  * GET /api/users/[id]/route.ts?includeStats=true
+ *
+ * Owner or admin: full profile, preferences and stats. Everyone else,
+ * anonymous included: curated public profile (getPublicProfile).
  */
 export async function GET(
     request: NextRequest,
@@ -22,9 +116,15 @@ export async function GET(
         const { searchParams } = new URL(request.url);
         const includeStats = searchParams.get('includeStats') === 'true';
 
+        const authUser = await getAuthUser(request);
+        const isOwnerOrAdmin = !!authUser && (authUser.id === userId || authUser.role === 'admin');
+        if (!isOwnerOrAdmin) {
+            return await getPublicProfile(userId, includeStats);
+        }
+
         // Get user
         const [user] = await db
-            .select()
+            .select(USER_OWNER_COLUMNS)
             .from(users)
             .where(eq(users.id, userId));
 
@@ -98,14 +198,10 @@ export async function GET(
             };
         }
 
-        return NextResponse.json({
-            user: {
-                ...user,
-                password: undefined, // Don't send password
-            },
-            preferences,
-            stats,
-        });
+        return NextResponse.json(
+            { user, preferences, stats },
+            { headers: { 'Cache-Control': 'private, no-store' } }
+        );
     } catch (error) {
         console.error('Error fetching user profile:', error);
         return NextResponse.json(
