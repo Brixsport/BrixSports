@@ -1,129 +1,104 @@
 # Spec — Mobile Nav / IA Restructure (Later-bucket item 15)
 
 **Source findings:** `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` H1, H2, H3.
-**Prior art:** `BACKLOG.md` BACKLOG-388 — the literal fix (add Teams/Lineups/News directly
-into `BottomNav`, `grid-cols-6` at 375px) shipped 2026-09-15 and was **reverted same day**
-by Richard, reason undocumented beyond "reconsidered." A "dedicated More tab" was floated
-at revert time but never scoped.
-**This pass:** ran the `information-architecture` skill against the findings before writing
-anything, specifically because the last attempt skipped that step and got reverted.
-**Status:** SPEC ONLY — no code changed. This is a second attempt at a nav change Richard
-already reverted once; get an explicit go before implementing, unlike item 13 (backend-only,
-lower blast radius).
+**Prior art:** `BACKLOG.md` BACKLOG-388 — the literal fix (add Teams/Lineups/News directly into
+`BottomNav`, `grid-cols-6` at 375px) shipped 2026-09-15 and was reverted the same day.
+**Status:** APPROVED by Richard 2026-09-18 (revision 2), being built as `BACKLOG-406` (nav) and
+`BACKLOG-407` (competition header).
 
----
+## Revision history — why this differs from the first draft
 
-## The findings
+The first draft (commits `d6531ae`, `4f779e0`) recommended a global "More" tab in `BottomNav`
+that replaced the homepage hamburger. Richard pushed back ("the hamburger in the top bar is
+calm") and asked for the design team to re-assess. The re-assessment reversed the call:
 
-- **H1:** no `/players` browse page anywhere. Zero entry point, not a hop-count problem.
-- **H2:** `BottomNav` (global, persistent: Fixtures/Competitions/Profile) and the homepage's
-  own hamburger (homepage-only: Teams/All Competitions/Lineup Builder/News) are two
-  non-nested nav surfaces — neither a subset of the other, and the hamburger is unreachable
-  from anywhere except `/`.
-- **H3:** Lineup Builder — 🔴 High Volatility per `CLAUDE.md`, untested under real
-  multi-logger/multi-user load — carries the single heaviest promotional nav treatment in
-  the app (`UpdateTooltip` + persistent `NewFeatureBadge`, desktop and mobile both).
+- **"More" is the generic-label anti-pattern** the `information-architecture` skill itself warns
+  against ("Other", "Tools"). The first draft broke its own rule.
+- **The reference Richard supplied points the other way.** The Sofascore screen shows a gear icon
+  in the top bar opening a bottom sheet — a top-bar trigger with a bottom-sheet presentation, not
+  a bottom-nav tab.
+- **The reachability cost is one tap.** From any page: Fixtures tab, then the menu, then the
+  destination. That is inside the 3-hop rule, for destinations Richard says are not daily-use.
+- **A bottom-tab change is the kind already reverted once** (`BACKLOG-388`).
 
-## Richard's framing (verbatim, this session)
+What survived from the first draft: the task-frequency table (Teams, Players, News and Lineup
+Builder are all secondary), the `/players` browse page, and dropping Lineup Builder's promotional
+treatment everywhere.
 
-> "the lineup builder isnt a major or day to day activity task need to be on bottm nav bar
-> and unlinke desktop in the top nabar guess the hamburger menu is enough then?"
+## Decision
 
-His instinct: Lineup Builder isn't a daily-use action like Fixtures/Competitions, so it may
-not deserve primary-nav real estate at all — asked for this to be checked against real IA
-reasoning rather than either of us asserting it.
+1. **`BottomNav` is unchanged** — Fixtures, Competitions, Profile. No "More" tab.
+2. **The homepage hamburger stays in the top bar**, but its panel changes from a full-screen
+   overlay to a **bottom sheet** using the existing `src/components/ui/sheet.tsx` (`side="bottom"`).
+   That file is the Radix-based shadcn `new-york` component already in the repo; **no install and
+   no new dependency**. The Base UI `Sheet` snippet in the design brief targets a different style
+   (`base-nova`, `@base-ui/react`) and must not be added, since it would introduce a second dialog
+   primitive next to Radix.
+3. **Sheet contents:** Teams, Players *(new)*, All Competitions with the existing dynamic list,
+   Lineup Builder, News. Rows get a 44px minimum touch height.
+4. **Lineup Builder loses its `NewFeatureBadge` and `UpdateTooltip` on mobile and desktop.** The link
+   stays in the desktop top bar (position is fine there); only the promotion goes. Reason: 🔴
+   High Volatility feature, low-frequency task, and the Live Event Readiness checklist wants
+   exposure down, not up.
+5. **Desktop top bar gains a Players link.**
+6. **New `/players` browse page** (H1: there was no entry point at all).
 
-## IA assessment
+**Known limitation, accepted:** the top bar (and so the hamburger) exists only on `/`, because
+`page.tsx` renders its own `<nav>`. Making the header global is a much larger refactor and is out
+of scope. Mitigation: `Fixtures` in `BottomNav` is one tap from anywhere.
 
-Task-frequency is the load-bearing test for primary (persistent, thumb-reachable, every
-screen) vs. secondary (one hop away, opened on demand) nav placement — not "does this
-feature exist," which is the mistake BACKLOG-388 made by treating every top-level route as
-equally nav-worthy.
+## `/players` page (MVP scope)
 
-| Item | Real usage pattern | Frequency | Primary or secondary? |
-|---|---|---|---|
-| Fixtures | cold-start "what's live/next" | every session | **Primary** (already is) |
-| Competitions | cold-start hub, cross-cutting | frequent | **Primary** (already is) |
-| Profile | account/auth gate | every session | **Primary** (already is) |
-| Teams | reached contextually — tap a team name from a match/standings, rarely a cold "browse teams" start | moderate, contextual | Secondary |
-| Players | same contextual pattern as Teams; H1's gap is "no entry point at all," not "needs primary weight" | low, contextual | Secondary |
-| News | read-when-idle, not task-driven | low | Secondary |
-| Lineup Builder | build-once-per-matchday at most; a tool/action, not a content hub; still 🔴 untested at load | lowest of the set | Secondary — **confirms Richard's instinct** |
+- Client page at `src/app/players/page.tsx`; search box, sport chips (All, Football, Basketball),
+  list rows linking to the existing `/players/[id]`, "Load more".
+- Uses the existing `GET /api/players?search=&sport=&limit=&offset=`, which already returns a
+  public-stripped DTO (`toPublicPlayer`) and a `total`. Team names come from one `GET /api/teams`
+  call (bare array) mapped by `teamId`, because the public DTO strips `memberships`.
+- **Known limit, not fixed here:** that endpoint fetches at most 500 players and filters and pages
+  in memory (`db.select().from(players).limit(500)`), so the page only ever sees the first 500
+  players. Fine at today's ~309; needs real DB-side search and paging before it grows past 500.
+- Debounced search (300ms), stale-response guard, loading / empty / error states, a real
+  `<label>` on the search input, `aria-pressed` on the chips.
 
-**H2's actual defect isn't "too few items in BottomNav," it's two competing secondary
-surfaces that don't nest.** BACKLOG-388's fix put everything in the primary bar to collapse
-that into one surface — the wrong direction. The IA-correct collapse is the opposite: keep
-primary nav at its current frequency-justified size, and unify the *secondary* surface into
-one, made globally reachable instead of homepage-only.
+## Competition group header on the homepage (`BACKLOG-407`)
 
-## Recommendation
+Findings from the design critique of `page.tsx` (competition group header in the match list):
 
-- `BottomNav` stays 4 items: **Fixtures, Competitions, More, Profile**. `grid-cols-4` at
-  375px — well inside touch-target size, nowhere near the `grid-cols-6` squeeze that got
-  reverted.
-- **"More"** replaces the homepage-only hamburger as a single global secondary surface
-  (bottom sheet), reachable from every route `BottomNav` already renders on — not just `/`.
-  Contains: Teams, Players *(new)*, News, Lineup Builder. One coherent list, not two nav
-  surfaces to check depending on what a user wants — this is the actual fix for H2.
-- Lineup Builder's row inside "More" is a **plain list item** — no `NewFeatureBadge`, no
-  `UpdateTooltip`. Dropping the promotional treatment isn't a separate decision bolted on;
-  it falls out of the frequency table above, and it's also what the Live Event Readiness
-  Checklist's "🔴 features hidden from UI" line is actually asking for — this doesn't fully
-  satisfy that line (Lineup Builder is still reachable, just not promoted), but it stops
-  actively driving traffic toward an untested feature, which is the more actionable half of
-  that checklist item.
-- **`/players` browse page (H1):** minimal MVP-tier list/search view — reuse the existing
-  players search backend (`GlobalSearch`'s query or `/api/players` with pagination already
-  in place per `BACKLOG-395`'s configurable `.limit()` fix), no new design system, no filter
-  UI beyond what already exists. Linked from the new "More" sheet.
+- The header was `bg-muted` on a `bg-muted` card, so it blended into the card body.
+- Its `ChevronRight` was `text-foreground/20` — about 20% opacity, below the 3:1 non-text contrast
+  bar — and it was **not a link at all**: a dead affordance that looks tappable.
+- Matches were grouped by competition **name**, so two competitions sharing a name (same bug
+  class as `BACKLOG-401` #7 on `/teams`) merge into one group, and there was no id to link to.
 
-## Desktop top bar — corrected scope (Richard flagged this after first draft)
+Decision: **tinted, not solid primary.** Solid primary would repeat once per competition group
+and outrank the live score, and primary is reserved for active states and buttons (and was just
+darkened for AA in light mode, so it would be a heavy band).
 
-`src/app/page.tsx:413-427` (the `hidden md:flex` "Desktop Links" block, separate from the
-mobile hamburger at :848-851) renders Teams/Lineup Builder/News as permanent inline links.
-Lineup Builder there carries the identical `UpdateTooltip` + `NewFeatureBadge` treatment
-flagged in H3.
+- Header becomes a real `<Link>` to `/competitions/{id}` when the id is known (the API already
+  returns `competitionId`; the `Match` type just lacked it), `bg-primary/10` tint,
+  full-opacity title, primary trophy and chevron, `min-h-11` touch target.
+- Group by `competitionId` when present, falling back to the name.
+- Without an id it renders as a plain (non-link) header with no chevron, so there is never a
+  false affordance.
+- Alternative Richard did not pick: a 3px primary left edge instead of a tint.
 
-First draft of this spec left desktop untouched on the theory that "desktop has room, so
-the squeeze problem doesn't apply." That conflates two different things — **position**
-(does it fit in the bar: yes, desktop has room, no change needed there) and **promotion**
-(badge + tooltip actively flagging it as a hot new feature). The frequency argument from the
-IA assessment above (low-use, untested-at-load, shouldn't be pushed on users) doesn't
-depend on screen size — it's inconsistent to strip the badge/tooltip in mobile's "More" sheet
-while the identical badge/tooltip stays live on desktop.
+## Out of scope
 
-**Corrected scope:** Lineup Builder's link stays inline in the desktop top bar (position —
-desktop genuinely has the room, this isn't H2's squeeze problem). Drops `NewFeatureBadge`
-and the `UpdateTooltip` wrapper there too, same as its mobile "More" row — one consistent
-rule (untested 🔴 feature doesn't get promotional treatment anywhere), not a device-specific
-exception.
-
-## Explicitly not in this spec
-
-- **M1 (bell icon opens Settings, not Notifications)** — tracked separately as Later-bucket
-  item 24, nav-adjacent but a wiring bug, not an IA question.
-
-## Implementation notes (for when this is built)
-
-- "More" is a new small shared component (bottom sheet/drawer), not a page — same
-  interaction weight as the settings/notifications overlays already in the app.
-- Retire `page.tsx`'s homepage-only hamburger entirely once "More" ships — keeping both
-  would resurrect H2 (two surfaces again) rather than fix it.
-- `BottomNav.tsx`'s existing `hiddenRoutes` list (`/login`, `/signup`, `/admin`,
-  `/reset-password`, `/forgot-password`, `/lineup-builder`, `/logger`) is unaffected — "More"
-  inherits the same visibility rules as the rest of the bar.
+- **M1 (bell icon opens Settings, not Notifications)** — separate wiring bug, Later-bucket item 24.
+- A global header/top bar.
+- `BottomNav` changes of any kind.
 
 ## Test scenarios
 
-1. 375px `scrollWidth` vs `clientWidth` check on `BottomNav` post-change — this project's
-   own established verification method for this exact failure class (`BACKLOG-370`/`371`).
-2. From a non-homepage route (e.g. a match detail page), confirm Teams/Players/News/Lineup
-   Builder are all reachable via "More" — the concrete fix for H2's "hamburger is
-   homepage-only" gap.
-3. Confirm Lineup Builder's "More" row has no badge/tooltip, while the feature itself still
-   works end to end when tapped (demoted in nav weight, not removed).
-4. `/players` loads a real list, paginates, and each row links to the existing
-   `/players/[id]` detail page.
-5. Desktop top bar (`page.tsx:413-427`): Lineup Builder link still present and functional,
-   `NewFeatureBadge`/`UpdateTooltip` gone — confirm Teams/News in the same block are
-   unaffected (they never had the promotional wrapper to begin with).
+1. Mobile (375px), on `/`: menu button opens a bottom sheet; the sheet closes via the X, the
+   overlay, Escape, and after tapping a link. Contents are Teams, Players, All Competitions plus
+   the list, Lineup Builder, News, with no badge or tooltip on Lineup Builder.
+2. Sheet with a long competitions list scrolls inside the sheet and never exceeds 85vh; the iOS
+   safe-area inset is respected.
+3. Desktop (≥768px): top bar shows Teams, Players, Lineup Builder (plain link), News; no badge or
+   tooltip; the hamburger and sheet are not shown.
+4. `/players`: loads a list; search narrows it; sport chips filter; "Load more" appends;
+   empty and error states render; each row opens `/players/[id]`; back button works.
+5. Homepage match list: each competition header is tinted, links to `/competitions/{id}`, and a
+   duplicate-named competition no longer merges into a single group.
+6. Both themes: header tint and chevron are visible in light and dark.

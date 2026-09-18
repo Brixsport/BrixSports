@@ -1,103 +1,131 @@
-# Spec — Backscoped-Feature API Guard (Later-bucket item 13)
+# Spec — Backscope Route Guard: Pages and APIs from One Registry (Later-bucket item 13)
 
 **Source finding:** `ENGINEERING_AUDIT_2026-09-17.md` C2 — "Backscoped features leave live,
-unauthenticated write endpoints reachable underneath `notFound()` pages." Priority Critical,
-effort estimated Medium ("shared feature-flag guard").
-**Backscope entries affected:** `BACKSCOPE.md` — `/fpl/*`, `/predictions`, `Polls UI` (all filed
-under `BACKLOG-028`, gap itself found session 47D under `BUG-147`).
-**Status:** SPEC ONLY — no code changed yet. Sequenced ahead of item 15 (IA/nav restructure)
-per Richard + peer session agreement, 2026-09-18.
+unauthenticated write endpoints reachable underneath `notFound()` pages." Priority Critical.
+**Backscope entries affected:** `BACKSCOPE.md` — `/fpl/*`, `/predictions`, Polls UI (`BACKLOG-028`;
+gap found session 47D, `BUG-147`), plus `/scouts` and `/nesa-registration` (pages only).
+**Status:** SPEC ONLY — no code changed yet. Revised 2026-09-18 after Richard asked for the
+guard to cover **pages as well as APIs, automatically**, and after re-verifying the route state
+against current source (the first draft's problem table was partly stale — see below).
 
 ---
 
 ## Problem
 
-`notFound()` on a page component only removes the *page*. The API routes underneath keep
-running with their original (missing) auth checks:
+`notFound()` on a page only removes the page. Two things go wrong from that:
 
-| Feature | Route(s) | Gap |
+1. The API routes underneath keep running with whatever auth they had.
+2. Protection is per-file and manual: a new page or route added under a backscoped feature is
+   live by default, and "is this feature really dead?" has to be re-answered file by file.
+
+### Current state, re-verified against source 2026-09-18 (`getAuthUser` calls per file)
+
+| Route file | Methods | Auth today |
 |---|---|---|
-| FPL | `src/app/api/fpl/{teams,leagues,leagues/join,transfers,players}/route.ts` | `POST`/write handlers take `userId` straight from the request body — no session check |
-| Predictions | `src/app/api/predictions/route.ts` (`POST`/`PUT`) | zero auth on writes |
-| Polls | `src/app/api/polls/route.ts` (`POST`/`PATCH`), `src/app/api/polls/comments/route.ts` | `createdBy` optional, body-supplied |
+| `api/fpl/teams/route.ts` | GET POST PATCH | **Authenticated** — `BACKLOG-397` |
+| `api/fpl/leagues/route.ts` | GET POST PATCH DELETE | none |
+| `api/fpl/leagues/join/route.ts` | POST DELETE | none |
+| `api/fpl/players/route.ts` | GET POST | none |
+| `api/fpl/transfers/route.ts` | GET POST | none |
+| `api/polls/route.ts` | GET POST PATCH | none |
+| `api/polls/vote/route.ts` | POST GET | none |
+| `api/polls/comments/route.ts` | GET POST DELETE | none |
+| `api/polls/comments/like/route.ts` | POST GET | none |
+| `api/predictions/route.ts` | GET POST PUT | **Authenticated** — `BUG-222`, session 51 |
+| `api/predictions/leaderboard/route.ts`, `stats/route.ts` | GET | none (read-only) |
 
-None of this is reachable through the UI (pages are `notFound()`'d), so real-world exposure is
-low — but the routes are live in production today for anyone who finds them directly. `staff-comms`
-(a related but different case — a *working* feature pulled for an auth gap) already got a direct
-fix in `api/staff-comms/route.ts`; this spec is for the "feature was never really built" category
-instead, where the correct fix is to stop the route from doing anything at all, not to harden it.
+**Correction to the first draft:** it listed predictions as having zero auth on writes. That was
+copied from `BACKSCOPE.md`'s session-47D note without re-checking; `BUG-222` fixed it in
+session 51 and `CLAUDE.md`'s checklist says so. The real remaining gap is 4 FPL files and all 4
+polls files, write methods included.
 
 ## Why not reuse `src/lib/featureFlags.ts` as-is
 
-That module (`isFeatureEnabled`, backing the admin Settings flags panel) is **fail-open by
-design**: an unrecognized key or a DB error both return `true`. That's the right polarity for a
-*live* feature someone might be mid-toggle on — a flag going down must never be the reason a
-working feature vanishes for users.
+`isFeatureEnabled` is **fail-open by design** (unknown key or DB error returns `true`) — right
+for a live feature someone is mid-toggle on, wrong for a dead one. Backscoped features must be
+dead by default, and a DB hiccup must never bring one back. Reusing it would invert the safety
+property this fix exists to add.
 
-Backscoped features need the opposite default: dead by default, and a DB hiccup must never be
-the reason a route that's supposed to be dead comes back alive. A shared primitive with fail-open
-semantics is the wrong tool here even though the name ("feature flag") sounds like a fit — reusing
-it verbatim would silently invert the safety property this fix exists to add.
+## Proposed mechanism: one registry, enforced in middleware
 
-## Proposed primitive
+`src/middleware.ts` already runs on every request — its matcher is the catch-all
+`'/((?!_next/static|_next/image|favicon\\.ico).*)'`. That means:
 
-A static, code-only allow-list — no DB table, no admin UI, no request-time I/O:
+- **No matcher change is needed**, so `CLAUDE.md`'s "middleware matcher and internal logic do
+  not match" anti-pattern is avoided by construction, not by care.
+- One check covers pages **and** APIs, and covers any route added later under a registered
+  prefix without anyone remembering to guard it. That is the "auto guard" Richard asked for.
+- It replaces editing ~12 route files with one registry plus one middleware block.
 
-**`src/lib/backscopedApiGuard.ts`**
+**`src/lib/backscopedFeatures.ts`** — static, no DB, no env, Edge-safe:
+
 ```ts
-// Mirrors BACKSCOPE.md. A key here means every route under it 404s unconditionally.
-// Reinstating a feature = delete its key here in the same commit that un-notFound()s
-// the page (see BACKSCOPE.md's own "Reinstate when" line for each entry).
-const BACKSCOPED_FEATURES = new Set([
-  'fpl',          // BACKSCOPE.md: /fpl/* -- BACKLOG-028
-  'predictions',  // BACKSCOPE.md: /predictions -- BACKLOG-028
-  'polls',        // BACKSCOPE.md: Polls UI -- BACKLOG-028
-]);
+// Mirrors BACKSCOPE.md. Every path under a listed prefix 404s, pages and APIs alike.
+// Reinstating a feature = delete its entry here in the same commit that removes the
+// notFound() from its page (BACKSCOPE.md's "Reinstate when" line for each entry).
+export const BACKSCOPED_FEATURES = [
+  { key: 'fpl',          prefixes: ['/fpl', '/api/fpl'],               ref: 'BACKLOG-028' },
+  { key: 'predictions',  prefixes: ['/predictions', '/api/predictions'], ref: 'BACKLOG-028' },
+  { key: 'polls',        prefixes: ['/api/polls'],                     ref: 'BACKLOG-028' },
+  { key: 'scouts',       prefixes: ['/scouts'],                        ref: 'BACKLOG-028' },
+  { key: 'nesa',         prefixes: ['/nesa-registration'],             ref: 'BACKLOG-028' },
+] as const;
 
-export function guardBackscopedRoute(featureKey: string) {
-  if (BACKSCOPED_FEATURES.has(featureKey)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-  return null; // caller falls through to real handler logic
+export function isBackscopedPath(pathname: string): boolean {
+  return BACKSCOPED_FEATURES.some(f =>
+    f.prefixes.some(p => pathname === p || pathname.startsWith(p + '/')));
 }
 ```
 
-Call at the top of every affected handler:
+The `p + '/'` boundary matters: `/fpl` must not swallow a future `/fplayers`.
+
+**In `middleware()`, first thing, before the staging auth gate** (so behavior is identical in
+staging and prod, and an unauthenticated staging request gets the same 404 rather than a login
+redirect that hints the route exists):
+
 ```ts
-export async function POST(request: NextRequest) {
-  const blocked = guardBackscopedRoute('fpl');
-  if (blocked) return blocked;
-  // ...existing handler unchanged
+if (isBackscopedPath(pathname)) {
+  return pathname.startsWith('/api/')
+    ? NextResponse.json({ error: 'Not found' }, { status: 404 })
+    : NextResponse.rewrite(new URL('/_backscoped', request.url)); // no such route -> app not-found.tsx, 404 status
 }
 ```
 
-Gates the whole route file (GET included), not just the write methods the audit flagged —
-simpler and more consistent with the page already being fully `notFound()`'d; no legitimate
-caller should reach any method on a route whose page doesn't exist.
+The rewrite target deliberately does not exist, so Next renders the app's own `not-found.tsx`
+with a real 404 status. Existing `notFound()` stubs in the pages stay as defense in depth;
+they are not removed by this.
 
-## Rollout (pilot = the three confirmed gaps, nothing else)
+**Middleware is not being used as an auth check here.** `CLAUDE.md` says handlers must not rely
+on middleware as the *sole auth check*. This is a route kill-switch for features that do not
+exist yet, not an authorization decision, so the rule does not apply. Any feature that is
+reinstated leaves the registry and goes back to per-handler `getAuthUser()`.
 
-- `fpl` → all 5 files under `src/app/api/fpl/**/route.ts`
-- `predictions` → `src/app/api/predictions/route.ts`, `leaderboard/route.ts`, `stats/route.ts`
-- `polls` → `src/app/api/polls/route.ts`, `vote/route.ts`, `comments/route.ts`, `comments/like/route.ts`
+## Scope
 
-**Explicitly not touched by this primitive:**
-- `/scouts`, `/nesa-registration` — no API routes exist, nothing to gate
-- `/auth/signin` (NextAuth) — stays live intentionally, tracked separately under `BACKLOG-009`
-- `staff-comms` — already fixed in place with real auth, not a "dead feature" case
-- notification preferences (`BACKLOG-103`) — was never built, no live route to gate
+- **In:** the registry above, the middleware block, and one test per prefix (below).
+- **Out:** an admin toggle UI or DB-backed flag (over-engineering for MVP — these features do not
+  exist; a code change and redeploy is the right weight, matching how `BACKSCOPE.md` is
+  maintained). `/auth/signin` and `api/auth/[...nextauth]` (NextAuth stays live, tracked as
+  `BACKLOG-009`). `staff-comms` (working feature, already fixed in place). Notification
+  preferences (`BACKLOG-103`, nothing was built).
 
-## Test scenario
+## Risks
 
-Before: `curl -X POST /api/fpl/teams -d '{"userId":"<any-id>","name":"x"}'` → 200, writes a row
-attributed to any user.
-After: same request → 404, no DB write. Manually re-run for one route per feature (fpl/teams,
-predictions, polls) plus one already-working flow (e.g. `/api/matches` POST) to confirm the
-guard doesn't false-positive on live routes.
+- Middleware runs on every request; the check is a handful of `startsWith` comparisons on a
+  static array — negligible, but it is on the hot path, so keep it allocation-free.
+- If a prefix is registered by mistake (e.g. `/fpl` typo'd broader), live routes 404. Mitigated
+  by the boundary check plus the "live route still works" test below.
+- The registry can drift from `BACKSCOPE.md`. Acceptable at this size; a `dev/` script that
+  diffs the two is a possible later addition, not part of this item.
 
-## Out of scope (flagging per CLAUDE.md anti-pattern list)
+## Test scenarios
 
-FLAG: an admin-facing toggle UI for this, or a DB-backed version, would be overengineering for
-MVP tier — these are routes for features that don't exist yet, not routes an admin needs to
-flip live. A code change + redeploy is the correct weight, matching how `BACKSCOPE.md` itself is
-already maintained (hand-edited markdown, not a live toggle).
+1. Unauthenticated `POST /api/fpl/leagues` — before: reaches the handler; after: 404 JSON, no DB
+   row (read-back to confirm nothing was written).
+2. `GET /fpl` and `GET /predictions` — 404 with the app's not-found page and a real 404 status.
+3. `POST /api/polls` and `POST /api/polls/vote` — 404.
+4. A **new, nonexistent** route under a registered prefix (e.g. `/api/fpl/anything`) — 404
+   (proves it is automatic, not per-file).
+5. Live routes unaffected: `GET /api/matches`, `GET /`, `POST /api/auth/login` still behave; and
+   `/fplayers` (boundary check) is not swallowed.
+6. Staging: the same 404 for an unauthenticated request, not a `/login` redirect.
