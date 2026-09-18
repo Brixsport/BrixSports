@@ -34,7 +34,7 @@ jobs:
 
       - name: Run critical-flows smoke test
         env:
-          BASE_URL: https://brixsports-staging.vercel.app
+          BASE_URL: ${{ vars.STAGING_BASE_URL }}
           TURSO_CONNECTION_URL: ${{ secrets.TURSO_CONNECTION_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
