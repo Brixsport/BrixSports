@@ -98,6 +98,13 @@ export default function MatchDetailClient() {
 
     const [matchData, setMatchData] = useState<MatchData | null>(null);
     const [loading, setLoading] = useState(true);
+    // BACKLOG-394: distinguishes a genuinely-missing match (404, real content
+    // absence) from a transient load failure (network error, 500, etc.) on the
+    // INITIAL load only -- BUG-236 already made every later silent background
+    // poll (10s disconnect poll, 25s reconciliation poll) preserve last-known
+    // matchData on failure instead of reverting to null, so this only needed
+    // to cover the first fetch, not every subsequent one.
+    const [loadError, setLoadError] = useState<'not-found' | 'load-failed' | null>(null);
     // BACKLOG-207: replaces the dead single Heart (pure local useState, no API
     // call, reset on reload) with two real per-team follow stars -- toggleTeam()
     // already works and is already the exact thing sendMatchEventNotification()
@@ -462,9 +469,17 @@ export default function MatchDetailClient() {
             // real initial load should fall through to the existing "Match not found" UI.
             if (!response.ok || !data?.match || !Array.isArray(data?.events)) {
                 console.error('fetchMatchData: unexpected response shape', { status: response.status, silent, data });
-                if (!silent) setMatchData(null);
+                if (!silent) {
+                    setMatchData(null);
+                    // BACKLOG-394 P0-3: a 404 means the match genuinely doesn't exist;
+                    // any other bad response (500, malformed body, etc.) is a load
+                    // failure that deserves a retry, not the same "not found" message.
+                    setLoadError(response.status === 404 ? 'not-found' : 'load-failed');
+                }
                 return;
             }
+
+            if (!silent) setLoadError(null);
 
             if (silent) {
                 // BUG-113: diff/merge instead of a wholesale replace on every silent poll —
@@ -497,6 +512,14 @@ export default function MatchDetailClient() {
             }
         } catch (error) {
             console.error('Error fetching match:', error);
+            // BACKLOG-394 P0-3: fetch() itself threw (offline, DNS, CORS) -- no
+            // response to read a status from, but this is unambiguously a load
+            // failure, never a confirmed "doesn't exist". Silent polls intentionally
+            // leave matchData/loadError untouched here (BUG-236's existing behavior).
+            if (!silent) {
+                setMatchData(null);
+                setLoadError('load-failed');
+            }
         } finally {
             if (!silent) setLoading(false);
         }
@@ -511,6 +534,26 @@ export default function MatchDetailClient() {
     }
 
     if (!matchData) {
+        // BACKLOG-394 P0-3: a real load failure (network/server error) reads as
+        // honest and retriable, distinct from a confirmed-absent match -- telling
+        // a viewer on a flaky connection their match "wasn't found" when the real
+        // problem is their network is actively misleading.
+        if (loadError === 'load-failed') {
+            return (
+                <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold mb-2">Couldn't load this match</h2>
+                        <p className="text-foreground/60 text-sm mb-4">Check your connection and try again.</p>
+                        <button
+                            onClick={() => fetchMatchData()}
+                            className="text-primary hover:underline"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            );
+        }
         return (
             <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
                 <div className="text-center">
