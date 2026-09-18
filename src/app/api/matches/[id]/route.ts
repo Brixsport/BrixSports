@@ -718,7 +718,13 @@ export async function PATCH(
                 updateData.extraTime = null;
             }
         }
-        if (body.loggerId !== undefined) updateData.loggerId = body.loggerId;
+        // BACKLOG-398 medium: was writable by any assigned logger, unlike the
+        // neighboring homeScore/awayScore/approvalStatus fields on this same
+        // route which are correctly admin-gated -- not a privilege-escalation
+        // path (real logging authorization runs through matchLoggerAssignments,
+        // untouched by this field) but a silent data-integrity gap on an
+        // admin-attribution field.
+        if (body.loggerId !== undefined && authUser.role === 'admin') updateData.loggerId = body.loggerId;
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
         if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
 
