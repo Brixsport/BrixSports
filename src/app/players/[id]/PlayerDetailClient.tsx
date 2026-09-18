@@ -6,12 +6,14 @@ import { motion } from 'framer-motion';
 import {
     ArrowLeft, Star, Trophy, Target, Shield,
     TrendingUp, Activity, Calendar, History,
-    Clock, BarChart3, Table2, ChevronRight,
+    Clock, BarChart3, Table2, ChevronRight, Circle, Zap,
 } from 'lucide-react';
+import { FaFutbol } from 'react-icons/fa';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { PlayerAvatar } from '@/lib/utils/player-avatar';
 import { useFavorites } from '@/hooks/useFavorites';
+import { displayMinute } from '@/lib/eventMinute';
 
 interface PlayerData {
     player: any;
@@ -109,27 +111,35 @@ export default function PlayerDetailClient() {
         return isNaN(d.getTime()) ? null : format(d, 'MMM yyyy');
     };
 
+    // BACKLOG-401 #2: event.type is stored Title Case ("Goal", "Yellow Card"
+    // -- see the API route's own comment), but this switch compared it
+    // case-sensitively against ALL-CAPS constants, so every single event fell
+    // through to the emoji default -- confirmed live as the "📋" repeated on
+    // every badge on a real player profile. Normalizes first, same pattern
+    // already used by LiveMatchTimeline.tsx's own getEventIcon. Also swapped
+    // emoji for the same real icon components LiveMatchTimeline.tsx already
+    // uses, for visual consistency across the app rather than a second,
+    // divergent icon language.
     const getEventIcon = (eventType: string, sport?: string) => {
-        // Basketball events
+        const type = eventType.toUpperCase().replace(/\s+/g, '_');
         if (sport === 'Basketball') {
-            switch (eventType) {
-                case 'BASKET_2PT': return '🏀';
-                case 'BASKET_3PT': return '🎯';
-                case 'FREE_THROW': return '🎪';
-                case 'STEAL': return '⚡';
-                case 'BLOCK': return '🛡️';
-                case 'REBOUND': return '↩️';
-                case 'ASSIST': return '🤝';
-                default: return '📋';
+            switch (type) {
+                case 'BASKET_2PT': return <Target className="w-3.5 h-3.5" />;
+                case 'BASKET_3PT': return <Target className="w-3.5 h-3.5 text-primary" />;
+                case 'FREE_THROW': return <Circle className="w-3.5 h-3.5" />;
+                case 'STEAL': return <Zap className="w-3.5 h-3.5" />;
+                case 'BLOCK': return <Shield className="w-3.5 h-3.5" />;
+                case 'REBOUND': return <TrendingUp className="w-3.5 h-3.5 rotate-180" />;
+                case 'ASSIST': return <TrendingUp className="w-3.5 h-3.5" />;
+                default: return <Activity className="w-3.5 h-3.5" />;
             }
         }
-        // Football events
-        switch (eventType) {
-            case 'GOAL': return '⚽';
-            case 'ASSIST': return '🎯';
-            case 'YELLOW_CARD': return '🟨';
-            case 'RED_CARD': return '🟥';
-            default: return '📋';
+        switch (type) {
+            case 'GOAL': return <FaFutbol className="w-3.5 h-3.5" />;
+            case 'ASSIST': return <TrendingUp className="w-3.5 h-3.5" />;
+            case 'YELLOW_CARD': return <div className="w-2.5 h-3.5 rounded-[2px] bg-yellow-400 inline-block" />;
+            case 'RED_CARD': return <div className="w-2.5 h-3.5 rounded-[2px] bg-red-600 inline-block" />;
+            default: return <Activity className="w-3.5 h-3.5" />;
         }
     };
 
@@ -404,9 +414,9 @@ export default function PlayerDetailClient() {
                                                         {matchData.events.map((event: any, idx: number) => (
                                                             <span
                                                                 key={idx}
-                                                                className="px-2 py-1 bg-primary/20 text-primary rounded text-xs"
+                                                                className="px-2 py-1 bg-primary/20 text-primary rounded text-xs inline-flex items-center gap-1"
                                                             >
-                                                                {getEventIcon(event.type, playerSport)} {event.minute}'
+                                                                {getEventIcon(event.type, playerSport)} {displayMinute(event.minute)}'
                                                             </span>
                                                         ))}
                                                     </div>
