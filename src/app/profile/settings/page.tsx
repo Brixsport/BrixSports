@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
     Settings, User, Bell, Lock, Globe, Palette, Eye, Shield,
-    Mail, Smartphone, Moon, Sun, Volume2, VolumeX, Save, ChevronRight, Loader2
+    Mail, Smartphone, Moon, Sun, Volume2, VolumeX, Check, ChevronRight, Loader2
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,7 +16,16 @@ export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
     const { setTheme } = useTheme();
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+
+    // Auto-save bookkeeping. `confirmed` holds the last server-accepted value per
+    // key (the rollback target on failure); `saveSeq` lets a stale failure skip its
+    // rollback when a newer change to the same key has since been made.
+    const confirmed = useRef<Record<string, unknown>>({});
+    const saveSeq = useRef<Record<string, number>>({});
+    const loadedName = useRef('');
+    const [pending, setPending] = useState(0);
+    const [lastResult, setLastResult] = useState<'saved' | 'error' | null>(null);
+    const [nameError, setNameError] = useState<string | null>(null);
 
     const [showPasswordModal, setShowPasswordModal] = useState(false);
 
@@ -70,6 +79,7 @@ export default function SettingsPage() {
                 const userResponse = await fetch(`/api/users/${user.id}`);
                 if (userResponse.ok) {
                     const userData = await userResponse.json();
+                    loadedName.current = userData.user.name || '';
                     setSettings(prev => ({
                         ...prev,
                         name: userData.user.name || '',
@@ -120,65 +130,83 @@ export default function SettingsPage() {
         loadSettings();
     }, [user]);
 
-    const updateSetting = (key: string, value: any) => {
-        setSettings(prev => ({ ...prev, [key]: value }));
-    };
+    // Local settings key -> preferences API field, where they differ.
+    const PREF_API_KEY: Record<string, string> = { pushNotifications: 'notifications' };
 
-    const handleSave = async () => {
+    // Each control saves only its own field. The old Save button sent every field
+    // at once, so a slow or failed initial load could overwrite real stored
+    // preferences with this form's defaults; a single-field PATCH cannot.
+    const saveField = async (key: string, value: unknown) => {
         if (!user?.id) {
             toast.error('You must be logged in to save settings');
             return;
         }
-
+        if (!(key in confirmed.current)) {
+            confirmed.current[key] = (settings as Record<string, unknown>)[key];
+        }
+        const seq = (saveSeq.current[key] = (saveSeq.current[key] ?? 0) + 1);
+        setPending(n => n + 1);
         try {
-            setSaving(true);
-
-            // Update user profile
-            const profileResponse = await fetch(`/api/users/${user.id}`, {
+            const res = await fetch(`/api/users/${user.id}/preferences`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: settings.name,
-                }),
+                body: JSON.stringify({ [PREF_API_KEY[key] ?? key]: value }),
             });
-
-            if (!profileResponse.ok) {
-                throw new Error('Failed to update profile');
-            }
-
-            // Update user preferences
-            const prefsResponse = await fetch(`/api/users/${user.id}/preferences`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    theme: settings.theme,
-                    language: settings.language,
-                    timezone: settings.timezone,
-                    defaultView: settings.defaultView,
-                    notifications: settings.pushNotifications,
-                    matchAlerts: settings.matchAlerts,
-                    emailNotifications: settings.emailNotifications,
-                    favoriteTeamUpdates: settings.favoriteTeamUpdates,
-                    weeklyDigest: settings.weeklyDigest,
-                    profileVisibility: settings.profileVisibility,
-                    showStats: settings.showStats,
-                    showActivity: settings.showActivity,
-                    soundEffects: settings.soundEffects,
-                    animations: settings.animations,
-                    compactMode: settings.compactMode,
-                }),
-            });
-
-            if (!prefsResponse.ok) {
-                throw new Error('Failed to update preferences');
-            }
-
-            toast.success('Settings saved successfully!');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            confirmed.current[key] = value;
+            setLastResult('saved');
         } catch (error) {
-            console.error('Error saving settings:', error);
-            toast.error('Failed to save settings');
+            console.error(`Error saving setting "${key}":`, error);
+            if (saveSeq.current[key] === seq) {
+                setSettings(prev => ({ ...prev, [key]: confirmed.current[key] }));
+                if (key === 'theme') setTheme(String(confirmed.current[key]));
+            }
+            setLastResult('error');
+            toast.error("Couldn't save that change, so it was reverted");
         } finally {
-            setSaving(false);
+            setPending(n => n - 1);
+        }
+    };
+
+    const updateSetting = (key: string, value: any) => {
+        setSettings(prev => ({ ...prev, [key]: value }));
+        // Name is a free-text field: committed on blur (commitName), not per keystroke.
+        if (key !== 'name') void saveField(key, value);
+    };
+
+    const commitName = async () => {
+        const trimmed = settings.name.trim();
+        if (trimmed === loadedName.current) {
+            setNameError(null);
+            return;
+        }
+        if (trimmed.length < 2 || trimmed.length > 100) {
+            setNameError('Name must be 2 to 100 characters');
+            return;
+        }
+        if (!user?.id) {
+            toast.error('You must be logged in to save settings');
+            return;
+        }
+        setNameError(null);
+        setPending(n => n + 1);
+        try {
+            const res = await fetch(`/api/users/${user.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: trimmed }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            loadedName.current = trimmed;
+            setSettings(prev => ({ ...prev, name: trimmed }));
+            setLastResult('saved');
+        } catch (error) {
+            console.error('Error saving name:', error);
+            setSettings(prev => ({ ...prev, name: loadedName.current }));
+            setLastResult('error');
+            toast.error("Couldn't save your name, so it was reverted");
+        } finally {
+            setPending(n => n - 1);
         }
     };
 
@@ -192,9 +220,10 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-3 mb-2">
                         <Settings size={16} className="text-primary" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">Preferences</span>
+                        <SaveStatus pending={pending} lastResult={lastResult} />
                     </div>
                     <div className="flex items-center gap-2">
-                        <BackButton />
+                        <BackButton fallbackHref="/profile" forceShow />
                         <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Settings</h1>
                     </div>
                 </div>
@@ -212,9 +241,17 @@ export default function SettingsPage() {
                                 id="settings-name"
                                 type="text"
                                 value={settings.name}
+                                maxLength={100}
+                                aria-invalid={nameError ? true : undefined}
+                                aria-describedby={nameError ? 'settings-name-error' : undefined}
                                 onChange={(e) => updateSetting('name', e.target.value)}
+                                onBlur={commitName}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                 className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all w-full max-w-xs"
                             />
+                            {nameError && (
+                                <p id="settings-name-error" role="alert" className="text-xs text-red-500 mt-1">{nameError}</p>
+                            )}
                         </SettingRow>
                         <SettingRow label="Email Address" inputId="settings-email">
                             <input
@@ -407,26 +444,6 @@ export default function SettingsPage() {
                     </SettingsSection>
                 </div>
 
-                {/* Save Button */}
-                <div className="flex justify-end">
-                    <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="px-8 py-4 bg-primary text-primary-foreground rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20 disabled:bg-primary/60 disabled:cursor-not-allowed disabled:hover:scale-100"
-                    >
-                        {saving ? (
-                            <>
-                                <Loader2 size={20} className="animate-spin" />
-                                Saving...
-                            </>
-                        ) : (
-                            <>
-                                <Save size={20} />
-                                Save Changes
-                            </>
-                        )}
-                    </button>
-                </div>
             </div>
 
             {/* Change Password Modal */}
@@ -483,10 +500,30 @@ function SettingRow({ label, children, inputId }: { label: string; children: Rea
     );
 }
 
+// Shown only from real request outcomes: "Saved" appears after the server
+// accepted a change, never optimistically.
+function SaveStatus({ pending, lastResult }: { pending: number; lastResult: 'saved' | 'error' | null }) {
+    let content: React.ReactNode = null;
+    if (pending > 0) {
+        content = (<><Loader2 size={14} className="animate-spin" />Saving...</>);
+    } else if (lastResult === 'saved') {
+        content = (<><Check size={14} className="text-green-500" />Saved</>);
+    } else if (lastResult === 'error') {
+        content = (<span className="text-red-500">Not saved</span>);
+    }
+    return (
+        <div role="status" aria-live="polite" className="ml-auto flex items-center gap-1.5 text-xs font-bold text-foreground/60 min-h-[1rem]">
+            {content}
+        </div>
+    );
+}
+
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (val: boolean) => void }) {
     // ... (implementation remains same)
     return (
         <button
+            role="switch"
+            aria-checked={enabled}
             onClick={() => onChange(!enabled)}
             className={`relative w-14 h-8 rounded-full transition-all ${enabled ? 'bg-primary' : 'bg-muted'
                 }`}

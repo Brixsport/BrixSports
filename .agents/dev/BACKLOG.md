@@ -11933,3 +11933,43 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 - Also worth noting: `src/app/layout.tsx` globally mounts NextAuth's `SessionProvider` (wraps every single page), which fetches `/api/auth/session` on every load and logs a `[next-auth][error][CLIENT_FETCH_ERROR]` on failure — this is NOT the crash cause (next-auth catches this internally, doesn't throw), but it is real, confirmed dead weight: per `BUG-148`'s own history, this NextAuth integration is "functionally complete in isolation, but never invoked by any UI button" — a global provider making a network call on every page load for a feature no button wires up to. Worth removing entirely in a later pass, filed here rather than opening a new entry for something this small.
 
 ---
+
+### BACKLOG-404 — /profile/settings: No Back Control in Browser Mode, No Fallback for a Cold PWA Open, and a Manual "Save Changes" Button That Could Overwrite Stored Preferences
+
+**Status:** SHIPPED — 2026-09-18, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Medium — Richard-requested UX fix plus a latent data-integrity hazard in the old save model.
+
+**Root cause:**
+1. `<BackButton />` on this page used its defaults (`forceShow=false`, no `fallbackHref`): the component hides itself entirely in browser mode by design, and in an installed PWA opened cold (deep link/share target, `history.length <= 2`) `router.back()` has no in-app destination.
+2. The explicit "Save Changes" button PATCHed the name plus all ~13 preference fields at once from local form state. Two consequences: unsaved edits were silently discarded on navigation (worse now that a back control exists), and if the initial preferences load was slow or failed, pressing Save would overwrite the user's stored preferences with this form's hardcoded defaults. Theme also applied live via `setTheme` but reached the DB only on Save.
+
+**Fix (`src/app/profile/settings/page.tsx`):**
+- `<BackButton fallbackHref="/profile" forceShow />` — visible in browser and PWA, falls back to `/profile` on a cold open.
+- Removed the Save button. Every toggle/select/theme control now PATCHes only its own field to `/api/users/[id]/preferences` immediately (`pushNotifications` maps to the API's `notifications` field). Optimistic, rolls back to the last server-confirmed value on failure; a per-key sequence counter stops a stale failure from rolling back a newer change.
+- Name saves on blur/Enter via `/api/users/[id]`, validated 2-100 chars (same bounds as the signup schema), inline `role="alert"` error, no request fired when invalid or unchanged.
+- New `SaveStatus` indicator (`role="status"`, `aria-live="polite"`): "Saving..." / "Saved" / "Not saved", driven only by real request outcomes — "Saved" is never shown optimistically (CLAUDE.md anti-pattern: success state before server confirms).
+- `Toggle` gained `role="switch"` + `aria-checked` (same file; auto-save removes the explicit confirm step, so the state change needs to be announced).
+
+**Deliberately not done:** no debounce or batching; two rapid same-key PATCHes arriving out of order at the server are not reconciled (last to arrive wins, rare, self-corrects on next change or reload); server-side the preference values (`theme`/`language`/`timezone`/`defaultView`/`profileVisibility`) are still unvalidated free strings — noted, not changed; the 3 BACKSCOPED notification toggles stay hidden.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `page.tsx`); source read of both PATCH routes confirming the preferences route is genuinely partial (per-field allow-list, self-or-admin auth) so single-field saves are safe.
+- Observed result: NOT live-tested.
+- Pending items: on the branch's Vercel preview — (1) browser: back arrow visible, cold open returns to `/profile`; (2) installed PWA: same; (3) toggle -> "Saving..." -> "Saved", then a DB/API read-back of `user_preferences` (not just the UI) confirms the value persisted after reload; (4) force a failing PATCH (offline) -> toggle reverts, "Not saved" + toast; (5) name: valid blur persists, 1 char shows inline error with no request in the network tab.
+**Files:** `src/app/profile/settings/page.tsx`.
+
+---
+
+### BACKLOG-405 — OPEN: `GET /api/users/[id]` Is Unauthenticated and Returns Email, Role and the Full Preferences Row for Any User ID
+
+**Status:** OPEN — found 2026-09-18 by source read while reviewing `BACKLOG-404`; not fixed (outside that task's scope). Not yet confirmed live.
+**Priority:** High — NDPR exposure (email + role to anonymous callers); a user's own `profileVisibility: 'private'` setting is not honored by this route.
+
+**What was found:** `src/app/api/users/[id]/route.ts` `GET` (L16-116) has no `getAuthUser()` call. It selects the full `users` row and returns it with only `password` nulled, so `email`, `role`, `favoriteTeamId`, `bio`, `avatar`, `coverImage` go to any caller, plus the full `user_preferences` row. The same file's `PATCH`, and the sibling `preferences` route's `GET`/`PATCH`/`DELETE`, all enforce self-or-admin — `GET` is the outlier. Same bug class as `BACKLOG-397`'s FPL relation leak (unrestricted select returned to an unauthenticated caller), but no secret column is involved here (the `users` table has no token columns; `password` is stripped).
+
+**Fix direction (not done):** own-or-admin gets the full row; everyone else, anonymous included, gets a curated DTO (name, avatar, bio, favorite team — nothing else) that honors `profileVisibility`. Grep the route's callers first (the public `/user/[userId]` page and this settings page are the likely two) so the curated shape does not break the public profile.
+
+**Not verified:** no unauthenticated fetch against staging yet to confirm the leak end to end — source read only.
+
+---
