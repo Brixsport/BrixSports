@@ -11961,9 +11961,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-405 — SHIPPED: `GET /api/users/[id]` Was Unauthenticated and Returned Email, Role and the Full Preferences Row for Any User ID
+### ~~BACKLOG-405 — RESOLVED: `GET /api/users/[id]` Was Unauthenticated and Returned Email, Role and the Full Preferences Row for Any User ID~~
 
-**Status:** SHIPPED — 2026-09-18, commit pending push. Found by source read while reviewing `BACKLOG-404`. **Live test NOT yet run** — not RESOLVED until an unauthenticated fetch on the deployed preview is confirmed to no longer return `email`/`role`.
+**Status:** RESOLVED — 2026-09-18 (commit `0aef8a7`). Found by source read while reviewing `BACKLOG-404`; fixed and live-verified at the API level on the staging preview the same day. Browser-level render checks of the two consuming pages are still pending (see Evidence).
 **Priority:** High — NDPR exposure (email + role to anonymous callers); a user's own `profileVisibility: 'private'` setting is not honored by this route.
 
 **What was found:** `src/app/api/users/[id]/route.ts` `GET` (L16-116) has no `getAuthUser()` call. It selects the full `users` row and returns it with only `password` nulled, so `email`, `role`, `favoriteTeamId`, `bio`, `avatar`, `coverImage` go to any caller, plus the full `user_preferences` row. The same file's `PATCH`, and the sibling `preferences` route's `GET`/`PATCH`/`DELETE`, all enforce self-or-admin — `GET` is the outlier. Same bug class as `BACKLOG-397`'s FPL relation leak (unrestricted select returned to an unauthenticated caller), but no secret column is involved here (the `users` table has no token columns; `password` is stripped).
@@ -11979,10 +11979,15 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Deliberately not done / assumptions:** name and avatar stay visible on a private profile (identity is needed to render the "private" page and already appears on public leaderboards); the client-side `isOwnProfile` (from localStorage) can disagree with the server's cookie-based owner check if a session has a token but no cookie — that user would see the curated view of their own profile, pre-existing auth-storage split, not addressed here; a user who chose `'friends'` now presents as private to everyone, which matches the setting's intent but is a visible behavior change.
 
 **Evidence:**
-- Commit: pending (this session)
-- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `users/[id]/route.ts` or `user/[userId]/page.tsx`); caller grep as above.
-- Observed result: NOT live-tested.
-- Pending items: on the branch's Vercel preview — (1) unauthenticated `GET /api/users/<real id>?includeStats=true` returns no `email`, no `role`, no preferences beyond the three flags, and a favorite team with only `id`/`name`/`logo`/`color`; (2) the same call with a valid session cookie for that user returns the full response; (3) with a different non-admin user's cookie returns the curated response; (4) a user set to `private` returns `id`/`name`/`avatar` only, and `/user/<id>` renders the private state with no "Joined Invalid Date"; (5) `/user/<id>` for a public user still shows cover, joined date and favorite team; (6) `/profile/settings` still loads name and email for the signed-in user.
+- Commit: `0aef8a7`
+- Verified by: live API checks against the branch's staging Vercel preview (`brixsports-staging-fvdtyw415-brixsports-projects.vercel.app`, build of `0aef8a7`), using `dev/verify-backlog-405.mjs` and `dev/verify-backlog-405-restricted.mjs` (both gitignored; read the target rows from the staging DB, signed short-lived JWTs from `JWT_SECRET`, HTTP GETs only). Also `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in the two touched files).
+- Observed result (all PASS, 20 checks in the first script, 21 in the second):
+  - **Anonymous** (no token; this preview has no login gate, so the request reached the handler and returned 200): `user` keys exactly `id,name,avatar,coverImage,bio,favoriteTeamId,createdAt`; no `email`, no `role`; the target's email string absent from the body; `preferences` keys exactly `profileVisibility,showStats,showActivity`; `stats.favoriteTeam` keys exactly `id,name,logo,color`; no favorite/follow counts.
+  - **Different non-admin user:** identical to anonymous.
+  - **Owner:** 200 with own `email` and `role`, no `password` field, full preferences row when one exists, `Cache-Control: private, no-store`.
+  - **Admin:** sees the target's email.
+  - **Restricted branch**, tested with a throwaway `users` + `user_preferences` row on the shared staging DB (visibility set to `private`, then `friends`; bio/cover set to marker strings): anonymous and other-user both got `user` keys exactly `id,name,avatar`, `stats: null`, `preferences` exactly `{profileVisibility}`, and none of the bio/cover/email markers appeared in the body; the owner still saw own email and bio. Throwaway rows deleted in `finally`, confirmed 0 remaining.
+- Pending items: (1) browser check that `/user/<id>` renders correctly for a public user (cover, joined date, favorite team) and shows the private state without "Joined Invalid Date" — the two page edits (`isPrivate`, `createdAt` guard) are source-only so far; (2) browser check that `/profile/settings` still loads name and email for the signed-in user (the API returns them to the owner, verified above, but the page itself was not opened); (3) the second Vercel project (`brixs2`) sits behind Vercel SSO and was not tested.
 **Files:** `src/app/api/users/[id]/route.ts`, `src/app/user/[userId]/page.tsx`.
 
 ---
