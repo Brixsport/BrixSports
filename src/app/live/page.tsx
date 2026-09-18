@@ -156,7 +156,22 @@ export default function LiveCenter() {
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Clock size={14} />
-                                                <span>{new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                {/* BACKLOG-401 #1: a malformed startTime (confirmed live: a
+                                                    stringified-epoch value like "1788963960000.0" instead of ISO)
+                                                    makes `new Date(...)` an Invalid Date -- toLocaleTimeString()
+                                                    on that silently returns the literal string "Invalid Date"
+                                                    rather than throwing, so it rendered unguarded on a real public
+                                                    match card. Defensive coercion: degrade to "TBD" instead. */}
+                                                <span>{(() => {
+                                                    const d = new Date(match.startTime);
+                                                    // No locale arg -- uses the viewer's own device locale (and
+                                                    // always the device's local timezone regardless, per Date's
+                                                    // own semantics) rather than assuming 'en-US' formatting for
+                                                    // every viewer.
+                                                    return isNaN(d.getTime())
+                                                        ? 'TBD'
+                                                        : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                                                })()}</span>
                                             </div>
                                         </div>
                                     </motion.div>

@@ -7,6 +7,21 @@ import { format } from 'date-fns';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
 import { TeamLogo } from '@/lib/utils/team-logo';
 
+// BACKLOG-401 #1: a malformed startTime (confirmed live: a stringified-epoch
+// value like "1788963960000.0" instead of ISO) makes `new Date(...)` an
+// Invalid Date -- date-fns' format() throws a RangeError for that, which was
+// only guarded at one of this file's 3 call sites. Shared defensive helper so
+// a bad value degrades to a fallback everywhere instead of crashing (or, on
+// the one call site that catches it separately, silently rendering
+// "Invalid Date" text).
+function safeFormatStartTime(startTime: string, pattern: string, fallback = '--:--'): string {
+    try {
+        return format(new Date(startTime), pattern);
+    } catch {
+        return fallback;
+    }
+}
+
 interface MatchCardProps {
     match: {
         id: string;
@@ -83,11 +98,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
             case 'FINISHED':
                 return 'FT';
             default:
-                try {
-                    return format(new Date(match.startTime), 'HH:mm');
-                } catch (e) {
-                    return '--:--';
-                }
+                return safeFormatStartTime(match.startTime, 'HH:mm');
         }
     };
 
@@ -217,7 +228,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                     <div className="flex items-center gap-4 mt-6 pt-4 border-t border-gray-700">
                         <div className="flex items-center gap-2 text-sm text-gray-400">
                             <Clock className="w-4 h-4" />
-                            <span>{format(new Date(match.startTime), 'HH:mm')}</span>
+                            <span>{safeFormatStartTime(match.startTime, 'HH:mm')}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-400">
                             <MapPin className="w-4 h-4" />
@@ -302,7 +313,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                 <div className="flex items-center justify-center gap-6 mt-6 pt-6 border-t border-gray-700">
                     <div className="flex items-center gap-2 text-sm text-gray-400">
                         <Clock className="w-4 h-4" />
-                        <span>{format(new Date(match.startTime), 'MMM dd, HH:mm')}</span>
+                        <span>{safeFormatStartTime(match.startTime, 'MMM dd, HH:mm', 'TBD')}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-400">
                         <MapPin className="w-4 h-4" />
