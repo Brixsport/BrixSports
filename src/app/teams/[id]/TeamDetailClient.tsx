@@ -389,6 +389,7 @@ export default function TeamDetailClient() {
                                                     option gates to just that one competition/season. */}
                                                 {statsSeasons && statsSeasons.seasons.length > 0 && (
                                                     <select
+                                                        aria-label="Filter season stats by competition"
                                                         value={statsSeasons.selected}
                                                         disabled={statsLoading}
                                                         onChange={(e) => fetchTeamData(e.target.value)}

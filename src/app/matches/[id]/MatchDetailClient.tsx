@@ -734,6 +734,14 @@ export default function MatchDetailClient() {
                         </div>
                     </div>
 
+                    {/* BACKLOG-399/401: match-detail page had zero <h1> -- team
+                        names below render inside plain divs, not a heading.
+                        Visually hidden, no visual design change; screen
+                        readers get a real page heading. */}
+                    <h1 className="sr-only">
+                        {match.homeTeam.name} vs {match.awayTeam.name} — {match.homeScore}-{match.awayScore}
+                    </h1>
+
                     {/* Match Info - Always visible, shrinks when compact */}
                     <div className="flex items-center justify-between gap-4">
                         {/* Home Team */}

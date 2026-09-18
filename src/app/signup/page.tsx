@@ -31,16 +31,25 @@ const calculateStrength = (password: string) => {
     return score;
 };
 
+// BACKLOG-399 H6: had .min() with no .max() anywhere -- an extremely long
+// name/email/password had very little standing between it and a broken
+// layout or an oversized request body. Caps are generous, not restrictive.
 const formSchema = z
     .object({
         name: z.string().min(2, {
             message: "Name must be at least 2 characters.",
+        }).max(100, {
+            message: "Name must be under 100 characters.",
         }),
         email: z.string().email({
             message: "Please enter a valid email address.",
+        }).max(255, {
+            message: "Email must be under 255 characters.",
         }),
         password: z.string().min(6, {
             message: "Password must be at least 6 characters.",
+        }).max(72, {
+            message: "Password must be under 72 characters.",
         }),
         confirmPassword: z.string(),
     })
@@ -206,51 +215,63 @@ export default function SignupPage() {
 
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
+                            <label htmlFor="signup-name" className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Full Name
                             </label>
                             <div className="relative">
                                 <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("name")}
+                                    id="signup-name"
                                     type="text"
                                     placeholder="Enter your name"
+                                    maxLength={100}
+                                    aria-invalid={!!form.formState.errors.name}
+                                    aria-describedby={form.formState.errors.name ? "signup-name-error" : undefined}
                                     className="w-full bg-muted border border-border rounded-xl pl-12 pr-4 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                             </div>
                             {form.formState.errors.name && (
-                                <p className="text-xs text-red-500">{form.formState.errors.name.message}</p>
+                                <p id="signup-name-error" role="alert" className="text-xs text-red-500">{form.formState.errors.name.message}</p>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
+                            <label htmlFor="signup-email" className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Email
                             </label>
                             <div className="relative">
                                 <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("email")}
+                                    id="signup-email"
                                     type="email"
                                     placeholder="Enter your email"
+                                    maxLength={255}
+                                    aria-invalid={!!form.formState.errors.email}
+                                    aria-describedby={form.formState.errors.email ? "signup-email-error" : undefined}
                                     className="w-full bg-muted border border-border rounded-xl pl-12 pr-4 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                             </div>
                             {form.formState.errors.email && (
-                                <p className="text-xs text-red-500">{form.formState.errors.email.message}</p>
+                                <p id="signup-email-error" role="alert" className="text-xs text-red-500">{form.formState.errors.email.message}</p>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
+                            <label htmlFor="signup-password" className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Password
                             </label>
                             <div className="relative">
                                 <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("password")}
+                                    id="signup-password"
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Create a password"
+                                    maxLength={72}
+                                    aria-invalid={!!form.formState.errors.password}
+                                    aria-describedby={form.formState.errors.password ? "signup-password-error" : undefined}
                                     className="w-full bg-muted border border-border rounded-xl pl-12 pr-12 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm mb-2"
                                     onChange={(e) => {
                                         form.register("password").onChange(e);
@@ -287,27 +308,31 @@ export default function SignupPage() {
                                             );
                                         })}
                                     </div>
-                                    <p className="text-[10px] uppercase font-bold tracking-wider text-right text-gray-400">
+                                    <p className="text-[10px] uppercase font-bold tracking-wider text-right text-muted-foreground">
                                         {Object.values(STRENGTH_LABELS)[calculateStrength(form.watch("password"))]}
                                     </p>
                                 </div>
                             )}
 
                             {form.formState.errors.password && (
-                                <p className="text-xs text-red-500">{form.formState.errors.password.message}</p>
+                                <p id="signup-password-error" role="alert" className="text-xs text-red-500">{form.formState.errors.password.message}</p>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <label className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
+                            <label htmlFor="signup-confirm-password" className="block text-xs font-bold uppercase tracking-widest text-foreground/60 mb-2">
                                 Confirm Password
                             </label>
                             <div className="relative">
                                 <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                                 <input
                                     {...form.register("confirmPassword")}
+                                    id="signup-confirm-password"
                                     type={showConfirmPassword ? "text" : "password"}
                                     placeholder="Confirm your password"
+                                    maxLength={72}
+                                    aria-invalid={!!form.formState.errors.confirmPassword}
+                                    aria-describedby={form.formState.errors.confirmPassword ? "signup-confirm-password-error" : undefined}
                                     className="w-full bg-muted border border-border rounded-xl pl-12 pr-12 py-3 text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:bg-muted transition-all text-sm"
                                 />
                                 <button
@@ -319,7 +344,7 @@ export default function SignupPage() {
                                 </button>
                             </div>
                             {form.formState.errors.confirmPassword && (
-                                <p className="text-xs text-red-500">{form.formState.errors.confirmPassword.message}</p>
+                                <p id="signup-confirm-password-error" role="alert" className="text-xs text-red-500">{form.formState.errors.confirmPassword.message}</p>
                             )}
                         </div>
 

@@ -430,6 +430,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSearchOpen(true)}
+                aria-label="Search"
                 className="w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors"
               >
                 <Search size={18} className="text-foreground/60" />
@@ -439,6 +440,7 @@ export default function Home() {
                   e.stopPropagation();
                   setIsSettingsOpen(true);
                 }}
+                aria-label="Settings"
                 className="w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors relative"
               >
                 <Bell size={18} className="text-foreground/60" />
@@ -473,6 +475,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
+                aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
                 className="md:hidden w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors"
               >
                 {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -501,6 +504,11 @@ export default function Home() {
       {/* Main Content */}
       <main className="pt-28 pb-12">
         <div className="max-w-7xl mx-auto px-4">
+          {/* BACKLOG-399/401: homepage had zero <h1> -- the "BRIXSPORT" brand
+              mark in the nav above is a logo Link, not a heading. Visually
+              hidden since the visual design has no room for a redundant
+              on-screen title; screen readers still get a real page heading. */}
+          <h1 className="sr-only">BrixSports — Live Scores and Fixtures</h1>
           {/* Status Filter Tabs -- BACKLOG-390 #2 (44px touch target) + #4 (scroll-edge fade) */}
           <div className="relative mb-6">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">

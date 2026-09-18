@@ -207,16 +207,18 @@ export default function SettingsPage() {
                         title="Account"
                         description="Manage your account information"
                     >
-                        <SettingRow label="Full Name">
+                        <SettingRow label="Full Name" inputId="settings-name">
                             <input
+                                id="settings-name"
                                 type="text"
                                 value={settings.name}
                                 onChange={(e) => updateSetting('name', e.target.value)}
                                 className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all w-full max-w-xs"
                             />
                         </SettingRow>
-                        <SettingRow label="Email Address">
+                        <SettingRow label="Email Address" inputId="settings-email">
                             <input
+                                id="settings-email"
                                 type="email"
                                 value={settings.email}
                                 disabled
@@ -274,8 +276,9 @@ export default function SettingsPage() {
                         title="Preferences"
                         description="Set your default preferences"
                     >
-                        <SettingRow label="Language">
+                        <SettingRow label="Language" inputId="settings-language">
                             <select
+                                id="settings-language"
                                 value={settings.language}
                                 onChange={(e) => updateSetting('language', e.target.value)}
                                 className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
@@ -285,8 +288,9 @@ export default function SettingsPage() {
                                 <option value="es">Español</option>
                             </select>
                         </SettingRow>
-                        <SettingRow label="Timezone">
+                        <SettingRow label="Timezone" inputId="settings-timezone">
                             <select
+                                id="settings-timezone"
                                 value={settings.timezone}
                                 onChange={(e) => updateSetting('timezone', e.target.value)}
                                 className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
@@ -298,8 +302,9 @@ export default function SettingsPage() {
                                 <option value="Asia/Tokyo">Tokyo (JST)</option>
                             </select>
                         </SettingRow>
-                        <SettingRow label="Default View">
+                        <SettingRow label="Default View" inputId="settings-default-view">
                             <select
+                                id="settings-default-view"
                                 value={settings.defaultView}
                                 onChange={(e) => updateSetting('defaultView', e.target.value)}
                                 className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
@@ -458,11 +463,21 @@ function SettingsSection({ id, icon, title, description, children }: {
     );
 }
 
-function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
-    // ... (implementation remains same)
+// BACKLOG-399 H5: `label` rendered as a plain <span> -- no programmatic
+// association with the actual input/select in `children`, so a screen-reader
+// user got no label announcement on any of the 6 form controls this wraps.
+// `inputId`, when passed, renders a real <label htmlFor> instead; rows that
+// wrap a Toggle/button (no `id`-bearing form control) simply omit it and keep
+// the <span> fallback -- same visual output either way.
+function SettingRow({ label, children, inputId }: { label: string; children: React.ReactNode; inputId?: string }) {
+    const labelClassName = "text-sm font-bold text-foreground/80";
     return (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-3 border-b border-border/50 last:border-0">
-            <span className="text-sm font-bold text-foreground/80">{label}</span>
+            {inputId ? (
+                <label htmlFor={inputId} className={labelClassName}>{label}</label>
+            ) : (
+                <span className={labelClassName}>{label}</span>
+            )}
             <div>{children}</div>
         </div>
     );
@@ -557,15 +572,16 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
             >
                 <div className="flex justify-between items-center">
                     <h2 className="text-xl font-display uppercase tracking-tight">Change Password</h2>
-                    <button onClick={onClose} className="text-foreground/40 hover:text-foreground">
+                    <button onClick={onClose} aria-label="Close" className="text-foreground/40 hover:text-foreground">
                         <VolumeX className="w-5 h-5" style={{ transform: 'rotate(45deg)' }} /> {/* Using VolumeX as generic close icon - or check imports */}
                     </button>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">Current Password</label>
+                        <label htmlFor="change-password-current" className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">Current Password</label>
                         <input
+                            id="change-password-current"
                             type="password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
@@ -575,8 +591,9 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">New Password</label>
+                        <label htmlFor="change-password-new" className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">New Password</label>
                         <input
+                            id="change-password-new"
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
@@ -586,8 +603,9 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">Confirm New Password</label>
+                        <label htmlFor="change-password-confirm" className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">Confirm New Password</label>
                         <input
+                            id="change-password-confirm"
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
