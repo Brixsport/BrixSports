@@ -13673,9 +13673,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-395 — 4 API Routes Violate CLAUDE.md's "Every List Endpoint MUST Have `.limit()`" Rule
+### ~~BACKLOG-395~~ — 4 API Routes Violate CLAUDE.md's "Every List Endpoint MUST Have `.limit()`" Rule — SHIPPED
 
-**Status:** OPEN — filed 2026-09-17 (`db-inspector` background agent, part of the full-platform pre-promotion audit), not fixed.
+**Status:** SHIPPED, code-only, UNVERIFIED live — filed 2026-09-17 (`db-inspector` background agent, part of the full-platform pre-promotion audit); fixed 2026-09-18.
 **Priority:** High — a direct, unambiguous violation of a hard project rule (`CLAUDE.md` Architecture Rules: "Every list endpoint MUST have a .limit() clause — no unbounded queries ever"), not a judgment call.
 
 **Problem, code-audited (live-DB row-count impact not yet measured — the agent that found this had no DB query access, static-code-only):**
@@ -13688,9 +13688,13 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Not a new class of bug** — `BACKLOG-283` already fixed this exact pattern on `/api/admin/users` and `/api/admin/organizations` (configurable limits, safety caps); these 4 routes were evidently missed by that pass or added after it.
 
-**Not done:** any fix. Not done: live row-count check (is any of these tables actually large enough today for this to be an active performance problem, or is it a correctness landmine waiting for real data growth) — worth a quick DB check before prioritizing the fix, current team/ad counts are likely small enough that this hasn't bitten yet.
+**Fixed:** commit `4efb15f`, 2026-09-18.
 
-**Fix shape, when picked up:** same pattern as `BACKLOG-283` — add a capped, configurable `.limit()` to all 4 unbounded queries; fix `/api/competitions` to push `limit`/`offset` into the query itself instead of hardcoding 500 and filtering post-fetch.
+**Evidence:**
+- Commit: `4efb15f`
+- Verified by: code trace + `tsc --noEmit` (18 errors, unchanged baseline, zero new). No live row-count/DB check run.
+- Observed result: `admin/ads`, `football/teams` — added configurable/capped `.limit()` (BACKLOG-283 shape). `basketball/teams`, `basketball/players` — the unbounded `db.select().from(teams).all()` fetch-everything-then-filter-in-JS pattern replaced with an `inArray(teams.name, basketballTeamNames)` WHERE clause, naturally bounding the result to the fixed 6-team list regardless of table size (deliberately not just a `.limit()` cap, to avoid re-triggering the historic BUG-014 truncation pattern as the teams table grows). `competitions/route.ts` — real fix, not cosmetic: the hardcoded `.limit(500)` ignored the route's own accepted `limit`/`offset` params entirely, so rows beyond 500 were invisible no matter what page was requested. Sport/`isMultiSport` filtering pushed into the DB WHERE clause for the sport-filtered path (now correctly bounded to just the matching rows); no-filter-case safety cap raised 500→2000 (configurable via `_maxFetch`, capped 5000) since full DB-level pagination there would require `buildCompetitionGroups`' season-grouping logic to move server-side, out of this pass's scope.
+- Pending items: **live re-verification** — no live row-count check was run (was any of these tables actually large enough today for this to have been an active correctness problem, not just a latent one). `competitions/route.ts`'s no-sport-filter case is still a capped single page, not true DB-level pagination — a real caller requesting page 2+ with no sport filter and >2000 total competitions would still silently miss rows; flagged in code, not silently left as fully fixed.
 
 ---
 
