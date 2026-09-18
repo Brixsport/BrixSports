@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 
 const TeamStatsChart = dynamic(() => import('@/components/TeamStatsChart'), {
     loading: () => <div className="absolute inset-0 flex items-center justify-center animate-pulse bg-muted rounded-full" />,
@@ -45,6 +46,7 @@ export default function TeamDetailClient() {
     const [data, setData] = useState<TeamData | null>(null);
     const [loading, setLoading] = useState(true);
     const [statsLoading, setStatsLoading] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'fixtures' | 'stats'>('overview');
 
     useEffect(() => {
@@ -62,10 +64,21 @@ export default function TeamDetailClient() {
                 ? `/api/teams/${teamId}?statsCompetitionId=${encodeURIComponent(statsCompetitionId)}`
                 : `/api/teams/${teamId}`;
             const response = await fetch(url);
+            if (response.status === 404) {
+                // A genuine 404 is the only thing that means "this team doesn't exist".
+                setData(null);
+                setLoadFailed(false);
+                return;
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const teamData = await response.json();
             setData(teamData);
+            setLoadFailed(false);
         } catch (error) {
             console.error('Error fetching team:', error);
+            // Only the first load has no data to fall back on. A failed season-selector
+            // refetch keeps the team already on screen.
+            if (!statsCompetitionId) setLoadFailed(true);
         } finally {
             setLoading(false);
             setStatsLoading(false);
@@ -79,6 +92,14 @@ export default function TeamDetailClient() {
                     <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
                     <p className="text-foreground/40 text-sm font-medium animate-pulse">Loading Team Data...</p>
                 </div>
+            </div>
+        );
+    }
+
+    if (!data && loadFailed) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
+                <LoadFailedState title="Couldn't load this team" onRetry={() => fetchTeamData()} />
             </div>
         );
     }
