@@ -13767,9 +13767,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-399 — Static Product-Design Audit: `error.tsx` Leaks Raw Error Messages to Users (Critical, Violates CLAUDE.md Directly) + WCAG Gaps
+### ~~BACKLOG-399~~ — Static Product-Design Audit: `error.tsx` Leaks Raw Error Messages to Users (3 CRITICALs SHIPPED) + WCAG Gaps
 
-**Status:** OPEN — `general-purpose` background agent (static/spec-level half of the `product-team-review` pipeline), 2026-09-17. Source: `.agents/dev/PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` — all 3 Critical / 6 High / 4 Medium / 5 Low items enumerated below, nothing held back.
+**Status:** 3 Critical items SHIPPED, code-only, UNVERIFIED live (no live theme-toggle/curl re-check run) — `general-purpose` background agent (static/spec-level half of the `product-team-review` pipeline), 2026-09-17; fixed same day. Source: `.agents/dev/PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` — all 3 Critical / 6 High / 4 Medium / 5 Low items enumerated below, nothing held back.
 **Priority:** Critical item #1 is a direct violation of an explicit, already-written CLAUDE.md rule, not a new standard being proposed.
 
 **Critical findings:**
@@ -13793,7 +13793,7 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Low (all 5):**
 11. Inconsistent nav-label type scale — `BottomNav.tsx` uses `text-[10px]` (arbitrary, not a scale step), desktop top-nav uses `text-xs` (12px), same conceptual role at two sizes with no shared token.
-12. Error/404 pages block all content behind `if (!isClient) return null` — a leftover gate from now-removed Three.js scenes (`BACKSCOPED: 2026-06-11` comments in both files); a screen reader, no-JS visit, or slow-hydration session gets a fully blank page with no landmark/heading until React mounts. Safe to remove now that nothing in either file is actually client-only.
+12. ~~Error/404 pages block all content behind `if (!isClient) return null`~~ — **RESOLVED, commit `42e3768`.** Removed from both files as part of the Critical #3 conversion (same root cause — Three.js-removal leftovers).
 13. Sport-voice inconsistency between the two error surfaces — `not-found.tsx` is all-basketball idiom ("AIR BALL!", a Jordan quote hedged "(probably)"), `error.tsx` is all-football/stadium idiom (a Messi quote) — the platform covers football, basketball, and "other," so neither voice is wrong alone, but together they don't read as one product.
 14. **Positive, worth keeping**: `login/page.tsx:31-47` distinguishes a user-declined Google consent screen (`"Google sign-in cancelled"`, info toast) from an actual OAuth failure (error toast, "try again or sign in with email/password"), with an inline comment noting a cancel "is not a bug" — exactly the "what happened + why + how to fix" structure items 1/10 above don't follow.
 15. **Positive, confirmed not just absence-of-failure**: icon-only nav buttons (search/bell/hamburger) all use `w-11 h-11` (44×44px exactly), meeting WCAG 2.5.5's touch-target minimum.
@@ -13802,7 +13802,13 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Confirmed working well, not just an absence of complaints:** the `:root`/`.dark` token system in `globals.css` is genuinely semantic (elevation via lightness deltas, not an inverted palette); `/predictions` correctly unlinked from all navigation (matches its backscoped status, not a gap); Logger UI's dark-only-permanent decision (`BACKLOG-216` Phase 2e) is a considered call for a live-match night-usage tool, the hardcoded-color volume there is correctly out of scope; `BottomNav`'s active-tab motion (`layoutId` spring + icon scale) is purposeful, state-driven animation, the right example to follow.
 
-**Not done:** any fix for any item above.
+**Fixed — 3 Critical items + Low #12:** commit `42e3768`, 2026-09-18. **Not done:** High 1-6, Medium 7-10, Low 11/13/14/15 — findings, not fixes, still fully open.
+
+**Evidence:**
+- Commit: `42e3768`
+- Verified by: code trace + `tsc --noEmit` (18 errors, unchanged baseline, zero new). No live browser check (theme toggle, actual rendered contrast) run yet.
+- Observed result: `error.tsx` no longer renders `error.message`/`error.digest` outside `NODE_ENV === 'development'`. `globals.css` `--primary`/`--sidebar-primary` darkened 0.6→0.48 in light mode only. `error.tsx`/`not-found.tsx` converted from hardcoded `slate-950`/`text-white`/`bg-white/10` etc. to `bg-background`/`text-foreground`/`text-muted-foreground`/`bg-secondary`/`border-border`; also removed the dead `isClient` hydration gate (Low #12 above) and the now-empty 3D-scene overlay container in both files (found while fixing C3, same root cause — Three.js removal leftovers).
+- Pending items: **live re-verification** — no browser check confirming the new light-mode primary-button contrast actually clears 4.5:1 (the 0.48 value is a reasoned OKLCH-lightness adjustment, not a re-run of the audit's own contrast calculator), and no visual check that `error.tsx`/`not-found.tsx` render correctly in both themes post-conversion. High-priority items (no `/players` browse page, BottomNav/hamburger item-set mismatch, Lineup Builder promotion despite 🔴 flag, border/input contrast — item 4 above, signup label association, max-length validation — item 6 above) not touched by this commit.
 
 ---
 
