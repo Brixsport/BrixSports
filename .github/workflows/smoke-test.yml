@@ -1,0 +1,42 @@
+name: Critical Flows Smoke Test
+
+# BACKLOG-400/402/403: gates PRs into dev/main on the Three Critical Flows
+# (CLAUDE.md) actually working end to end, not just tsc passing. Runs
+# tests/smoke/critical-flows.ts against the shared staging deployment --
+# NOT a per-PR preview URL, deliberately, for v1: this project has no
+# ephemeral-per-PR database provisioning, and every other live-verification
+# this session already runs against the same shared staging Turso instance,
+# so this matches existing convention rather than introducing new infra.
+# Real tradeoff, on record rather than silently assumed: every PR run
+# writes and deletes real throwaway rows against shared staging. Revisit
+# if staging ever needs to stay pristine (e.g. for a demo) or if per-PR
+# preview-URL targeting becomes worth the added complexity.
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  smoke-test:
+    name: Three Critical Flows (staging)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run critical-flows smoke test
+        env:
+          BASE_URL: https://brixsports-staging.vercel.app
+          TURSO_CONNECTION_URL: ${{ secrets.TURSO_CONNECTION_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npx tsx tests/smoke/critical-flows.ts
