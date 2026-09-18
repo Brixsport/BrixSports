@@ -13740,9 +13740,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### ⛔ BACKLOG-398 — Full-Codebase Code Review: Livestream Chat Identity Is Fully Spoofable (Critical) + 4 Medium/Low Findings
+### BACKLOG-398 — Full-Codebase Code Review: Livestream Chat Identity Is Fully Spoofable (Critical, PARTIALLY FIXED) + 4 Medium/Low Findings
 
-**Status:** OPEN — `code-reviewer` background agent, full-platform pre-promotion audit, 2026-09-17.
+**Status:** CRITICAL partially fixed — `code-reviewer` background agent, full-platform pre-promotion audit, 2026-09-17. HTTP-fallback path fixed same day; WS-direct path (the primary path, used whenever the socket is connected) still open, needs a fix in the separate ws-server repo.
 **Priority:** CRITICAL for the chat finding — a second, independent critical vulnerability from a different code path than `BACKLOG-397`'s security-agent findings.
 
 **CRITICAL — chat message identity is fully client-controlled, spoofable, broadcast unmodified to every viewer.** `src/components/livestream/LivestreamChat.tsx:116-136` builds `{ userId, userName, userAvatar, message }` entirely client-side and sends it as-is (socket emit or `POST /api/chat/send`). `src/app/api/chat/send/route.ts:11-37` only checks `getAuthUser(request)` for session *presence* — it never cross-checks the message's claimed `userId`/`userName` against the actual verified session's `user.id`/`user.name`. **Failure scenario:** any authenticated Fan sends `{ userId: 'admin-id', userName: 'BrixSports Admin', message: '...' }` and every viewer in that match's livestream chat sees it as a real admin message, indistinguishable from genuine. Same class of bug CLAUDE.md already bans for audit fields (`createdBy`/`updatedBy` must come from the verified session, never client input), just not previously applied to chat. **Not independently checked:** whether the `ws-server`'s direct socket path (outside this repo) enforces the same identity check — worth a follow-up.
@@ -13755,9 +13755,15 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **LOW:** `admin/users` PATCH returns `{success:true}` even for a non-existent `userId` (cosmetic false-positive toast); team logos have no `onError`/null-guard fallback in `MatchDetailClient.tsx`; the CLAUDE.md `try/catch/finally` rule is aspirational given this project's stateless-per-request Turso HTTP client has nothing to release — a style note against the letter of the rule, not a real leak.
 
-**Verdict:** ship-ready once the chat-spoofing CRITICAL is resolved (or chat is explicitly gated/hidden pre-launch as an accepted risk) — everything else is fast-follow, not blocking.
+**Verdict:** the HTTP-fallback identity trust gap is closed; the WS-direct path (primary, used whenever connected) is genuinely still open and outside this repo's fixable surface — chat should stay explicitly gated/hidden pre-launch as an accepted risk until the ws-server repo enforces the same check, or promotion proceeds accepting this residual risk. Everything else in this entry (loggerId gate, unbounded-query sweep, env.ts bypass, MatchDetailClient size) is fast-follow, not blocking.
 
-**Not done:** any fix.
+**Fixed — chat identity, HTTP-fallback path only:** commit `2b0eeef`, 2026-09-18.
+
+**Evidence:**
+- Commit: `2b0eeef`
+- Verified by: code trace + `tsc --noEmit` (18 errors, unchanged baseline, zero new). No live test run.
+- Observed result: `src/app/api/chat/send/route.ts` now builds `safeMessage` with `userId`/`userName`/`userAvatar` always sourced from `getAuthUser`'s verified session; the client-supplied `message.userId`/`userName`/`userAvatar` are never read.
+- Pending items: **the WS-direct path is NOT fixed** — `LivestreamChat.tsx`'s `emit('chat:message', { matchId, ...newMessage })` (the primary send path, only falls back to the HTTP route when the socket is disconnected) still sends the client-built object with spoofable identity straight over the socket to a separate ws-server deployment (Railway) whose identity enforcement lives outside this repo and was never confirmed by the original audit. This is a real, live, unclosed spoofing vector via the WS path specifically. Needs a fix in the ws-server codebase (reject/override client-claimed identity, verify against its own session/token) before this finding is fully resolved. MEDIUM/LOW items (loggerId gate at `matches/[id]/route.ts:721`, `football/teams`+`basketball/teams` unbounded queries, 4 files reading `process.env` directly, `MatchDetailClient.tsx` size) not touched by this commit.
 
 ---
 
