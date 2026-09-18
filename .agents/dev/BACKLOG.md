@@ -13711,9 +13711,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### ⛔ BACKLOG-397 — Full-Platform Security Audit: BLOCKED — Password-Hash Leak, Client-Passed Audit Field, Unbounded Mass-Assignment
+### ~~BACKLOG-397~~ — Full-Platform Security Audit: 3 CRITICALs SHIPPED — Password-Hash Leak, Client-Passed Audit Field, Unbounded Mass-Assignment
 
-**Status:** OPEN, BLOCKING — `security` background agent, full-platform pre-promotion audit, 2026-09-17. **Verdict: BLOCKED — must fix before this branch merges to dev/main.**
+**Status:** 3 CRITICALs SHIPPED — code-only, **UNVERIFIED live** (no curl/staging re-test run yet against the fixed routes). `security` background agent found these in the full-platform pre-promotion audit, 2026-09-17; fixed same day per the audit's own handoff sequencing. **Verdict: no longer blocking on these 3 — MEDIUM/LOW items below still open, not blocking.**
 **Priority:** CRITICAL — real, live, unauthenticated exposure paths, not theoretical.
 
 **CRITICAL #1 — Unauthenticated FPL API leaks password hashes.** `src/app/api/fpl/teams/route.ts` GET has zero auth check. Its Drizzle relation (`fplTeamsRelations.user` in `src/db/schema-fpl.ts:233-237`) does `with: { user: true }` with no column restriction, so the response includes the **entire `users` row — `password` column and `email` included** — for `?userId=`, `?teamId=`, or the no-param "all teams" branch (up to 100 full records). `curl` with no credentials against this route today returns real password hashes. `/fpl` the page is `notFound()`'d, but the API route itself has no gate — page removal is not an auth control, and `BACKSCOPE.md`'s existing "low risk, no UI" note for this feature only ever called out a POST `userId` issue, not this GET leak. **Fix:** add `getAuthUser` + ownership check; if `user` must be joined at all, restrict to `columns: { id, name, avatar }` — never select `password`/`email` in any relational join. Likely the same pattern recurs on `leagues`, `leagues/join`, `players`, `transfers` under `/api/fpl/*` — not independently confirmed this pass, worth a full sweep.
@@ -13730,7 +13730,13 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Cross-referenced, confirmed still correctly resolved, not re-broken:** `BACKLOG-324`/`BUG-037`, `BACKLOG-222` (`/api/predictions`, used as the reference-correct pattern above), `BACKLOG-220`/`BACKLOG-323` (lineup lock/atomic-write). None of BUG-002/003/004/006 or the 🔴 volatility list's original citations were newly touched.
 
-**Not done:** any fix. This is the audit's headline finding — recommend treating the 3 CRITICAL items as a hard blocker on the `dev`/`main` promotion until fixed, given they're live and unauthenticated today, not merely theoretical.
+**Fixed — CRITICAL #1, #2, #3:** commit `b29a75e`, 2026-09-18.
+
+**Evidence:**
+- Commit: `b29a75e`
+- Verified by: code trace + `tsc --noEmit` (18 errors, unchanged baseline, zero new). No live/staging curl re-test run against the fixed routes yet.
+- Observed result: `fpl/teams`, `fpl/leagues`, `fpl/leagues/join` — every `with: { user: true }`/`with: { admin: true }` relational join now restricted to `columns: { id, name, avatar }`; `fpl/teams` GET/POST/PATCH now require `getAuthUser` + ownership check (own team/session only, admin override). `matches/[id]/route.ts:741` — `approvedBy` now always `authUser.id` when `approvalStatus` is set, `body.approvedBy` no longer read. `matches/route.ts` POST — `MATCH_CREATE_FIELDS` allow-list in place, `approvalStatus`/`managerNotes`/`approvedBy`/`loggerId` can no longer be set at match-creation time.
+- Pending items: **live re-verification** — an actual unauthenticated `curl` against `fpl/teams` (expect 401 on `?userId=`, no `password`/`email` in any response shape) has not been run since the fix. `fpl/teams` GET/POST/PATCH now do have `getAuthUser` + ownership checks (fixed by this commit, narrower than the MEDIUM note originally implied). Still genuinely open, **not fixed by this commit**: `fpl/leagues/join` POST still takes `userId` straight from the body with no `getAuthUser` call (ownership is checked against the claimed `userId`, but that `userId` itself isn't session-verified); `polls/route.ts` POST/PATCH untouched; `seed.ts` hardcoded plaintext admin credential + unguarded destructive delete; `publishedByName` email exposure; stale `BUG-037` closure note.
 
 ---
 
