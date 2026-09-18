@@ -36,16 +36,33 @@ function SearchContent() {
     const query = searchParams.get('q') || '';
 
     const [results, setResults] = useState<SearchResults | null>(null);
-    const [loading, setLoading] = useState(true);
+    // BACKLOG-401 #5: this page had zero <input> elements and no query meant
+    // `loading` (initialized true) was never set false, since performSearch()
+    // only ever runs when `query` is already non-empty -- a permanent
+    // "Searching..." spinner for anyone reaching bare /search (e.g. the
+    // not-found.tsx Search button links here with no ?q=, or a plain
+    // bookmark/share of the route). Starts false now; the effect below only
+    // flips it true right before an actual search runs.
+    const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'teams' | 'players' | 'matches' | 'competitions'>('all');
     const [selectedSport, setSelectedSport] = useState<string | null>(null);
     const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
+    const [searchInput, setSearchInput] = useState(query);
 
     useEffect(() => {
+        setSearchInput(query);
         if (query) {
             performSearch();
         }
     }, [query, activeTab, selectedSport]);
+
+    const handleSearchSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const trimmed = searchInput.trim();
+        if (trimmed) {
+            router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+        }
+    };
 
     const performSearch = async () => {
         setLoading(true);
@@ -110,10 +127,26 @@ function SearchContent() {
                         <div>
                             <h1 className="text-2xl font-bold">Search Results</h1>
                             <p className="text-foreground/60">
-                                {loading ? 'Searching...' : `${getTotalResults()} results for "${query}"`}
+                                {loading ? 'Searching...' : query ? `${getTotalResults()} results for "${query}"` : 'Search teams, players, matches, and competitions'}
                             </p>
                         </div>
                     </div>
+
+                    {/* BACKLOG-401 #5: this page previously had zero <input> elements at
+                        all -- it only ever worked as a landing target for a query already
+                        built into the URL (e.g. the header's inline overlay), with no way
+                        for a user who reached the bare route to actually search from here. */}
+                    <form onSubmit={handleSearchSubmit} className="relative mb-4">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
+                        <input
+                            type="search"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            placeholder="Search teams, players, matches, competitions..."
+                            aria-label="Search"
+                            className="w-full bg-muted border border-border rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-primary/50 transition-all"
+                        />
+                    </form>
 
                     {/* Category Tabs */}
                     <UnderlineTabs
@@ -146,6 +179,12 @@ function SearchContent() {
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
                         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                ) : !query ? (
+                    <div className="text-center py-20">
+                        <Search className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground/60 mb-2">Search BrixSports</h3>
+                        <p className="text-foreground/40">Type above to find teams, players, matches, and competitions</p>
                     </div>
                 ) : !results || getTotalResults() === 0 ? (
                     <div className="text-center py-20">
