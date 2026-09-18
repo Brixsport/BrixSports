@@ -311,8 +311,12 @@ export default function PlayerDetailClient() {
                                 <div>
                                     <InfoRow label="Position" value={player.position} />
                                     {player.team && <InfoRow label="Team" value={player.team.name} />}
-                                    {player.height && <InfoRow label="Height" value={`${player.height} cm`} />}
-                                    {player.weight && <InfoRow label="Weight" value={`${player.weight} kg`} />}
+                                    {/* BACKLOG-401 #8: height/weight are free-text columns -- some rows
+                                        already store the unit inline (e.g. "186cm"), so unconditionally
+                                        appending " cm"/" kg" produced a visible "186cm cm" on this
+                                        player's profile. Only append the unit if it isn't already there. */}
+                                    {player.height && <InfoRow label="Height" value={/cm\s*$/i.test(player.height) ? player.height : `${player.height} cm`} />}
+                                    {player.weight && <InfoRow label="Weight" value={/kg\s*$/i.test(player.weight) ? player.weight : `${player.weight} kg`} />}
                                     {player.dateOfBirth && (
                                         <InfoRow
                                             label="Age"

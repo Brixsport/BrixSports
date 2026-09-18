@@ -27,7 +27,20 @@ interface Competition {
     id: string;
     name: string;
     sport: string;
+    season?: string;
     level?: string; // 'inter-university' | 'busa-league' | 'college' | 'department'
+}
+
+// BACKLOG-401 #7: two real competitions can share an identical display name
+// (confirmed live: "BUSA LEAGUE FOOTBALL" 2025/2026 vs 2026/2027) -- /competitions
+// shows season alongside the name so they're distinguishable there, but this
+// page's tabs used the bare name as both the tab key AND its label, so the two
+// were indistinguishable in the tab strip AND a name-only lookup couldn't tell
+// them apart. Appends the season only when the name actually collides within
+// the current competitions list, so every other (unique-named) tab is unchanged.
+function getTabKey(c: Competition, allComps: Competition[]): string {
+    const isDuplicateName = allComps.filter(x => x.name === c.name).length > 1;
+    return isDuplicateName && c.season ? `${c.name} (${c.season})` : c.name;
 }
 
 export default function TeamsPage() {
@@ -36,6 +49,14 @@ export default function TeamsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<string>('');
+
+    // BACKLOG-401 #6: the Quick Stats tile below hardcoded "Total Goals" even
+    // for a basketball competition, where the shared `goalsFor` field
+    // actually holds points -- confirmed live on
+    // "/teams?competition=BUSA LEAGUE BASKETBALL" (showed "TOTAL GOALS: 2322").
+    // Sport-conditional label only; not touching the shared goalsFor column.
+    const activeSport = competitions.find(c => getTabKey(c, competitions) === activeTab)?.sport;
+    const isBasketballTab = activeSport?.toLowerCase() === 'basketball';
 
     // Fetch initial data
     useEffect(() => {
@@ -56,7 +77,7 @@ export default function TeamsPage() {
                 let defaultTab = '';
                 if (currentComps.length > 0) {
                     const busaComp = currentComps.find(c => c.name.toUpperCase().includes('BUSA'));
-                    defaultTab = busaComp ? busaComp.name : currentComps[0].name;
+                    defaultTab = getTabKey(busaComp || currentComps[0], currentComps);
                 }
 
                 if (defaultTab) {
@@ -98,11 +119,21 @@ export default function TeamsPage() {
                 data = Array.isArray(result) ? result : [];
             } else {
                 // Determine sport for competition
-                const comp = currentComps.find(c => c.name === filter);
+                const comp = currentComps.find(c => getTabKey(c, currentComps) === filter);
                 const sport = comp?.sport || 'Football';
 
+                // BACKLOG-401 #7: prefer competitionId when we've already resolved
+                // the exact competition row -- authoritative on both standings
+                // routes specifically to avoid the name-collision bug two
+                // same-named-different-season competitions can trigger (see
+                // those routes' own comments). Name-only fallback stays for the
+                // (should no longer happen) case where lookup by tab key fails.
+                const query = comp?.id
+                    ? `competitionId=${encodeURIComponent(comp.id)}`
+                    : `competition=${encodeURIComponent(filter)}`;
+
                 // Fetch teams via standings for specific competition
-                const response = await fetch(`/api/${sport.toLowerCase()}/standings?competition=${encodeURIComponent(filter)}`);
+                const response = await fetch(`/api/${sport.toLowerCase()}/standings?${query}`);
                 if (!response.ok) throw new Error('Failed to fetch competition teams');
                 const result = await response.json();
 
@@ -148,7 +179,10 @@ export default function TeamsPage() {
     // independently-animating bars.
     const renderCompTabs = (title: string, comps: Competition[], icon: any) => {
         if (comps.length === 0) return null;
-        const tabs: UnderlineTab[] = comps.map((c) => ({ id: c.name, label: c.name }));
+        const tabs: UnderlineTab[] = comps.map((c) => {
+            const key = getTabKey(c, competitions);
+            return { id: key, label: key };
+        });
         return (
             <div className="mb-4">
                 <div className="flex items-center gap-2 mb-1 px-1">
@@ -243,7 +277,7 @@ export default function TeamsPage() {
                                         <p className="font-display text-xl italic text-foreground truncate px-2">{[...teams].sort((a, b) => (b.points || 0) - (a.points || 0))[0]?.shortName || '-'}</p>
                                     </div>
                                     <div className="hidden md:block">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-1">Total Goals</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-1">{isBasketballTab ? 'Total Points' : 'Total Goals'}</p>
                                         <p className="font-display text-xl italic text-foreground">{teams.reduce((sum, t) => sum + (t.goalsFor || 0), 0)}</p>
                                     </div>
                                 </div>
