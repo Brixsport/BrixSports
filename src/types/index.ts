@@ -61,6 +61,8 @@ export interface Match {
     startTime: string;
     venue: string;
     competition: string;
+    // Already returned by GET /api/matches; the homepage groups and links by it.
+    competitionId?: string | null;
     round?: string | null;
     sport: SportType;
     matchType?: string;

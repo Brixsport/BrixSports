@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLeft, Play } from 'lucide-react';
+import { Trophy, Calendar, User, Search, Bell, Menu, ChevronRight, ChevronLeft, Play } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
@@ -18,8 +18,7 @@ import LiveMatchStatus from '@/components/LiveMatchStatus';
 import AdBanner from '@/components/ads/AdBanner';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
-import { NewFeatureBadge } from '@/components/ui/NewFeatureBadge';
-import { UpdateTooltip } from '@/components/ui/UpdateTooltip';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 
 // Lazy load heavy overlay components
 const MatchOverlay = dynamic(() => import('@/components/MatchOverlay').then(mod => mod.MatchOverlay), { ssr: false });
@@ -415,12 +414,12 @@ export default function Home() {
                 <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   Teams
                 </Link>
-                <UpdateTooltip message="New: build and share your matchday starting XI">
-                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors relative">
-                    Lineup Builder
-                    <NewFeatureBadge className="absolute -top-1 -right-1" />
-                  </Link>
-                </UpdateTooltip>
+                <Link href="/players" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
+                  Players
+                </Link>
+                <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
+                  Lineup Builder
+                </Link>
                 <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   News
                 </Link>
@@ -474,11 +473,12 @@ export default function Home() {
                 )}
               </div>
               <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+                onClick={() => setIsMenuOpen(true)}
+                aria-label="Open menu"
+                aria-haspopup="dialog"
                 className="md:hidden w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors"
               >
-                {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                <Menu size={20} />
               </button>
             </div>
           </div>
@@ -590,10 +590,14 @@ export default function Home() {
             <div className="space-y-6">
               {Object.entries(groupedMatches).map(([date, dateMatches]: [string, any]) => {
                 // Group matches by competition within the date group
+                // BACKLOG-407: group by id when known -- two competitions can share a
+                // name (same class as BACKLOG-401 #7 on /teams) and must not merge
+                // into one group or link to the wrong competition.
                 const matchesByCompetition = dateMatches.reduce((acc: any, match: Match) => {
                   const compName = match.competition || 'Other'; // Fallback if undefined
-                  if (!acc[compName]) acc[compName] = [];
-                  acc[compName].push(match);
+                  const groupKey = match.competitionId || compName;
+                  if (!acc[groupKey]) acc[groupKey] = { id: match.competitionId ?? null, name: compName, matches: [] };
+                  acc[groupKey].matches.push(match);
                   return acc;
                 }, {});
 
@@ -618,33 +622,45 @@ export default function Home() {
 
                     {/* Competitions */}
                     <div className="space-y-4">
-                      {Object.entries(matchesByCompetition).map(([competitionName, compMatches]: [string, any]) => (
-                        <div key={competitionName} className="bg-muted border border-border rounded-xl overflow-hidden">
-                          {/* Competition Header */}
-                          <div className="bg-muted px-4 py-2 flex items-center justify-between border-b border-border">
-                            <div className="flex items-center gap-2">
-                              {/* Attempt to find competition logo or use icon */}
-                              {/* Ideally we'd have a map or lookup for competition logos, for now use standard icon */}
-                              <div className="w-5 h-5 rounded bg-muted flex items-center justify-center">
-                                <Trophy size={12} className="text-foreground/40" />
+                      {Object.entries(matchesByCompetition).map(([groupKey, group]: [string, any]) => (
+                        <div key={groupKey} className="bg-muted border border-border rounded-xl overflow-hidden">
+                          {/* Competition Header (BACKLOG-407): a real link when the id is known,
+                              tinted so it reads as a section header instead of blending into the
+                              card. Without an id it stays a plain header with no chevron, so it
+                              never shows an affordance that does nothing. */}
+                          {group.id ? (
+                            <Link
+                              href={`/competitions/${group.id}`}
+                              aria-label={`${group.name} - view competition`}
+                              className="min-h-11 px-4 py-2 flex items-center justify-between gap-3 bg-primary/10 hover:bg-primary/15 border-b border-border transition-colors"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Trophy size={14} className="text-primary shrink-0" />
+                                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider truncate">
+                                  {group.name}
+                                </h3>
                               </div>
-                              <h3 className="text-xs font-bold text-foreground/80 uppercase tracking-wider">
-                                {competitionName}
+                              <ChevronRight size={16} className="text-primary shrink-0" />
+                            </Link>
+                          ) : (
+                            <div className="min-h-11 px-4 py-2 flex items-center gap-2 bg-primary/10 border-b border-border">
+                              <Trophy size={14} className="text-primary shrink-0" />
+                              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider truncate">
+                                {group.name}
                               </h3>
                             </div>
-                            <ChevronRight size={14} className="text-foreground/20" />
-                          </div>
+                          )}
 
                           {/* Matches List */}
                           <div>
-                            {compMatches.map((match: Match, idx: number) => (
+                            {group.matches.map((match: Match, idx: number) => (
                               <React.Fragment key={match.id}>
                               {idx === 1 && <AdBanner position="inline" />}
                               <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 onClick={() => router.push(`/matches/${match.id}`)}
-                                className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-border' : ''
+                                className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors group ${idx !== group.matches.length - 1 ? 'border-b border-border' : ''
                                   }`}
                               >
                                 <div className="flex items-center justify-between">
@@ -822,46 +838,44 @@ export default function Home() {
 
 
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-0 z-40 bg-background pt-20 px-4 md:hidden"
-          >
-            <div className="flex flex-col gap-4 text-lg font-display uppercase">
-              <Link href="/teams" className="text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Teams</Link>
+      {/* Mobile menu -- bottom sheet (BACKLOG-406) */}
+      <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <SheetContent
+          side="bottom"
+          className="md:hidden max-h-[85vh] overflow-y-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
+        >
+          <SheetHeader className="pb-0">
+            <SheetTitle className="font-display uppercase tracking-wide">Menu</SheetTitle>
+            <SheetDescription className="sr-only">Browse teams, players, competitions, lineup builder and news</SheetDescription>
+          </SheetHeader>
+          <nav aria-label="Main menu" className="flex flex-col px-4 pb-6 text-lg font-display uppercase">
+            <Link href="/teams" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Teams</Link>
+            <Link href="/players" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Players</Link>
 
-              {/* Competition Links */}
-              <div className="space-y-2">
-                <Link href="/competitions" className="text-foreground/60 hover:text-foreground transition-colors block" onClick={() => setIsMenuOpen(false)}>All Competitions</Link>
-                {competitions.length > 0 && (
-                  <div className="pl-4 border-l border-border space-y-2 py-1">
-                    {competitions.map((comp) => (
-                      <Link
-                        key={comp.id}
-                        href={`/competitions/${comp.id}`}
-                        className="block text-sm text-foreground/40 hover:text-primary transition-colors truncate"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        {comp.name}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <Link href="/lineup-builder" className="text-foreground/60 hover:text-foreground transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
-                Lineup Builder
-                <NewFeatureBadge />
-              </Link>
-              <Link href="/news" className="text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
+            {/* Competition Links */}
+            <div>
+              <Link href="/competitions" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>All Competitions</Link>
+              {competitions.length > 0 && (
+                <div className="pl-4 border-l border-border py-1">
+                  {competitions.map((comp) => (
+                    <Link
+                      key={comp.id}
+                      href={`/competitions/${comp.id}`}
+                      className="min-h-11 flex items-center text-sm text-foreground/40 hover:text-primary transition-colors"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <span className="truncate">{comp.name}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+            <Link href="/lineup-builder" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Lineup Builder</Link>
+            <Link href="/news" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
+          </nav>
+        </SheetContent>
+      </Sheet>
     </div>
     </>
   );

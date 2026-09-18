@@ -11516,6 +11516,8 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Reverted, 2026-09-15, same day:** Richard reconsidered and asked to remove the 3 added items (Teams/Lineups/News) — back to `Fixtures`/`Competitions`/`Profile` only, `Competitions` label restored (no longer needs the "Comps" shortening once it's back to 3 columns). Kept the `grid grid-cols-N` layout approach rather than restoring the original `flex justify-around` + fixed `min-w-[70px]`, now `grid-cols-3` — a grid is the safer default if the item count changes again, and there was no reason to revert a strictly-better layout mechanism along with the content change. Kept the `Users`/`ListChecks`/`Newspaper` icon imports removed (unused now). The underlying gap this entry describes (Teams/Lineup Builder/News unreachable from a global nav) is open again — no replacement solution decided; revisit if Richard wants a different approach later (a dedicated "More" tab, or leaving it as homepage-only per the original state).
 **Files (revert):** `src/components/BottomNav.tsx`.
 
+**Update 2026-09-18:** the gap this entry describes is being addressed differently — see `BACKLOG-406` (hamburger becomes a bottom sheet, Players added, `BottomNav` left at 3 items). No "More" tab and no direct `BottomNav` additions, per Richard.
+
 ---
 
 ### BACKLOG-389 — Live-Match Scores Don't Color-Code by State (Live vs. Finished Read Identically)
@@ -11989,5 +11991,47 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
   - **Restricted branch**, tested with a throwaway `users` + `user_preferences` row on the shared staging DB (visibility set to `private`, then `friends`; bio/cover set to marker strings): anonymous and other-user both got `user` keys exactly `id,name,avatar`, `stats: null`, `preferences` exactly `{profileVisibility}`, and none of the bio/cover/email markers appeared in the body; the owner still saw own email and bio. Throwaway rows deleted in `finally`, confirmed 0 remaining.
 - Pending items: (1) browser check that `/user/<id>` renders correctly for a public user (cover, joined date, favorite team) and shows the private state without "Joined Invalid Date" — the two page edits (`isPrivate`, `createdAt` guard) are source-only so far; (2) browser check that `/profile/settings` still loads name and email for the signed-in user (the API returns them to the owner, verified above, but the page itself was not opened); (3) the second Vercel project (`brixs2`) sits behind Vercel SSO and was not tested.
 **Files:** `src/app/api/users/[id]/route.ts`, `src/app/user/[userId]/page.tsx`.
+
+---
+
+### BACKLOG-406 — Mobile Nav Restructure: Hamburger Becomes a Bottom Sheet, New `/players` Browse Page, Lineup Builder Promotion Removed
+
+**Status:** SHIPPED — 2026-09-18, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` H1 (no Players entry point), H3 (Lineup Builder over-promoted despite its High Volatility flag), and the presentation half of H2. Richard approved the plan (revision 2 of `IA_NAV_RESTRUCTURE_SPEC.md`).
+
+**Decision trail:** the first spec draft proposed a global "More" tab in `BottomNav`; Richard preferred the top-bar hamburger and asked for a design re-assessment, which reversed the call (see the spec's revision history). Supersedes the "gap open again" note on `BACKLOG-388`.
+
+**What changed:**
+- `src/app/page.tsx`: the mobile menu's full-screen overlay is now the existing `src/components/ui/sheet.tsx` (`side="bottom"`, Radix — no new dependency; the Base UI variant in the design brief was deliberately not added). Rows have a 44px minimum height; the sheet scrolls inside `max-h-[85vh]` and respects the iOS safe-area inset. The trigger is always the `Menu` icon (the sheet overlays it, so the X swap is gone).
+- Menu contents: Teams, **Players (new)**, All Competitions plus the dynamic list, Lineup Builder, News.
+- Lineup Builder's `NewFeatureBadge` and `UpdateTooltip` removed on mobile and desktop; the desktop link stays in the top bar. Desktop top bar gains a Players link.
+- New `src/app/players/page.tsx`: search, sport chips (All/Football/Basketball), list linking to `/players/[id]`, "Load more", loading/empty/error states, back button with `/` fallback. Uses `GET /api/players?search=&sport=&limit=&offset=` (public-stripped DTO) and one `GET /api/teams` for team names.
+
+**Not changed:** `BottomNav` (still Fixtures/Competitions/Profile). **Known limitations:** the top bar and so the hamburger exist only on `/` (`page.tsx` renders its own `<nav>`), so a global header is still a separate, larger refactor; `GET /api/players` fetches at most 500 players and filters/pages in memory, so `/players` only sees the first 500 until that gets DB-side search and paging.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `page.tsx`, `players/page.tsx`, `types/index.ts`).
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview at 375px and desktop — (1) menu button opens the bottom sheet; closes via X, overlay, Escape, and after tapping a link; (2) contents and order as above, no badge/tooltip on Lineup Builder; (3) long competitions list scrolls inside the sheet; (4) desktop shows Teams/Players/Lineup Builder/News, no hamburger; (5) `/players` loads, searches, filters by sport, pages, and each row opens `/players/[id]`; (6) `document.documentElement.scrollWidth <= clientWidth` on `/` and `/players` at 375px.
+**Files:** `src/app/page.tsx`, `src/app/players/page.tsx`.
+
+---
+
+### BACKLOG-407 — Homepage Competition Group Header: Dead Chevron, Blended Background, and Same-Name Competitions Merged
+
+**Status:** SHIPPED — 2026-09-18, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Medium — false affordance plus a grouping bug of the same class as `BACKLOG-401` #7.
+
+**Findings (from the design critique):** in the match list on `/`, the competition header was `bg-muted` on a `bg-muted` card (no separation), its `ChevronRight` was `text-foreground/20` (about 20% opacity, below the 3:1 non-text contrast bar) and was **not a link** — it looked tappable and did nothing. Matches were also grouped by competition name, so two competitions sharing a name merged into one group, and there was no id to link to.
+
+**Fix:** `src/app/page.tsx` groups by `competitionId` (falling back to the name) and the header is a real `<Link>` to `/competitions/{id}`, `bg-primary/10` tint, full-opacity title, primary trophy and chevron, `min-h-11` touch target, `aria-label`. With no id it renders as a plain header with no chevron. `src/types/index.ts`: `Match` gains `competitionId?: string | null` (the field was already in the `GET /api/matches` response). **Tinted, not solid primary** — a solid band would repeat per competition and outrank the live score; Richard approved the tint (the 3px left-edge accent was the alternative).
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new).
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview — header is tinted and visible in both themes; tapping it opens `/competitions/{id}`; two same-named competitions on one day render as two separate groups linking to different ids; a match with no `competitionId` renders a non-link header without a chevron.
+**Files:** `src/app/page.tsx`, `src/types/index.ts`.
 
 ---
