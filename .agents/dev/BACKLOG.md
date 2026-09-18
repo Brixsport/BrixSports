@@ -11649,7 +11649,7 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-394 — Match Detail Page Has No Offline-First Caching Story: A Dropped Connection Shows "No Match Found" Instead of Stale Data
 
-**Status:** PARTIAL — P0 items implemented 2026-09-18 per `BACKLOG-394-SPEC-offline-first-caching.md`; P1/P2 (shared hook extraction, cross-page survey, full offline-first architecture) remain OPEN and deliberately deferred.
+**Status:** PARTIAL — P0 items implemented 2026-09-18 per `BACKLOG-394-SPEC-offline-first-caching.md`; P2 (Service Worker read-cache layer) remains OPEN and deliberately deferred. **P1 (shared hook extraction + cross-page survey) is now DONE as a scoping pass** — see `BACKLOG-404` and `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`, produced by a full engineering+product reassessment session 2026-09-18. The survey found two real, previously-undocumented instances of this exact bug class on other pages — not implemented yet, spec'd and phased into Now/Next/Later.
 **Priority:** Medium — real user-facing correctness gap on a Critical Flow C page, but needs a proper cross-cutting design pass, not a one-file patch.
 
 **Problem, Richard's direct observation:** `/matches/[id]` fetches match data. When the network drops after an initial successful load, the page does not fall back to the already-cached data it fetched moments ago — it reverts to a "no match found" state, as if the match never existed. This is worse than showing nothing: it actively misrepresents a real, previously-confirmed match as not found, on one of the app's highest-traffic pages (Flow C, the public livescore path `CLAUDE.md` explicitly protects).
@@ -11664,7 +11664,57 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Not done:** the P1 shared-hook extraction, the cross-page survey, and the P2 Service Worker layer — all explicitly deferred per the spec's own phasing, not blocking. **Also not done: a live click-through of the new "Couldn't load — Retry" state itself.** Attempted this session by overriding `window.fetch` to force a failure then remounting — the override doesn't survive a full page reload (matchData refetches only on the initial mount / `matchId` change, and a soft client-side remount without a real navigation proved too fragile to force reliably via browser automation). What IS confirmed: the actual `/api/matches/[id]` route returns a genuine 404 for missing matches (not a 200/500 disguised as one), so the branching logic's real-world trigger condition is sound even without a forced click-through of the failure UI itself.
 
-**Reinstate/pick up when:** P1's page survey can be picked up any time; it's well-defined, just not urgent. P2 needs a dedicated engineering+product session before it's even spec-able.
+**Reinstate/pick up when:** P2 needs a dedicated engineering+product session before it's even spec-able. (P1 survey — see `BACKLOG-404` — is now done.)
+
+---
+
+### BACKLOG-404 — `BACKLOG-394`'s Cross-Page Survey Found the Same False-"Not-Found" Bug Live on `/teams/[id]` and `/competitions/[id]`
+
+**Status:** PARTIAL — `/live` first-load false-empty SHIPPED 2026-09-18 (local commit on `fix/backlog-404-read-path-resilience`, NOT pushed, NOT live-verified — see `git log` for the hash; per `.agents/rules/backlog.md`, SHIPPED is not RESOLVED). `/teams/[id]` and `/competitions/[id]` still OPEN at this commit. Spec: `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`.
+
+**Shipped so far (`/live`):** new `src/hooks/useResilientFetch.ts` (single-URL fetch with `response.ok` + shape validation, a real 404 kept distinct from a failed load, previously loaded data never overwritten by a later failure, refetch on the browser `online` event and on a poll timer) and `src/components/resilience/ReadPathStates.tsx` (`LoadFailedState` retry state, `StaleDataBanner`). `/live` now shows a retry state instead of "0 matches live now" on a first-load failure, keeps stale matches on screen behind a "Showing saved data" banner on a later failed poll, and no longer trusts a non-array response body. `tsc --noEmit`: 18 errors before and after, identical set, none in touched files.
+**Not verified:** no browser or network-off test of the new states (per this project's practice, verification runs on a pushed Vercel preview, and this branch is deliberately unpushed). The hook has no automated test — no test framework is installed yet (`TESTING_STRATEGY_2026-09-18.md` Phase 2 would add Vitest).
+**Priority:** Medium — same failure class as `BACKLOG-394`'s original P0 (a network blip renders as "this doesn't exist" instead of a retry state), on two more Critical-Flow-adjacent viewer pages. Not urgent enough to block `feature/ui-redesign` → `dev` (per the same reasoning `BACKLOG-394` was placed under), but real and previously undocumented.
+**Found:** 2026-09-18, during a full-team (engineering + product) offline-first/error-resilience reassessment triggered by `BACKLOG-394` and `BACKLOG-403`, specifically doing the cross-page survey `BACKLOG-394`'s own P1 left open.
+
+**Problem — three independent, uncoordinated implementations of "fetch failed, now what," found by direct source read (not live-clicked):**
+
+| Page | File | Behavior on fetch failure |
+|---|---|---|
+| `/teams/[id]` | `TeamDetailClient.tsx` | `catch` only logs; `data` stays `null`; render falls through to a hard "Team not found" page on ANY fetch failure including the very first load — indistinguishable from a real nonexistent team ID. |
+| `/competitions/[id]` | `page.tsx` | `catch` on the initial `fetchAllData` call explicitly sets `notFound(true)` — same bug, more directly. |
+| `/live` | `page.tsx` | `catch` on the 15s poll is a no-op. Later polls: stale data correctly stays, but with no staleness indicator. **First load: `liveMatches` stays `[]`, so the page states "0 matches live now" / "No Live Matches" — a false claim during a real live match** (correction: first written up here as merely "silent"; re-read showed the false-empty). Also no `response.ok`/`Array.isArray` check before `setLiveMatches(data)` (source-read, not reproduced). Interacts with `sw-user.js`'s 30s live-data cap: any offline reload after 30s reaches this path. |
+| `/teams/[id]` (additional mode) | `TeamDetailClient.tsx` | No `response.ok` check before `setData(await response.json())`; `/api/teams/[id]` returns a 500 error body, so a server error likely sets `data` to an error object and renders a broken page rather than reaching "Team not found" (source-read, not reproduced). |
+
+**Frequency caveat (added after checking `sw-user.js`):** `/api/teams`, `/api/competitions` are stale-while-revalidate cached by the service worker, so the false-not-found on those two pages mostly occurs on a cold cache (first visit while offline/flaky), not on every drop. Also: an app-wide `OfflineIndicator` banner already exists (`PWAProvider`, `navigator.onLine`-driven) — the fix should reuse it, and `navigator.onLine` misses the no-upstream-WiFi case, so per-page states are still required.
+
+**Correction to `BACKLOG-394-SPEC`'s own assumption:** that spec frames the general problem as "other SWR-backed pages." None of these three pages use SWR — all are plain `fetch` + `useState`, same pattern `BACKLOG-394` itself found on `/matches/[id]`. The fix needs to be a plain-React hook, not an SWR-specific wrapper.
+
+**Not done, and why:** this session was scoped to survey + spec (see `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md` for the full requirements, UX copy pattern, and phasing), not implementation — consistent with the same engineering+product-scoping-before-code approach `BACKLOG-394` itself was placed under. **Also not live-verified** — this is a direct source-code read finding (the failure branches are unambiguous from the code itself: `catch` blocks that either no-op or unconditionally set a not-found flag), not a forced-failure click-through in the browser. Recommend a quick live confirmation (same `window.fetch` override technique attempted, and found fragile, for `BACKLOG-394`) before or during implementation, not as a blocking precondition to starting it.
+
+**Fix (spec'd, not built):** extract `MatchDetailClient.tsx`'s already-shipped `loadError: 'not-found' | 'load-failed'` pattern into a shared hook, apply to `/teams/[id]` and `/competitions/[id]`, add a staleness toast to `/live` reusing the existing "Live updates paused" visual language. Full detail, UX copy for all 3 states, and Now/Next/Later phasing in `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`.
+
+**Explicitly not the same primitive as:** `BACKSCOPE_API_GUARD_SPEC.md` (peer session, same date) — that's a fail-closed guard for dead-feature *write* API routes; this is a fail-open "keep showing what we have" pattern for live *read* paths. Different problems, different polarity, kept separate in the spec.
+
+**Reinstate/pick up when:** any time — well-defined, spec'd, sized for a solo dev, not blocking anything. Recommend bundling with other small `BACKLOG-400`-adjacent follow-up work per the spec's own phasing.
+
+**Correction, same day (found when a follow-up pass tried to design `BACKLOG-394` P2):** `BACKLOG-394`'s P2 ("a genuine Service Worker read-cache layer") is **not** unbuilt. `public/sw-user.js` (registered app-wide via `<PWAProvider swPath="/sw-user.js">`, `src/app/layout.tsx:258`) already does cache-then-serve for previously-visited pages, per-route API TTLs (never-cache for auth/live events, 30s-capped network-first for live scores, SWR for teams/players/competitions/news/standings), and build-SHA-stamped cache versioning — shipped and live-verified session 55 under `BACKLOG-226`. `BACKLOG-394-SPEC`'s P2 framing and this entry's original "Not done" list were wrong on that point. What this entry (`BACKLOG-404`) covers — component-level `loadError` state — is a different, complementary layer and stands as written. **Caveat carried from `BACKLOG-226` itself:** full network-severed navigation was never tested end to end (only cache contents and handler logic were verified), so "offline browsing works" is source-reviewed and cache-content-verified, not exercised with a real dropped connection.
+
+---
+
+### BACKLOG-405 — `sw-user.js`'s `sync-favorites` / `sync-profile` Background Sync Handlers Have No Callers Anywhere in `src/`
+
+**Status:** OPEN — low priority, cleanup, not a live functional gap.
+**Priority:** Low.
+**Found:** 2026-09-18, while grounding the `BACKLOG-394` P2 design pass against `public/sw-user.js`.
+
+**Finding:** `public/sw-user.js` defines a `sync` event handler for tags `sync-favorites` and `sync-profile` (`syncFavorites()`, `syncProfile()`, and an `openDB()` creating a `BrixsportDB` with `pendingFavorites`/`pendingProfile` stores). A repo-wide grep of `src/` for `pendingFavorites`, `pendingProfile`, `sync-favorites`, `sync-profile` returns zero hits — nothing in the app writes to those stores or calls `sync.register()` with those tags. The handlers are unreachable scaffolding, not a working offline queue for favorites/profile edits.
+
+**Why it matters (and why only Low):** it is not the iOS Background Sync gap `PWA_LIMITATIONS.md` documents for the Logger (`BACKLOG-107`) — that concern doesn't apply to code that never runs. The actual consequence: a Fan who favourites a team or edits their profile while offline gets a plain failed request, with no queueing, on every platform. `BACKLOG-226`'s note that the iOS Background-Sync fallback "already exists" refers to the Logger's `admin-offline-queue.ts` path, not this one. Also note the Fan Account Blueprint (`userFavorites`, `userFollows`, `userPreferences`) now makes favourites a real feature, so this may stop being hypothetical.
+
+**Not verified:** grep only; not checked whether a dynamic string construction elsewhere could reference these names. Recommend one confirming look before deleting.
+
+**Options, Richard's call (not assumed):** (a) delete the dead handlers; (b) actually build a viewer offline write queue for favourites/profile, reusing `BACKLOG-107`'s page-level `online`/`visibilitychange` drain pattern so it works on iOS, since Background Sync alone would not.
 
 ---
 
