@@ -11936,9 +11936,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-404 — /profile/settings: No Back Control in Browser Mode, No Fallback for a Cold PWA Open, and a Manual "Save Changes" Button That Could Overwrite Stored Preferences
+### ~~BACKLOG-404 — /profile/settings: No Back Control in Browser Mode, No Fallback for a Cold PWA Open, and a Manual "Save Changes" Button That Could Overwrite Stored Preferences~~
 
-**Status:** SHIPPED — 2026-09-18, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — 2026-09-18 (commit `e202fd9`), live-verified in the browser on the staging preview with database-side read-back. One item not testable here: installed-PWA standalone mode (see Evidence).
 **Priority:** Medium — Richard-requested UX fix plus a latent data-integrity hazard in the old save model.
 
 **Root cause:**
@@ -11955,10 +11955,16 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Deliberately not done:** no debounce or batching; two rapid same-key PATCHes arriving out of order at the server are not reconciled (last to arrive wins, rare, self-corrects on next change or reload); server-side the preference values (`theme`/`language`/`timezone`/`defaultView`/`profileVisibility`) are still unvalidated free strings — noted, not changed; the 3 BACKSCOPED notification toggles stay hidden.
 
 **Evidence:**
-- Commit: pending (this session)
-- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `page.tsx`); source read of both PATCH routes confirming the preferences route is genuinely partial (per-field allow-list, self-or-admin auth) so single-field saves are safe.
-- Observed result: NOT live-tested.
-- Pending items: on the branch's Vercel preview — (1) browser: back arrow visible, cold open returns to `/profile`; (2) installed PWA: same; (3) toggle -> "Saving..." -> "Saved", then a DB/API read-back of `user_preferences` (not just the UI) confirms the value persisted after reload; (4) force a failing PATCH (offline) -> toggle reverts, "Not saved" + toast; (5) name: valid blur persists, 1 char shows inline error with no request in the network tab.
+- Commit: `e202fd9`
+- Verified by: browser session on the staging preview (`brixsports-staging-5j89k3qa9-brixsports-projects.vercel.app`, build of `5e92106`) signed in as a throwaway staging user (minted 30-minute JWT, user deleted afterward), with read-backs through `GET /api/users/[id]` and `GET /api/users/[id]/preferences`; `tsc --noEmit` 18 errors (baseline unchanged, none in `page.tsx`); source read of both PATCH routes.
+- Observed result:
+  - Page loads the owner's name and email; the "Save Changes" button is gone; the `role="status"` region exists; the toggles expose `role="switch"` with `aria-checked`.
+  - **Back button:** visible in browser mode. Opened cold in a fresh tab (`history.length` 2), clicking it went to `/profile`.
+  - **Toggle:** clicking "Match Event Alerts" showed "Saving...", then "Saved". The request body was exactly `{"matchAlerts":false}` to `/api/users/<id>/preferences`, and the API read-back changed `matchAlerts` true to false with `showStats`, `notifications` and `theme` unchanged.
+  - **Failure:** with `PATCH` forced to return 500, "Show Statistics" reverted to its previous state, the indicator read "Not saved", and the read-back `showStats` was unchanged.
+  - **Select:** setting Profile Visibility to private sent `{"profileVisibility":"private"}` and the read-back showed `private`.
+  - **Name:** a 1-character name showed the inline error ("Name must be 2 to 100 characters"), `aria-invalid="true"`, and sent no request; "Verify Renamed" sent `{"name":"Verify Renamed"}` and the read-back name changed; blurring with no change sent nothing.
+- Pending items: installed-PWA standalone mode was not tested (only browser mode, since the pane cannot install a PWA); the toast wording on failure was not inspected, only the indicator and the revert. A first attempt at the name checks looked like a failure and was a test-harness artifact (a synthetic `el.blur()` does not fire React's blur handler in an unfocused pane); redone with the real `focusout` event.
 **Files:** `src/app/profile/settings/page.tsx`.
 
 ---
@@ -11989,14 +11995,15 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
   - **Owner:** 200 with own `email` and `role`, no `password` field, full preferences row when one exists, `Cache-Control: private, no-store`.
   - **Admin:** sees the target's email.
   - **Restricted branch**, tested with a throwaway `users` + `user_preferences` row on the shared staging DB (visibility set to `private`, then `friends`; bio/cover set to marker strings): anonymous and other-user both got `user` keys exactly `id,name,avatar`, `stats: null`, `preferences` exactly `{profileVisibility}`, and none of the bio/cover/email markers appeared in the body; the owner still saw own email and bio. Throwaway rows deleted in `finally`, confirmed 0 remaining.
-- Pending items: (1) browser check that `/user/<id>` renders correctly for a public user (cover, joined date, favorite team) and shows the private state without "Joined Invalid Date" — the two page edits (`isPrivate`, `createdAt` guard) are source-only so far; (2) browser check that `/profile/settings` still loads name and email for the signed-in user (the API returns them to the owner, verified above, but the page itself was not opened); (3) the second Vercel project (`brixs2`) sits behind Vercel SSO and was not tested.
+- Browser checks, added later the same day (staging preview, build of `5e92106`): `/user/<public user id>` renders name, "Joined January 2026", "Supports Joga-Bonito" and the favorite-team card with no "Invalid Date" and no email; for a throwaway user set to private (through the settings page itself), a signed-out viewer sees the name, "This user's profile is private.", no Joined or Supports line, and no bio or email text, while the anonymous API call returned only `id,name,avatar`, `preferences: {profileVisibility: "private"}` and `stats: null`; `/profile/settings` loads the signed-in user's name and email (owner path).
+- Pending items: the second Vercel project (`brixs2`) sits behind Vercel SSO and was not tested.
 **Files:** `src/app/api/users/[id]/route.ts`, `src/app/user/[userId]/page.tsx`.
 
 ---
 
-### BACKLOG-406 — Mobile Nav Restructure: Hamburger Becomes a Bottom Sheet, New `/players` Browse Page, Lineup Builder Promotion Removed
+### ~~BACKLOG-406 — Mobile Nav Restructure: Hamburger Becomes a Bottom Sheet, New `/players` Browse Page, Lineup Builder Promotion Removed~~
 
-**Status:** SHIPPED — 2026-09-18, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — 2026-09-18 (commit `5fcf2bb`), live-verified in the browser on the staging preview at 375px and desktop width.
 **Priority:** Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` H1 (no Players entry point), H3 (Lineup Builder over-promoted despite its High Volatility flag), and the presentation half of H2. Richard approved the plan (revision 2 of `IA_NAV_RESTRUCTURE_SPEC.md`).
 
 **Decision trail:** the first spec draft proposed a global "More" tab in `BottomNav`; Richard preferred the top-bar hamburger and asked for a design re-assessment, which reversed the call (see the spec's revision history). Supersedes the "gap open again" note on `BACKLOG-388`.
@@ -12010,17 +12017,21 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Not changed:** `BottomNav` (still Fixtures/Competitions/Profile). **Known limitations:** the top bar and so the hamburger exist only on `/` (`page.tsx` renders its own `<nav>`), so a global header is still a separate, larger refactor; `GET /api/players` fetches at most 500 players and filters/pages in memory, so `/players` only sees the first 500 until that gets DB-side search and paging.
 
 **Evidence:**
-- Commit: pending (this session)
-- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `page.tsx`, `players/page.tsx`, `types/index.ts`).
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview at 375px and desktop — (1) menu button opens the bottom sheet; closes via X, overlay, Escape, and after tapping a link; (2) contents and order as above, no badge/tooltip on Lineup Builder; (3) long competitions list scrolls inside the sheet; (4) desktop shows Teams/Players/Lineup Builder/News, no hamburger; (5) `/players` loads, searches, filters by sport, pages, and each row opens `/players/[id]`; (6) `document.documentElement.scrollWidth <= clientWidth` on `/` and `/players` at 375px.
+- Commit: `5fcf2bb`
+- Verified by: browser session on the staging preview (`brixsports-staging-5j89k3qa9-brixsports-projects.vercel.app`, build of `5e92106`), DOM measurements rather than screenshots alone, plus screenshots for the visual check; `tsc --noEmit` 18 errors (baseline unchanged, none in the touched files).
+- Observed result:
+  - **Sheet (375px):** the menu button opens a dialog anchored to the bottom (`bottom` equals the viewport height), 16px rounded top, titled "Menu", 661px tall of 812 (within the 85vh cap). Contents in order: Teams, Players, All Competitions plus 9 competition links, Lineup Builder, News. Every row 44px tall. Lineup Builder's link has no child elements and no "NEW" text. Closes via Escape, the X button and the overlay, and body scroll lock releases each time.
+  - **Desktop (1024px):** top bar shows Teams, Players, Lineup Builder, News as plain links; no "NEW" text and no tooltip trigger in the nav; the hamburger is hidden.
+  - **No horizontal overflow** (`scrollWidth` 375 = `clientWidth` 375) on `/` and on `/players` at 375px.
+  - **`/players`:** 422 players listed, first 30 shown; team names resolved (e.g. "Forward · Storm · Bells University of Technology · #24"); Load more appended to 60 unique rows; the Basketball chip gave 95 players; searching "jordan" gave 1; a nonsense search showed `No players match "zzzzqqqq".`; clearing restored 422; the search input has a label; chips are 44px with `aria-pressed`; the back button is present; clicking the first row opened `/players/<that id>` (page title "JORDAN — Storm | BRIXSPORTS").
+- Pending items: (1) a competitions list long enough to make the sheet scroll internally was not exercised (the current list of 9 fits) — the `max-h-[85vh] overflow-y-auto` is in place but unobserved; (2) the iOS safe-area inset cannot be tested in this pane; (3) `/players` now shows 422 of the 500-player ceiling that `GET /api/players` fetches before paging, so DB-side search and paging is due sooner than the "~309 players" figure written in the spec — worth its own entry when someone touches that endpoint; (4) the `brixs2` Vercel project is behind SSO and was not tested.
 **Files:** `src/app/page.tsx`, `src/app/players/page.tsx`.
 
 ---
 
-### BACKLOG-407 — Homepage Competition Group Header: Dead Chevron, Blended Background, and Same-Name Competitions Merged
+### ~~BACKLOG-407 — Homepage Competition Group Header: Dead Chevron, Blended Background, and Same-Name Competitions Merged~~
 
-**Status:** SHIPPED — 2026-09-18, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — 2026-09-18 (commits `5fcf2bb` and `cc70961`), live-verified in the browser on the staging preview in both themes.
 **Priority:** Medium — false affordance plus a grouping bug of the same class as `BACKLOG-401` #7.
 
 **Findings (from the design critique):** in the match list on `/`, the competition header was `bg-muted` on a `bg-muted` card (no separation), its `ChevronRight` was `text-foreground/20` (about 20% opacity, below the 3:1 non-text contrast bar) and was **not a link** — it looked tappable and did nothing. Matches were also grouped by competition name, so two competitions sharing a name merged into one group, and there was no id to link to.
@@ -12030,10 +12041,10 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Fix:** `src/app/page.tsx` groups by `competitionId` (falling back to the name) and the header is a real `<Link>` to `/competitions/{id}`, `bg-primary/10` tint, full-opacity title, primary trophy and chevron, `min-h-11` touch target, `aria-label`. With no id it renders as a plain header with no chevron. `src/types/index.ts`: `Match` gains `competitionId?: string | null` (the field was already in the `GET /api/matches` response). **Tinted, not solid primary** — a solid band would repeat per competition and outrank the live score; Richard approved the tint (the 3px left-edge accent was the alternative).
 
 **Evidence:**
-- Commit: pending (this session)
-- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new).
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview — header is tinted and visible in both themes; tapping it opens `/competitions/{id}`; two same-named competitions on one day render as two separate groups linking to different ids; a match with no `competitionId` renders a non-link header without a chevron.
+- Commit: `5fcf2bb` (grouping and link) and `cc70961` (the transform fix, without which no header was a link)
+- Verified by: browser session on the staging preview (build of `cc70961`, `brixsports-staging-olxwdttlf-brixsports-projects.vercel.app`) at 375px, dark and light; `tsc --noEmit` 18 errors (baseline unchanged). The first live check on the `5fcf2bb` build is what exposed the missing transform field: 0 of the headers were links there.
+- Observed result: on the `cc70961` build, 47 competition headers render as links (each 44px tall, `oklab` primary at 10% opacity over the card, primary chevron); the only plain headers are the four legacy free-text groups with no `competitionId` ("MOCK SHOWCASE (delete me)", "League", "U", "Gba"), which correctly have no chevron; no group is duplicated by name across different ids; no horizontal overflow. Light theme: header tint over `oklch(0.92 0.003 85)`, title `oklch(0.15 0 0)`, chevron `oklch(0.48 0.2 250)`, readable in the screenshot. Clicking a header navigated to `/competitions/TnsEzc3E8v_sIKSCO4KHf` (the first attempt timed out at 3.5s on a cold route load; a second attempt with a longer wait navigated).
+- Pending items: none for this entry. Not tested: a same-day pair of same-named competitions with different ids (none exists in the staging data today), so the grouping-by-id path is verified only for "no duplicate merged" and by code.
 **Files:** `src/app/page.tsx`, `src/types/index.ts`.
 
 ---
