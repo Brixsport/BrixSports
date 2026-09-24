@@ -13,6 +13,15 @@ import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 
+// BACKLOG-401 #1 found this exact malformed-startTime shape ("1788963960000.0",
+// a stringified epoch instead of ISO) on /live's match cards; date-fns' format()
+// throws RangeError on an Invalid Date, which this file's recent/upcoming match
+// cards had no guard against -- one bad row crashed the whole page.
+function safeFormat(value: string | number | undefined, pattern: string, fallback = 'TBD') {
+    const d = new Date(value ?? NaN);
+    return isNaN(d.getTime()) ? fallback : format(d, pattern);
+}
+
 const TeamStatsChart = dynamic(() => import('@/components/TeamStatsChart'), {
     loading: () => <div className="absolute inset-0 flex items-center justify-center animate-pulse bg-muted rounded-full" />,
     ssr: false
@@ -351,8 +360,8 @@ export default function TeamDetailClient() {
                                                         <div className="flex items-center justify-between">
                                                             <div className="flex items-center gap-6">
                                                                 <div className="flex flex-col items-center">
-                                                                    <span className="text-xs font-bold text-foreground/40 uppercase mb-1">{format(new Date(match.startTime), 'MMM')}</span>
-                                                                    <span className="text-xl font-black">{format(new Date(match.startTime), 'dd')}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 uppercase mb-1">{safeFormat(match.startTime, 'MMM', '')}</span>
+                                                                    <span className="text-xl font-black">{safeFormat(match.startTime, 'dd')}</span>
                                                                 </div>
                                                                 <div className="h-10 w-px bg-border" />
                                                                 <div className="space-y-1">
@@ -389,7 +398,7 @@ export default function TeamDetailClient() {
                                                                     </span>
                                                                 ) : (
                                                                     <span className="px-3 py-1 rounded-lg bg-muted text-foreground/40 text-xs font-bold uppercase tracking-widest">
-                                                                        {format(new Date(match.startTime), 'HH:mm')}
+                                                                        {safeFormat(match.startTime, 'HH:mm')}
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -615,11 +624,11 @@ export default function TeamDetailClient() {
                                                                 <div className="flex justify-between items-start mb-6">
                                                                     <div className="flex flex-col">
                                                                         <span className="text-lg font-bold text-foreground mb-1 group-hover:text-primary transition-colors">
-                                                                            {format(new Date(match.startTime), 'EEEE, MMM d')}
+                                                                            {safeFormat(match.startTime, 'EEEE, MMM d')}
                                                                         </span>
                                                                         <span className="text-sm font-medium text-foreground/40 flex items-center gap-2">
                                                                             <Calendar className="w-3 h-3" />
-                                                                            {format(new Date(match.startTime), 'h:mm a')}
+                                                                            {safeFormat(match.startTime, 'h:mm a')}
                                                                         </span>
                                                                     </div>
                                                                     <div className="px-3 py-1 rounded-full bg-muted text-xs font-bold uppercase tracking-widest text-foreground/60">

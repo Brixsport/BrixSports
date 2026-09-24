@@ -11746,6 +11746,20 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
+### BACKLOG-413 — `/teams/[id]` Hard-Crashed to the Generic 500 Page for Any Team With a Malformed `startTime` in `recentMatches`/`upcomingMatches`
+
+**Status:** RESOLVED — 2026-09-25 (commit pending on `fix/backlog-404-read-path-resilience`).
+**Priority:** High — full-page crash, not a display glitch, on a real, live, publicly reachable team.
+**Found:** 2026-09-25, as a side effect of live-testing `BACKLOG-412`'s `/live` fix on the branch's Vercel preview. Unrelated to that fix's own `fetch` override, which never engaged — both loads of the crashing page returned a real 200 from `/api/teams/[id]`; the crash happened during render, not fetch.
+
+**Problem:** `TeamDetailClient.tsx` called `format(new Date(match.startTime), <pattern>)` (`date-fns`) directly, five call sites across the recent-matches and upcoming-matches (fixtures) cards, with no guard against an invalid date. `date-fns`' `format()` throws `RangeError: Invalid time value` on an Invalid Date, uncaught anywhere in this component, so it propagated to Next's global error boundary and replaced the entire team page with the generic "Houston, we have a problem!" 500 screen.
+**Root cause, confirmed via live JSON inspection:** `GET /api/teams/xOakumUyGIWZqkZMretK7` (a real team, "TEAM B", involved in the one live match at test time) returns `recentMatches[4].startTime: "1788963960000.0"` — a stringified epoch with a trailing decimal instead of ISO-8601. **This is the exact same malformed-data shape `BACKLOG-401` item #1 already found and defensively coerced on `/live`'s match cards** (`live/page.tsx`'s own comment names this literal pattern) — that fix was never applied to this file, so the same bad row that degrades gracefully to "TBD" on `/live` crashes the entire page on `/teams/[id]`.
+**Reproduction (100%, confirmed live):** navigated to `/teams/xOakumUyGIWZqkZMretK7` on the branch's per-deployment Vercel preview twice (once as a plain navigation, once via a full reload) — both times rendered the 500 page. Console showed `RangeError: Invalid time value` at the same minified call site both times. `/api/teams/xOakumUyGIWZqkZMretK7` itself returned 200 both times — confirmed via `read_network_requests` — so this is a render-time crash, not a fetch failure.
+**Fix:** added a `safeFormat(value, pattern, fallback = 'TBD')` helper (mirrors `/live`'s existing `isNaN(d.getTime())` guard) and replaced all five unguarded `format(new Date(match.startTime), ...)` call sites with it. `tsc --noEmit`: 18 errors, identical set to baseline, none in `TeamDetailClient.tsx` (verified via a synchronous, non-backgrounded run — an earlier backgrounded run silently produced an empty/untrustworthy output file under heavy concurrent-session load on this machine; not treated as evidence).
+**Not done:** the underlying bad data (`1788963960000.0` on at least this one match) was not corrected in the DB — this fix makes the page resilient to it, not the data itself. Not checked whether other malformed-date shapes exist elsewhere in this same team's payload or other teams'; the `safeFormat` guard covers only these five call sites in this one file. Not re-verified live after the fix (the branch was still rebasing/pushing when this entry was written — see the commit's own follow-up note if verification landed after).
+
+---
+
 ### ~~BACKLOG-395~~ — 4 API Routes Violate CLAUDE.md's "Every List Endpoint MUST Have `.limit()`" Rule — SHIPPED
 
 **Status:** SHIPPED, code-only, UNVERIFIED live — filed 2026-09-17 (`db-inspector` background agent, part of the full-platform pre-promotion audit); fixed 2026-09-18.
