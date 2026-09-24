@@ -439,9 +439,9 @@ export default function Home() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsSettingsOpen(true);
+                  router.push('/notifications');
                 }}
-                aria-label="Settings"
+                aria-label="Notifications"
                 className="w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors relative"
               >
                 <Bell size={18} className="text-foreground/60" />

@@ -12076,3 +12076,26 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files:** `src/lib/backscopedFeatures.ts`, `src/middleware.ts`.
 
 ---
+
+### BACKLOG-409 — Homepage Bell Icon Opened Settings Instead of Notifications
+
+**Status:** SHIPPED — 2026-09-24, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` M1 (Later-bucket item 23).
+
+**Finding:** `src/app/page.tsx` (top nav, the only Bell icon in the app) showed an unread-count dot — the universal "notifications" affordance — but its `onClick` called `setIsSettingsOpen(true)`, opening `SettingsOverlay`. A real `/notifications` page and `src/components/Notifications.tsx` already existed and were never wired to it — the audit's own read was "a wiring leftover, not an intentional choice," confirmed here: `Settings` is already reachable elsewhere (`/profile`'s "System Settings" and "Privacy & Security" quick actions, both to `/profile/settings`), so the bell was never the only path to Settings.
+
+**Fix:** the button now calls `router.push('/notifications')`, `aria-label` changed from `"Settings"` to `"Notifications"`. Icon, badge dot and position unchanged.
+
+**Found in the same pass, not fixed here:**
+1. The badge dot's data source (`notifications.length` from `useNotifications()`, `src/components/Notifications.tsx`) is a local in-session toast queue, not the DB-backed list `/notifications` itself reads (`GET /api/notifications?userId=default`) — the dot and the page it now links to can disagree (dot lit with nothing new on the real list, or vice versa). Out of scope for a wiring fix; worth its own entry if the two are ever meant to be the same signal.
+2. `/notifications`'s own fetch hardcodes `userId=default` (`src/app/notifications/page.tsx:32`) rather than the signed-in user's real id — every visitor was already seeing the same placeholder notifications regardless of who they are. Pre-existing, unrelated to the bell's wiring, not touched here.
+3. `isSettingsOpen`/`setIsSettingsOpen` and the `SettingsOverlay` render in `page.tsx` are now unreachable from anywhere in this file (the bell was the only trigger) — left in place rather than removed, since deleting a whole overlay is dead-code-sweep scope (Later-bucket item 21), not this fix's job.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `page.tsx`); source read confirming Settings stays reachable via `/profile`.
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview — clicking the bell navigates to `/notifications`, not the settings overlay; `/profile` → "System Settings" still opens `/profile/settings`; the badge dot still renders when the local `useNotifications()` queue is non-empty.
+**Files:** `src/app/page.tsx`.
+
+---
