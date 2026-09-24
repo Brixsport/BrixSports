@@ -12048,3 +12048,24 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files:** `src/app/page.tsx`, `src/types/index.ts`.
 
 ---
+
+### BACKLOG-408 — Backscoped-Feature Route Guard: One Registry, Enforced in Middleware, Pages and APIs Both
+
+**Status:** SHIPPED — 2026-09-24, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Critical — closes `ENGINEERING_AUDIT_2026-09-17.md` C2 (Later-bucket item 13): `notFound()` on a page never removed the API routes underneath, and 4 FPL files plus all 4 polls files still take unauthenticated writes today (re-verified against source, not assumed — see `.agents/dev/BACKSCOPE_API_GUARD_SPEC.md`, which also corrects a stale claim that predictions was unauthenticated; `BUG-222` fixed that in session 51).
+
+**Fix, exactly as the spec (revised, approved) lays out — no new decisions made here:**
+- New `src/lib/backscopedFeatures.ts`: a static `BACKSCOPED_FEATURES` array (no DB, no env — deliberately not the fail-open `featureFlags.ts` pattern, since a dead feature must stay dead even if a DB read fails) and `isBackscopedPath()`, boundary-checked (`pathname === prefix || pathname.startsWith(prefix + '/')`) so `/fpl` can't swallow a future `/fplayers`. Registered prefixes: `/fpl` + `/api/fpl`, `/predictions` + `/api/predictions`, `/api/polls`, `/scouts`, `/nesa-registration` — all `BACKLOG-028`.
+- `src/middleware.ts`: the check runs first, before the staging-wide auth gate, so an unauthenticated staging request gets the same 404 as prod instead of a `/login` redirect that would hint the route exists. API paths get `NextResponse.json({error:'Not found'}, {status:404})`; page paths get `NextResponse.rewrite('/_backscoped')` — a path with no matching route, so Next renders the app's own `not-found.tsx` with a real 404 while the URL bar keeps the original path. No matcher change needed (the existing catch-all already covers every route).
+- One registry covers pages and APIs, and any route added later under a registered prefix is covered automatically — the actual "auto guard" ask, versus the ~12-file manual-edit alternative.
+
+**Deliberately not done (per spec):** no admin toggle UI or DB-backed flag — over-engineering for features that don't exist yet, a code change plus redeploy matches how `BACKSCOPE.md` itself is already maintained. `/auth/signin` and `api/auth/[...nextauth]` are untouched (tracked separately, `BACKLOG-009`). `staff-comms` untouched (working feature, already fixed in place, not a dead-feature case).
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `middleware.ts` or `backscopedFeatures.ts`).
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview — (1) `POST /api/fpl/leagues` and `POST /api/polls` unauthenticated → 404 JSON, DB read-back confirms no row written; (2) `GET /fpl`, `GET /predictions`, `GET /scouts`, `GET /nesa-registration` → the app's not-found page with a real 404 status; (3) a route that doesn't exist yet under a registered prefix (e.g. `/api/fpl/anything`) → 404, proving the guard is automatic and not per-file; (4) live routes unaffected — `GET /api/matches`, `GET /`, `POST /api/auth/login`; (5) a path that starts with a registered prefix's name but isn't actually under it (e.g. `/fplayers` if such a route existed) is not swallowed; (6) on staging specifically, the 404 fires instead of the usual `/login` redirect for an unauthenticated request.
+**Files:** `src/lib/backscopedFeatures.ts`, `src/middleware.ts`.
+
+---

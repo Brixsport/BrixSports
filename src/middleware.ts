@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
+import { isBackscopedPath } from '@/lib/backscopedFeatures';
 
 if (!env.jwtSecret) {
     throw new Error('JWT_SECRET is not configured');
@@ -19,6 +20,24 @@ async function verifyToken(token: string) {
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+
+    // ── Backscoped-feature guard (BACKLOG-408, all environments) ───────────
+    // notFound() on a page only removes the page -- the API routes underneath
+    // kept running with whatever auth they had (BACKLOG-397/398/399's shared
+    // root cause). Checked first, before the staging gate, so an unauthenticated
+    // staging request gets the same 404 as prod rather than a /login redirect
+    // that would otherwise hint the route exists. Not an auth check -- these
+    // features don't exist yet, there's nothing to authorize into. See
+    // .agents/dev/BACKSCOPE_API_GUARD_SPEC.md and src/lib/backscopedFeatures.ts.
+    if (isBackscopedPath(pathname)) {
+        if (pathname.startsWith('/api/')) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+        // Rewrite to a path with no matching route -- Next.js renders the app's
+        // own not-found.tsx with a real 404 status, and the URL bar keeps the
+        // original path rather than exposing an internal rewrite target.
+        return NextResponse.rewrite(new URL('/_backscoped', request.url));
+    }
 
     // ── Staging-wide auth gate ─────────────────────────────────────────────
     // When NEXT_PUBLIC_ENV === 'staging', every route requires a valid JWT
