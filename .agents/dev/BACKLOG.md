@@ -11649,7 +11649,7 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-394 — Match Detail Page Has No Offline-First Caching Story: A Dropped Connection Shows "No Match Found" Instead of Stale Data
 
-**Status:** PARTIAL — P0 items implemented 2026-09-18 per `BACKLOG-394-SPEC-offline-first-caching.md`; P2 (Service Worker read-cache layer) remains OPEN and deliberately deferred. **P1 (shared hook extraction + cross-page survey) is now DONE as a scoping pass** — see `BACKLOG-404` and `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`, produced by a full engineering+product reassessment session 2026-09-18. The survey found two real, previously-undocumented instances of this exact bug class on other pages — not implemented yet, spec'd and phased into Now/Next/Later.
+**Status:** PARTIAL — P0 items implemented 2026-09-18 per `BACKLOG-394-SPEC-offline-first-caching.md`; P2 (Service Worker read-cache layer) remains OPEN and deliberately deferred. **P1 (shared hook extraction + cross-page survey) is now DONE as a scoping pass** — see `BACKLOG-412` and `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`, produced by a full engineering+product reassessment session 2026-09-18. The survey found two real, previously-undocumented instances of this exact bug class on other pages — not implemented yet, spec'd and phased into Now/Next/Later.
 **Priority:** Medium — real user-facing correctness gap on a Critical Flow C page, but needs a proper cross-cutting design pass, not a one-file patch.
 
 **Problem, Richard's direct observation:** `/matches/[id]` fetches match data. When the network drops after an initial successful load, the page does not fall back to the already-cached data it fetched moments ago — it reverts to a "no match found" state, as if the match never existed. This is worse than showing nothing: it actively misrepresents a real, previously-confirmed match as not found, on one of the app's highest-traffic pages (Flow C, the public livescore path `CLAUDE.md` explicitly protects).
@@ -11664,11 +11664,11 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Not done:** the P1 shared-hook extraction, the cross-page survey, and the P2 Service Worker layer — all explicitly deferred per the spec's own phasing, not blocking. **Also not done: a live click-through of the new "Couldn't load — Retry" state itself.** Attempted this session by overriding `window.fetch` to force a failure then remounting — the override doesn't survive a full page reload (matchData refetches only on the initial mount / `matchId` change, and a soft client-side remount without a real navigation proved too fragile to force reliably via browser automation). What IS confirmed: the actual `/api/matches/[id]` route returns a genuine 404 for missing matches (not a 200/500 disguised as one), so the branching logic's real-world trigger condition is sound even without a forced click-through of the failure UI itself.
 
-**Reinstate/pick up when:** P2 needs a dedicated engineering+product session before it's even spec-able. (P1 survey — see `BACKLOG-404` — is now done.)
+**Reinstate/pick up when:** P2 needs a dedicated engineering+product session before it's even spec-able. (P1 survey — see `BACKLOG-412` — is now done.)
 
 ---
 
-### BACKLOG-404 — `BACKLOG-394`'s Cross-Page Survey Found the Same False-"Not-Found" Bug Live on `/teams/[id]` and `/competitions/[id]`
+### BACKLOG-412 — `BACKLOG-394`'s Cross-Page Survey Found the Same False-"Not-Found" Bug Live on `/teams/[id]` and `/competitions/[id]`
 
 **Status:** SHIPPED 2026-09-18 for all three pages (local commits on `fix/backlog-404-read-path-resilience`, NOT pushed, NOT live-verified — `19c2628` for `/live` + shared pieces, follow-up commit for `/teams/[id]` and `/competitions/[id]`; per `.agents/rules/backlog.md`, SHIPPED is not RESOLVED until a live test with an evidence block). Spec: `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`.
 
@@ -11702,11 +11702,11 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Reinstate/pick up when:** any time — well-defined, spec'd, sized for a solo dev, not blocking anything. Recommend bundling with other small `BACKLOG-400`-adjacent follow-up work per the spec's own phasing.
 
-**Correction, same day (found when a follow-up pass tried to design `BACKLOG-394` P2):** `BACKLOG-394`'s P2 ("a genuine Service Worker read-cache layer") is **not** unbuilt. `public/sw-user.js` (registered app-wide via `<PWAProvider swPath="/sw-user.js">`, `src/app/layout.tsx:258`) already does cache-then-serve for previously-visited pages, per-route API TTLs (never-cache for auth/live events, 30s-capped network-first for live scores, SWR for teams/players/competitions/news/standings), and build-SHA-stamped cache versioning — shipped and live-verified session 55 under `BACKLOG-226`. `BACKLOG-394-SPEC`'s P2 framing and this entry's original "Not done" list were wrong on that point. What this entry (`BACKLOG-404`) covers — component-level `loadError` state — is a different, complementary layer and stands as written. **Caveat carried from `BACKLOG-226` itself:** full network-severed navigation was never tested end to end (only cache contents and handler logic were verified), so "offline browsing works" is source-reviewed and cache-content-verified, not exercised with a real dropped connection.
+**Correction, same day (found when a follow-up pass tried to design `BACKLOG-394` P2):** `BACKLOG-394`'s P2 ("a genuine Service Worker read-cache layer") is **not** unbuilt. `public/sw-user.js` (registered app-wide via `<PWAProvider swPath="/sw-user.js">`, `src/app/layout.tsx:258`) already does cache-then-serve for previously-visited pages, per-route API TTLs (never-cache for auth/live events, 30s-capped network-first for live scores, SWR for teams/players/competitions/news/standings), and build-SHA-stamped cache versioning — shipped and live-verified session 55 under `BACKLOG-226`. `BACKLOG-394-SPEC`'s P2 framing and this entry's original "Not done" list were wrong on that point. What this entry (`BACKLOG-412`) covers — component-level `loadError` state — is a different, complementary layer and stands as written. **Caveat carried from `BACKLOG-226` itself:** full network-severed navigation was never tested end to end (only cache contents and handler logic were verified), so "offline browsing works" is source-reviewed and cache-content-verified, not exercised with a real dropped connection.
 
 ---
 
-### BACKLOG-405 — `sw-user.js`'s `sync-favorites` / `sync-profile` Background Sync Handlers Have No Callers Anywhere in `src/`
+### BACKLOG-409 — `sw-user.js`'s `sync-favorites` / `sync-profile` Background Sync Handlers Have No Callers Anywhere in `src/`
 
 **Status:** OPEN — low priority, cleanup, not a live functional gap.
 **Priority:** Low.
@@ -11719,6 +11719,21 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Not verified:** grep only; not checked whether a dynamic string construction elsewhere could reference these names. Recommend one confirming look before deleting.
 
 **Options, Richard's call (not assumed):** (a) delete the dead handlers; (b) actually build a viewer offline write queue for favourites/profile, reusing `BACKLOG-107`'s page-level `online`/`visibilitychange` drain pattern so it works on iOS, since Background Sync alone would not.
+
+---
+
+### BACKLOG-410 — `eslint` / `npm run lint` Crashes on Config Load ("Converting circular structure to JSON"), So Lint Is Not a Working Gate
+
+**Status:** OPEN — Low/Medium, found 2026-09-18 while trying to lint the `BACKLOG-412` files.
+**Evidence:** `npx eslint <files>` exits 2 before reading any source: `TypeError: Converting circular structure to JSON ... property 'react' closes the circle`, thrown from `@eslint/eslintrc`'s `config-validator` while loading a shareable config through `eslint.config.mjs` (ESLint 9.38.0). It is a config-level failure, independent of which files are passed; not investigated further. Consequence: `tsc --noEmit` is the only automated static gate, and `react-hooks/exhaustive-deps` is not being checked anywhere (relevant: the new `online`-listener effects in `TeamDetailClient.tsx` and `competitions/[id]/page.tsx` were never linted).
+**Not done:** no attempt to fix the config (likely the `FlatCompat` + `eslint-config-next` legacy-extends path; unconfirmed).
+
+---
+
+### BACKLOG-411 — Smoke Test Warns That the Just-Assigned Match Isn't Returned by `GET /api/matches?loggerId=`
+
+**Status:** OPEN — Low, unexplained, found 2026-09-18 (smoke test run against staging; overall result PASS).
+**Evidence:** `tests/smoke/critical-flows.ts` printed `WARN: match not found via /api/matches?loggerId= filter -- checking direct GET instead` after assigning a logger to a fresh match, then passed via the direct-GET fallback. Either the test's assumption about the list route's `loggerId` filter is wrong, or the route doesn't return a newly assigned match (which would matter for Flow A's "appears to the logger" step). Not investigated; possibly related to `BACKLOG-398`'s `loggerId` work, unchecked.
 
 ---
 
