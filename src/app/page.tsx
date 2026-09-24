@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Calendar, User, Search, Bell, Menu, ChevronRight, ChevronLeft, Play } from 'lucide-react';
+import { Trophy, Calendar, User, Users, Search, Bell, Menu, ChevronRight, ChevronLeft, Play, ListChecks, Newspaper } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
@@ -840,30 +840,38 @@ export default function Home() {
 
 
 
-      {/* Mobile menu -- bottom sheet (BACKLOG-406) */}
+      {/* Mobile menu -- bottom sheet (BACKLOG-406, polish pass BACKLOG-410).
+          MenuRow gives every top-level item the same icon + label + chevron
+          shape BottomNav already uses elsewhere in the app, instead of the
+          plain text links the first pass shipped. */}
       <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
         <SheetContent
           side="bottom"
           className="md:hidden max-h-[85vh] overflow-y-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
         >
-          <SheetHeader className="pb-0">
+          {/* Drag handle -- purely visual, signals "this sheet can be swiped
+              away" the way a native bottom sheet would; SheetContent's own
+              Radix-driven close (Escape/overlay/X) still does the real work. */}
+          <div className="mx-auto mt-1 h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+          <SheetHeader className="pb-2">
             <SheetTitle className="font-display uppercase tracking-wide">Menu</SheetTitle>
             <SheetDescription className="sr-only">Browse teams, players, competitions, lineup builder and news</SheetDescription>
           </SheetHeader>
-          <nav aria-label="Main menu" className="flex flex-col px-4 pb-6 text-lg font-display uppercase">
-            <Link href="/teams" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Teams</Link>
-            <Link href="/players" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Players</Link>
+          <nav aria-label="Main menu" className="flex flex-col px-2 pb-6">
+            <MenuRow href="/teams" icon={Users} label="Teams" onNavigate={() => setIsMenuOpen(false)} />
+            <MenuRow href="/players" icon={User} label="Players" onNavigate={() => setIsMenuOpen(false)} />
 
-            {/* Competition Links */}
+            {/* Competitions -- its own row plus the live sub-list, same icon
+                language, visually grouped by the left border + indent. */}
             <div>
-              <Link href="/competitions" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>All Competitions</Link>
+              <MenuRow href="/competitions" icon={Trophy} label="All Competitions" onNavigate={() => setIsMenuOpen(false)} />
               {competitions.length > 0 && (
-                <div className="pl-4 border-l border-border py-1">
+                <div className="ml-[1.375rem] pl-4 border-l border-border py-1">
                   {competitions.map((comp) => (
                     <Link
                       key={comp.id}
                       href={`/competitions/${comp.id}`}
-                      className="min-h-11 flex items-center text-sm text-foreground/40 hover:text-primary transition-colors"
+                      className="min-h-11 flex items-center text-sm font-medium text-foreground/50 hover:text-primary transition-colors"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       <span className="truncate">{comp.name}</span>
@@ -873,12 +881,39 @@ export default function Home() {
               )}
             </div>
 
-            <Link href="/lineup-builder" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>Lineup Builder</Link>
-            <Link href="/news" className="min-h-11 flex items-center text-foreground/60 hover:text-foreground transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
+            <div className="my-1 border-t border-border/60" />
+
+            {/* Lineup Builder: a plain row, same weight as every other item --
+                no badge/tooltip (BACKLOG-406/407: dropping the promotional
+                treatment on an untested 🔴 High Volatility feature). */}
+            <MenuRow href="/lineup-builder" icon={ListChecks} label="Lineup Builder" onNavigate={() => setIsMenuOpen(false)} />
+            <MenuRow href="/news" icon={Newspaper} label="News" onNavigate={() => setIsMenuOpen(false)} />
           </nav>
         </SheetContent>
       </Sheet>
     </div>
     </>
+  );
+}
+
+// One row shape for every top-level item in the mobile menu sheet -- icon,
+// label, chevron -- so the sheet reads as a real menu instead of a plain link
+// list. `onNavigate` closes the sheet; Next's <Link> handles the navigation.
+function MenuRow({ href, icon: Icon, label, onNavigate }: {
+  href: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className="min-h-11 px-2 flex items-center gap-3 rounded-xl text-foreground/80 hover:bg-muted hover:text-foreground active:bg-muted/70 transition-colors"
+    >
+      <Icon size={18} className="text-foreground/50 shrink-0" />
+      <span className="flex-1 font-display uppercase tracking-wide">{label}</span>
+      <ChevronRight size={16} className="text-foreground/30 shrink-0" />
+    </Link>
   );
 }
