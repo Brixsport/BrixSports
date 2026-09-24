@@ -12049,9 +12049,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-408 — Backscoped-Feature Route Guard: One Registry, Enforced in Middleware, Pages and APIs Both
+### ~~BACKLOG-408 — Backscoped-Feature Route Guard: One Registry, Enforced in Middleware, Pages and APIs Both~~
 
-**Status:** SHIPPED — 2026-09-24, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — 2026-09-24 (commit `cbfe70e`), live-verified on the staging preview, all 6 spec scenarios.
 **Priority:** Critical — closes `ENGINEERING_AUDIT_2026-09-17.md` C2 (Later-bucket item 13): `notFound()` on a page never removed the API routes underneath, and 4 FPL files plus all 4 polls files still take unauthenticated writes today (re-verified against source, not assumed — see `.agents/dev/BACKSCOPE_API_GUARD_SPEC.md`, which also corrects a stale claim that predictions was unauthenticated; `BUG-222` fixed that in session 51).
 
 **Fix, exactly as the spec (revised, approved) lays out — no new decisions made here:**
@@ -12062,10 +12062,17 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Deliberately not done (per spec):** no admin toggle UI or DB-backed flag — over-engineering for features that don't exist yet, a code change plus redeploy matches how `BACKSCOPE.md` itself is already maintained. `/auth/signin` and `api/auth/[...nextauth]` are untouched (tracked separately, `BACKLOG-009`). `staff-comms` untouched (working feature, already fixed in place, not a dead-feature case).
 
 **Evidence:**
-- Commit: pending (this session)
-- Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `middleware.ts` or `backscopedFeatures.ts`).
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview — (1) `POST /api/fpl/leagues` and `POST /api/polls` unauthenticated → 404 JSON, DB read-back confirms no row written; (2) `GET /fpl`, `GET /predictions`, `GET /scouts`, `GET /nesa-registration` → the app's not-found page with a real 404 status; (3) a route that doesn't exist yet under a registered prefix (e.g. `/api/fpl/anything`) → 404, proving the guard is automatic and not per-file; (4) live routes unaffected — `GET /api/matches`, `GET /`, `POST /api/auth/login`; (5) a path that starts with a registered prefix's name but isn't actually under it (e.g. `/fplayers` if such a route existed) is not swallowed; (6) on staging specifically, the 404 fires instead of the usual `/login` redirect for an unauthenticated request.
+- Commit: `cbfe70e`
+- Verified by: `dev/verify-backlog-408.mjs` (gitignored; HTTP checks against the deployed staging preview, `brixsports-staging-lz82ir2vs-brixsports-projects.vercel.app`, plus a before/after row count on `fpl_leagues` and `polls` for the write scenarios) and `tsc --noEmit` 18 errors (baseline unchanged, zero new).
+- Observed result: all 19 checks passed —
+  - Unauthenticated `POST /api/fpl/leagues` and `POST /api/polls` both returned `404 {"error":"Not found"}` with no new row in `fpl_leagues`/`polls` (confirmed by DB read-back, not just the HTTP status).
+  - `GET /fpl`, `/predictions`, `/scouts`, `/nesa-registration` all 404.
+  - `POST /api/polls/vote` unauthenticated: 404.
+  - `GET /api/fpl/anything-not-a-real-route` (never existed as a file): 404 — the guard covers routes that don't exist yet, not just the ones edited.
+  - `GET /api/matches`, `GET /`, `POST /api/auth/login` all unaffected (login correctly reached its handler and returned 401 for a bad password, not 404).
+  - Boundary check (mirrored prefix logic, since the ambiguous real case — a route like `/fplayers` — doesn't exist to test via HTTP): `/fplayers` not caught by the `/fpl` prefix, `/fpl/teams` is; `/api/pollsters` not caught by `/api/polls`, `/api/polls/vote` is.
+  - On staging specifically: `/predictions` and `/api/fpl/players` both 404 rather than the usual unauthenticated `/login` redirect or 401.
+- Pending items: none for this entry.
 **Files:** `src/lib/backscopedFeatures.ts`, `src/middleware.ts`.
 
 ---
