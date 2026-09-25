@@ -9,6 +9,7 @@ import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
@@ -139,6 +140,8 @@ function CompetitionHubContent() {
   const [statsLeaders, setStatsLeaders] = useState<Record<string, StatLeader[]>>({});
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // 1. Fetch all competitions on mount, select the one this route was opened for
@@ -146,30 +149,41 @@ function CompetitionHubContent() {
     const fetchAllData = async () => {
       try {
         setLoading(true);
+        setLoadFailed(false);
         const res = await fetch('/api/competitions');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        if (!Array.isArray(data.competitions)) throw new Error('Unexpected response shape');
 
-        if (data.competitions) {
-          setCompetitions(data.competitions);
-          setGroups(data.groups || []);
+        setCompetitions(data.competitions);
+        setGroups(data.groups || []);
 
-          const found = data.competitions.find((c: Competition) => c.id === competitionId);
-          if (found) {
-            setSelectedComp(found);
-          } else {
-            setNotFound(true);
-          }
+        // "Not found" means the list loaded fine and this id isn't in it. A failed
+        // load (caught below) proves nothing about whether the competition exists.
+        const found = data.competitions.find((c: Competition) => c.id === competitionId);
+        if (found) {
+          setSelectedComp(found);
+        } else {
+          setNotFound(true);
         }
       } catch (err) {
         console.error('Error fetching competitions:', err);
-        setNotFound(true);
+        setLoadFailed(true);
       } finally {
         setLoading(false);
       }
     };
 
     fetchAllData();
-  }, [competitionId]);
+  }, [competitionId, reloadKey]);
+
+  // A first load that failed retries by itself when the connection returns.
+  useEffect(() => {
+    if (!loadFailed) return;
+    const retryOnReconnect = () => setReloadKey((k) => k + 1);
+    window.addEventListener('online', retryOnReconnect);
+    return () => window.removeEventListener('online', retryOnReconnect);
+  }, [loadFailed]);
 
   // 2. When selectedComp changes, fetch its standings/matches/brackets
   useEffect(() => {
@@ -319,6 +333,17 @@ function CompetitionHubContent() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadFailed && !selectedComp) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
+        <LoadFailedState
+          title="Couldn't load this competition"
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
       </div>
     );
   }

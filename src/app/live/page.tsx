@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Activity, Play, Users, Clock } from 'lucide-react';
+import { useResilientFetch } from '@/hooks/useResilientFetch';
+import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
 
 interface Match {
     id: string;
@@ -21,30 +22,16 @@ interface Match {
     awayTeam?: any;
 }
 
+const isMatchList = (body: unknown): body is Match[] => Array.isArray(body);
+
 export default function LiveCenter() {
-    const [liveMatches, setLiveMatches] = useState<Match[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        async function fetchLiveMatches() {
-            try {
-                const response = await fetch('/api/matches?status=LIVE');
-                const data = await response.json();
-
-                setLiveMatches(data);
-            } catch (error) {
-                console.error('Error fetching live matches:', error);
-            } finally {
-                setLoading(false);
-            }
-        }
-
-        fetchLiveMatches();
-
-        // Poll every 15s — stopgap until WebSocket subscription is wired to the public viewer (BUG-020)
-        const interval = setInterval(fetchLiveMatches, 15000);
-        return () => clearInterval(interval);
-    }, []);
+    // Poll every 15s — stopgap until WebSocket subscription is wired to the public viewer (BUG-020)
+    const { data, isLoading: loading, isStale, loadError, retry } = useResilientFetch<Match[]>(
+        '/api/matches?status=LIVE',
+        { validate: isMatchList, pollMs: 15000 }
+    );
+    const liveMatches = data ?? [];
+    const loadFailed = loadError !== null && data === null;
 
     if (loading) {
         return (
@@ -76,7 +63,9 @@ export default function LiveCenter() {
                                         <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                                         LIVE CENTER
                                     </h1>
-                                    <p className="text-sm text-foreground/60">{liveMatches.length} matches live now</p>
+                                    <p className="text-sm text-foreground/60">
+                                        {loadFailed ? "Couldn't check right now" : `${liveMatches.length} matches live now`}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -90,7 +79,10 @@ export default function LiveCenter() {
 
             {/* Main Content */}
             <div className="max-w-7xl mx-auto px-4 py-8">
-                {liveMatches.length > 0 ? (
+                {isStale && !loadFailed && <StaleDataBanner />}
+                {loadFailed ? (
+                    <LoadFailedState title="Couldn't load live matches" onRetry={retry} />
+                ) : liveMatches.length > 0 ? (
                     <div className="space-y-4">
                         <h2 className="text-sm font-bold uppercase tracking-wider text-foreground/60 mb-6">
                             Live Matches ({liveMatches.length})
