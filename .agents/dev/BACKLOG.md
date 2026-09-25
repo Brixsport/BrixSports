@@ -12168,3 +12168,25 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files:** `src/app/signup/page.tsx`, `src/app/not-found.tsx`, `src/app/error.tsx`.
 
 ---
+
+### BACKLOG-414 — `basketball/leaderboard/mvp` Had Two Fully Unbounded Queries
+
+**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Medium — the one real, currently-true gap found while following up on a parallel agent's per-sport API investigation (Later-bucket item 19). Filed as its own item rather than as a generic "fix findings 2+3 on all 9 routes" task, because re-verifying against this branch's actual current state (not the investigation's base) showed the other 8 routes and the field-leak finding no longer apply here — see below.
+
+**Context — a stale-base correction, not a disagreement with the investigation's method:** a parallel agent (working in its own worktree, branched from `origin/dev`) investigated Later-bucket item 19 (per-sport `/api/basketball/*` and `/api/football/*` vs. the generic `/api/matches` tree) and reported two real bugs across all 9 sport-specific routes: a CLAUDE.md-banned-field leak on 4 of them, and a missing `.limit()` on all 9. Before touching anything, re-checked every one of the 9 routes directly against `feature/ui-redesign` (this session's actual branch), per this project's "verify before concluding" convention — `origin/dev` is behind this branch.
+- **The banned-field leak does not apply here.** `basketball/matches`, `football/matches`, `basketball/players`, `football/players` already use explicit column allow-lists with no banned fields and already have `.limit(100)` — fixed by `BACKLOG-260`/`BACKLOG-334`/`BACKLOG-395`, already on `feature/ui-redesign` before this session started. Confirmed by reading all 4 files directly.
+- **The missing-`.limit()` finding applies to only 1 of the 9 routes today.** `basketball/teams`/`football/teams` and `basketball/standings`/`football/standings` are all already bounded (explicit `.limit()`, or — for `basketball/teams` — a fixed 6-name `WHERE` clause with a comment explaining why a raw `.limit()` there would risk the historic `BUG-014` truncation bug instead). Only `basketball/leaderboard/mvp` was genuinely still unbounded.
+
+**Finding:** `src/app/api/basketball/leaderboard/mvp/route.ts` `GET` ran `db.select().from(matches).where(eq(matches.sport,'Basketball')).all()` and `db.select().from(players).all()` with no `.limit()` on either. Neither was a field-leak risk — the matches query only ever reads `.stats` per row (never spread into the response), and the players query only feeds an internal name-to-team/logo map; the response returns only derived fields (`player`, `mvpCount`, `team`, `teamLogo`, `rating`). Purely the unbounded-query anti-pattern.
+
+**Fix:** added `.limit(2000)` to both queries — generous relative to the platform's actual basketball match/player volume today.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` — see this session's running baseline check.
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview — `GET /api/basketball/leaderboard/mvp` returns the same leaderboard shape and row count as before (no behavior change expected at today's data volume). Also pending: the investigation agent's own `BACKLOG.md` entry (filed in its separate, unmerged worktree/branch) needs its Findings 2/3 corrected or cross-referenced to this entry once that branch is merged, so the stale claim doesn't ship as-is.
+**Files:** `src/app/api/basketball/leaderboard/mvp/route.ts`.
+
+---

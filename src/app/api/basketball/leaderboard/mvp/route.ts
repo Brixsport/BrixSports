@@ -9,10 +9,16 @@ import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 export async function GET() {
     try {
         // 1. Fetch all basketball matches
+        // BACKLOG-414: was unbounded (`.all()`, no `.limit()`) -- the project's
+        // own rules ban list queries with no limit. Only `.stats` is read below (never
+        // spread into the response), so this was never a field-leak risk,
+        // just an unbounded-query one. 2000 is generous relative to the
+        // platform's actual basketball match volume today.
         const basketballMatches = await db
             .select()
             .from(matches)
             .where(eq(matches.sport, 'Basketball'))
+            .limit(2000)
             .all();
 
         // 2. Count MVPs
@@ -29,9 +35,15 @@ export async function GET() {
         });
 
         // 3. Fetch all basketball players with their teams for mapping
+        // BACKLOG-414: was unbounded, same reasoning as the matches query
+        // above -- the raw player row is only used internally to build the
+        // name -> team/logo map (enrichPlayersWithAffiliations), never
+        // returned to the client (the response below only ever includes
+        // derived fields: player name, mvpCount, team, teamLogo, rating).
         const allPlayers = await db
             .select()
             .from(players)
+            .limit(2000)
             .all();
         const enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
 
