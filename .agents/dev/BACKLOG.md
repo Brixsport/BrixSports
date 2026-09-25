@@ -12099,3 +12099,72 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files:** `src/app/page.tsx`.
 
 ---
+
+### BACKLOG-410 — Mobile Menu Sheet Polish: Icon Rows, Drag Handle, Visual Grouping
+
+**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Low — visual finish on `BACKLOG-406`'s bottom sheet, not a new capability.
+
+**What changed (`src/app/page.tsx`):** the sheet's 5 top-level items (Teams, Players, All Competitions, Lineup Builder, News) were plain text `<Link>`s with no icon, no hover state beyond underline-adjacent color, and no visual weight matching `BottomNav`'s icon+label pattern used everywhere else in the app. Added a shared `MenuRow` component (icon + label + trailing chevron, `rounded-xl` hover/active background, 44px min height kept from `BACKLOG-406`) so the sheet reads as a real menu rather than a link list. Icons: `Users` (Teams), `User` (Players), `Trophy` (Competitions, matching the icon already used for the competition group headers on the same page — `BACKLOG-407`), `ListChecks` (Lineup Builder), `Newspaper` (News) — all already-available `lucide-react` exports, no new dependency. Added a purely decorative drag-handle bar at the top of the sheet (native-bottom-sheet visual convention; Radix's own Escape/overlay/X close behavior does the real work, confirmed working pre-existing) and a divider before Lineup Builder to separate "browse" items from it.
+
+**Deliberately not done:** no active-route highlighting on the rows — the sheet only ever renders while the user is on `/` (per `BACKLOG-406`'s own known limitation, the top bar and hamburger are homepage-only), so every row would always read as "not current" and the state would be dead weight.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` — see this session's running baseline check.
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview at 375px — each row shows its icon, hover/active background, and chevron; the drag handle renders above the "Menu" title; the divider sits between the competitions block and Lineup Builder; tapping any row still navigates and closes the sheet (behavior unchanged from `BACKLOG-406`, only presentation changed).
+**Files:** `src/app/page.tsx`.
+
+---
+
+### BACKLOG-411 — OPEN: RBAC Table-Driven Refactor (Later-bucket item 16)
+
+**Status:** OPEN — filed 2026-09-25 per Richard's explicit request to track it, not implement it yet. No code changed.
+**Priority:** Medium, not urgent — `ENGINEERING_AUDIT_2026-09-17.md` M1's own read: "no urgent refactor needed for this promotion... this is debt that will become High the day a 4th or 5th role needs its own carve-out, not before."
+
+**Finding:** `src/middleware.ts` lines 90-118's role check is a growing set of one-off carve-outs bolted onto a boolean `isAdmin` — `isAdmin`, then `isScopedLoggerManager` (added after `BACKLOG-306` let `logger_manager` through the entire `/admin/**` tree instead of just `/admin/manager`), then `isScopedRatingsLogger` (near-identical gap for `logger` role on `/admin/match-ratings`). `CLAUDE.md`'s actor model names 5 roles; the code only distinguishes 3 at the middleware layer, each with a hand-maintained path exception. Every new admin-adjacent page for a role gains one more `isScopedXInclude` boolean and one more chance to repeat the exact bug pattern that created `BACKLOG-306`.
+
+**Recommendation (from the audit, not re-litigated here):** a small `roleCanAccess(role, pathname): boolean` table-driven check — even a plain object map — the next time a role is added, rather than a fourth boolean.
+
+**Why filed OPEN and not delegated:** this is a direct edit to the one file every request in the app passes through (`middleware.ts`), and `CLAUDE.md`'s own anti-pattern list treats auth-adjacent logic as needing real care, not a first pass from an unsupervised agent. Deserves its own session with a real design decision (what does `roleCanAccess` need to support for Competition Admin/Team Manager, which aren't implemented as distinct from `admin` anywhere yet), not a blind refactor.
+
+**Files (when scoped):** `src/middleware.ts`.
+
+---
+
+### BACKLOG-412 — OPEN: `next-auth` Dual-Auth-System Resolution (`BACKLOG-009`, Later-bucket item 17)
+
+**Status:** OPEN — filed 2026-09-25 per Richard's explicit request to track it, not implement it yet. No code changed. Restates and cross-references the existing `BACKLOG-009` rather than duplicating it as a separate untracked item.
+
+**Finding:** `ENGINEERING_AUDIT_2026-09-17.md` M2 — two independent Google-auth code paths coexist: `next-auth` (`package.json`'s `next-auth@4.24.13`, `src/app/api/auth/[...nextauth]/route.ts`, Google OAuth never configured in production per `BACKSCOPE.md`'s `/auth/signin` entry) and the custom flow (`src/app/api/auth/google/route.ts` plus the rest of the JWT system). Different token formats. Flagged as a security/architecture gap since the June audit (§9 item #10, §12 item #7), still open. The recently-fixed `BACKLOG-371` (`/api/auth/me` ignoring the `Authorization` header) is adjacent to, though not directly caused by, this same dual-system area — a hint that this area keeps producing hard-to-reproduce login bugs.
+
+**Recommendation (from the audit, not re-litigated here):** "a good candidate for the next auth-focused session rather than folding into the current UI-redesign promotion — same file neighborhood [as `BACKLOG-371`], compounding value if done as one pass." The actual decision needed: remove `next-auth` entirely (it's vestigial, never wired to a real button per `BACKSCOPE.md`), or finish integrating it with a real session bridge to the JWT system. Either is real, auth-critical work.
+
+**Why filed OPEN and not delegated:** same reasoning as `BACKLOG-411` — this touches live auth code paths and needs a real decision (remove vs. integrate) before any implementation, not a background agent's guess.
+
+**Files (when scoped):** `package.json`, `src/app/api/auth/[...nextauth]/route.ts`, `src/app/api/auth/google/route.ts`, `src/app/auth/signin/page.tsx`.
+
+---
+
+### BACKLOG-413 — Copy/Tone Cleanup: Raw Error Code in Signup Toast, Sport-Voice Mismatch Between Error Pages
+
+**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Low/Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` M4 and L3 (Later-bucket item 24).
+
+**M4 fix (`src/app/signup/page.tsx`):** the registration-failure toast showed a raw internal error code (`{(error as any).code}`) to every user, unconditionally — a smaller-scale repeat of the C1 pattern already fixed in `error.tsx` this session. Now gated behind `process.env.NODE_ENV === 'development'`, same condition `error.tsx` already uses, so a non-technical user sees only the human-readable message.
+
+**L3 fix (`src/app/not-found.tsx`, `src/app/error.tsx`):** the two error surfaces read as two different products' voices — `not-found.tsx` all-basketball ("AIR BALL!", "nothing but net," "missed free throw," "Back to Court," a Michael Jordan quote hedged "(probably)"), `error.tsx` all-football ("fumbled the ball," "Even Messi misses sometimes") — on a platform whose own metadata advertises football, basketball, *and* "other" sports. Committing either page fully to one sport's idiom would just relocate the inconsistency, since neither sport is "the" platform sport. Rewrote both toward sport-neutral ball-sport language that reads naturally across football, basketball and beyond, and dropped both real-athlete attributions (Jordan and Messi) rather than keeping one and cutting the other, which would have reintroduced the same asymmetry:
+- `not-found.tsx`: "AIR BALL!" → "OUT OF BOUNDS!"; "nothing but net... wait, no net at all" → "nowhere on the pitch, the court, or anywhere else"; "missed free throw" → "missed the target completely"; "Back to Court" → "Back Home" (now matches `error.tsx`'s existing "Back to Home" button, a small extra consistency win); the Jordan quote's real-athlete attribution replaced with "ancient sporting wisdom, probably" — keeps the pun and the deliberate "probably" joke, drops the part the audit flagged as reading like an unfinished citation.
+- `error.tsx`: "fumbled the ball" → "dropped the ball" (a genuinely sport-neutral idiom, not football-specific); "Even Messi misses sometimes" → "Even the pros miss sometimes."
+
+**Deliberately not done:** a full copy/voice rewrite of either page beyond the flagged lines, or a written style guide — the audit's own words were "neither page's voice is wrong on its own," so this is a targeted consistency fix, not a creative-direction change Richard hasn't weighed in on.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` — see this session's running baseline check.
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview — signup failure toast shows no error code in prod build; `/nonexistent-url` and a forced render crash show the updated copy in both light and dark mode; both pages' "back" buttons read identically ("Back Home" / "Back to Home").
+**Files:** `src/app/signup/page.tsx`, `src/app/not-found.tsx`, `src/app/error.tsx`.
+
+---

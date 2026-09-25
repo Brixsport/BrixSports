@@ -134,7 +134,9 @@ export default function SignupPage() {
                 description: (
                     <div className="flex flex-col gap-1">
                         <p>{getClientErrorMessage(error, "Please try again later.")}</p>
-                        {(error as any).code && (
+                        {/* Same pattern as error.tsx: a raw internal code means nothing to a
+                            non-technical user and belongs in Sentry, not the toast -- dev only. */}
+                        {process.env.NODE_ENV === 'development' && (error as any).code && (
                             <p className="text-[10px] font-mono uppercase opacity-50">Code: {(error as any).code}</p>
                         )}
                     </div>

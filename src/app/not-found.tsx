@@ -86,7 +86,7 @@ export default function NotFoundPage() {
           transition={{ delay: 0.5 }}
           className="text-3xl md:text-4xl font-bold text-foreground mt-4 mb-4"
         >
-          AIR BALL!
+          OUT OF BOUNDS!
         </motion.h2>
 
         {/* Subtitle */}
@@ -96,7 +96,7 @@ export default function NotFoundPage() {
           transition={{ delay: 0.6 }}
           className="text-muted-foreground text-lg mb-2 max-w-lg mx-auto"
         >
-          That page rimmed out! Nothing but net... wait, no net at all.
+          This page went out of bounds. It's nowhere on the pitch, the court, or anywhere else.
         </motion.p>
 
         <motion.p
@@ -105,7 +105,7 @@ export default function NotFoundPage() {
           transition={{ delay: 0.7 }}
           className="text-muted-foreground/70 text-base mb-8 max-w-md mx-auto"
         >
-          The page you're looking for is like a missed free throw - it's just not there.
+          The page you're looking for missed the target completely - it's just not there.
         </motion.p>
 
         {/* Action Buttons */}
@@ -128,7 +128,7 @@ export default function NotFoundPage() {
             className="group flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white font-bold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-orange-600/25"
           >
             <Home className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            Back to Court
+            Back Home
           </Link>
 
           <Link
@@ -147,7 +147,7 @@ export default function NotFoundPage() {
           transition={{ delay: 1 }}
           className="mt-12 text-muted-foreground/70 text-sm italic"
         >
-          "You miss 100% of the pages you don't look for." - Michael Jordan (probably)
+          "You miss 100% of the pages you don't look for." - ancient sporting wisdom, probably
         </motion.p>
       </div>
     </div>

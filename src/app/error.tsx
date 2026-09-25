@@ -33,7 +33,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
     console.error('Application error:', error);
   }, [error]);
 
-  const getErrorMessage = () => "Houston, we have a problem! The server fumbled the ball.";
+  const getErrorMessage = () => "Houston, we have a problem! The server dropped the ball.";
 
   const getSubMessage = () => "Our servers are having a tough game. Let's take a water break and try again.";
 
@@ -176,7 +176,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           transition={{ delay: 1 }}
           className="mt-12 text-muted-foreground/70 text-sm"
         >
-          Even Messi misses sometimes. Don't worry, we've got this!
+          Even the pros miss sometimes. Don't worry, we've got this!
         </motion.p>
       </div>
     </div>
