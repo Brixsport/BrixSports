@@ -11715,7 +11715,7 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-414 — `sw-user.js`'s `sync-favorites` / `sync-profile` Background Sync Handlers Have No Callers Anywhere in `src/`
+### BACKLOG-419 — `sw-user.js`'s `sync-favorites` / `sync-profile` Background Sync Handlers Have No Callers Anywhere in `src/`
 
 **Status:** OPEN — low priority, cleanup, not a live functional gap.
 **Priority:** Low.
