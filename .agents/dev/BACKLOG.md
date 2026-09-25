@@ -12283,3 +12283,35 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files:** `src/app/api/basketball/leaderboard/mvp/route.ts`.
 
 ---
+
+### BACKLOG-415 — Dead-Code Sweep: 7 Files Deleted, Zero Real Importers (Later-bucket item 21)
+
+**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run (n/a for deletions)** — build/`tsc` verification only, this entry closes on that rather than a browser check.
+**Priority:** Low — hygiene, not a bug fix.
+
+**Process:** a parallel agent did the investigation (grep-verified zero real importers per candidate, cross-checked against `BACKSCOPE.md` and open `BACKLOG.md`/`CLAUDE.md` items to rule out intentionally-dormant code) but its worktree lacked `git rm` permission and was stale (branched from a point before `BACKLOG-154` had already deleted `LiveMatchCard.tsx`/`FixtureCard.tsx` as a pair, and before this worktree's actual `BACKLOG.md` history — its candidate list included both files as "safe to delete" when they'd already been removed here). Re-verified every remaining candidate directly in this worktree (`grep -rl` each file's base name across `src/`, excluding the file's own declaration) before deleting anything.
+
+**Deleted (7 files, all reconfirmed zero external references):**
+- `src/hooks/useUserProfile.ts` — no component imports the hook itself (only its own internal `fetch` calls referenced it).
+- `src/hooks/useUserActivity.ts` + `src/components/ActivityFeed.tsx` — a mutually-referencing orphan pair (the hook imports `getRelativeTime`/`getActivityColor`/`ActivityItem` from the component); that one cross-reference was the only match found for either file, confirming nothing outside the pair uses either.
+- `src/hooks/useLoggerAnalytics.ts` — zero importers; also squarely "advanced analytics dashboards," explicitly out of scope per `CLAUDE.md`.
+- `src/hooks/usePullToRefresh.ts`, `src/hooks/useViewportHeight.ts` — zero importers anywhere.
+- `src/app/admin/competitions/page-enhanced.tsx` — not a valid Next.js App Router route file (only literal `page.tsx` routes); zero references anywhere.
+- `src/db/schema-enhanced.ts` — zero importers; `drizzle.config.ts` points only at `schema.ts`; `.agents/rules/known-issues.md`'s 2026-07-01 entry already documents its `eye_point_awards` table as a superseded duplicate of a flag on `matchEvents`.
+
+**Investigated and deliberately left alone (do not delete) — carried over from the parallel investigation, not re-litigated here since the reasoning doesn't depend on which worktree did the check:**
+- Every component under `src/components/predictions/` and the poll components (`MatchPoll`, `MatchPollEnhanced`, `PollComments`, `CreatePoll`) — all usages are inside `BACKSCOPED: 2026-06-08` comment blocks; `BACKSCOPE.md`'s "Polls UI" entry tracks these as intentionally dormant pending Phase 7, not abandoned.
+- `src/hooks/useNotificationPrompt.ts`, `src/components/NotificationPermission.tsx`, `src/components/notifications/NotificationPrompt.tsx` — zero current importers, but `BACKLOG.md`'s `BUG-150` area has an explicit open, unbuilt fix that names these exact files as the intended mechanism. The most important catch of the sweep — a shallower check would have deleted live-planned work.
+- `src/hooks/useDragAndDrop.ts` — zero importers, but its shape is Lineup Builder territory, 🔴 High Volatility, "do not touch without explicit brief."
+- `src/hooks/useRealtimeSync.ts` — zero importers, but implements multi-logger WebSocket sync tied to the still-open `BACKLOG-151` line on the Live Event Readiness Checklist.
+- `src/components/MatchStatusBadge.tsx` — re-verification found it's live-imported by `MatchDetailClient.tsx`; not dead.
+- `LiveMatchCard.tsx`, `FixtureCard.tsx` — already deleted by `BACKLOG-154`, before this session; not re-deleted (nothing to delete).
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` — see this session's running baseline check; a deletion that broke the build would be proof something wasn't actually dead.
+- Observed result: pending the tsc run in progress as this entry is written.
+- Pending items: none beyond the tsc confirmation.
+**Files removed:** `src/hooks/useUserProfile.ts`, `src/hooks/useUserActivity.ts`, `src/components/ActivityFeed.tsx`, `src/hooks/useLoggerAnalytics.ts`, `src/hooks/usePullToRefresh.ts`, `src/hooks/useViewportHeight.ts`, `src/app/admin/competitions/page-enhanced.tsx`, `src/db/schema-enhanced.ts`.
+
+---
