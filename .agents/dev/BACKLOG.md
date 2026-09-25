@@ -2466,7 +2466,7 @@ Two auth systems coexist: custom JWT (active) and `next-auth@4.24.13` (vestigial
 
 Audit all imports of `next-auth` across the codebase. If confirmed unused, remove the package and any associated config files (`[...nextauth]` route if it exists).
 
-**Priority re-flag, 2026-09-25:** a peer session's offline-first-architecture handoff (see `BACKLOG-376`) re-raised this as "auth-critical" alongside an RBAC refactor, filed as an OPEN decision record needing a real session — a higher bar than this entry's original `Priority: Low` (filed 2026-06-05, framed as dead-weight package removal). Not independently re-assessed this session; flagging the discrepancy rather than changing the priority unilaterally. Also see `SYSTEM_AUDIT.md` §15 item 7, which independently confirmed this dual-auth-system gap predates the 2026-06-08 handoff.
+**Priority re-flag, 2026-09-25:** a peer session's offline-first-architecture handoff (see `BACKLOG-427`) re-raised this as "auth-critical" alongside an RBAC refactor, filed as an OPEN decision record needing a real session — a higher bar than this entry's original `Priority: Low` (filed 2026-06-05, framed as dead-weight package removal). Not independently re-assessed this session; flagging the discrepancy rather than changing the priority unilaterally. Also see `SYSTEM_AUDIT.md` §15 item 7, which independently confirmed this dual-auth-system gap predates the 2026-06-08 handoff.
 
 ---
 
@@ -10461,7 +10461,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 ---
 
-### BACKLOG-372 — Initial-Load-Failure Handling Unverified on 4 Public Detail Pages
+### BACKLOG-423 — Initial-Load-Failure Handling Unverified on 4 Public Detail Pages
 
 **Status:** OPEN — filed from peer handoff, not yet independently verified
 **Priority:** HIGH — flagged as blocking dev promotion in the peer session's own NOW classification; touches Flow C (public livescore) and its adjacent detail pages
@@ -10470,16 +10470,20 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 **Needed:** real network-offline emulation (not a code-only review) against each of the 4 pages.
 
+**Status update, 2026-09-25 (same day, later):** IN PROGRESS — owned by the "Brixpsorts match page" peer session, actively testing this live via real DevTools-offline hard-reloads (not code-only). Do not route this entry's remaining scope elsewhere or file competing findings under this number — that session has the most context and will log its own writeup here once it has a root cause or hits a hard wall. Interim signal from that session, not yet a full writeup: `/live` confirmed passing; `/matches/[id]` confirmed genuinely broken (crashes to the generic app error boundary on a cold offline reload instead of its own resilient state, root cause not yet found — two obvious candidate fixes, `BACKLOG-403`/`BACKLOG-394`, were checked and are NOT the cause, both already present in the tested commit); `/teams/[id]` and `/competitions/[id]` not yet tested.
+
+**Numbering note:** this entry was briefly relayed to the owning peer session as "BACKLOG-372" before this renumbering to 423 — if you're that session, use 423, not 372. 372 is already a real, unrelated entry on `feature/ui-redesign`'s own `BACKLOG.md` ("Team Page 'View All' Link 404s").
+
 **Found:** peer session ("Brixpsorts match page"), handoff received 2026-09-25.
 
 ---
 
-### BACKLOG-373 — sw-user.js Dead Background Sync Handlers: Delete vs. Build Real Queue
+### BACKLOG-424 — sw-user.js Dead Background Sync Handlers: Delete vs. Build Real Queue
 
 **Status:** OPEN — decision needed before work starts
 **Priority:** LOW — well-defined, not blocking
 
-**Problem:** `sw-user.js` has Background Sync event handlers with zero callers anywhere in the codebase. Decision needed: delete the dead code, or build a real offline-queue behind it. Originally relayed as provisional `BACKLOG-414`; renumbered here (see `BACKLOG-372`'s note on why 414-417 were never real entries).
+**Problem:** `sw-user.js` has Background Sync event handlers with zero callers anywhere in the codebase. Decision needed: delete the dead code, or build a real offline-queue behind it. Originally relayed as provisional `BACKLOG-414`; renumbered here (see `BACKLOG-423`'s note on why 414-417 were never real entries).
 
 **Branch already exists:** `fix/backlog-414-dead-sync-handlers`, off `feature/ui-redesign` tip `fdb5071`, no commits yet. The branch name references the peer session's provisional number (414), not this entry's real number (373) — cosmetic mismatch only, no commits at risk. Rename the branch if it bothers a future reader, or just note the mapping when work starts.
 
@@ -10487,12 +10491,12 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 ---
 
-### BACKLOG-374 — ESLint Config Crashes
+### BACKLOG-425 — ESLint Config Crashes
 
 **Status:** OPEN — logged only, cause not yet investigated
 **Priority:** LOW per peer handoff, unconfirmed — no repro steps, error text, or affected command were passed along
 
-**Problem:** Peer handoff reports "eslint config crashes" with no further detail. Originally relayed as provisional `BACKLOG-415`; renumbered here (see `BACKLOG-372`).
+**Problem:** Peer handoff reports "eslint config crashes" with no further detail. Originally relayed as provisional `BACKLOG-415`; renumbered here (see `BACKLOG-423`).
 
 **Needed:** first session to touch this must reproduce and document the actual crash before scoping a fix — this entry currently has no evidence beyond a one-line mention.
 
@@ -10500,12 +10504,12 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 ---
 
-### BACKLOG-375 — Smoke Test's loggerId Filter Warning
+### BACKLOG-426 — Smoke Test's loggerId Filter Warning
 
 **Status:** OPEN — logged only, cause not yet investigated
 **Priority:** LOW per peer handoff, unconfirmed
 
-**Problem:** Peer handoff reports the Phase 0 smoke test (`TESTING_STRATEGY_2026-09-18.md`) emits a `loggerId` filter warning, with no further detail passed along. Originally relayed as provisional `BACKLOG-416`; renumbered here (see `BACKLOG-372`).
+**Problem:** Peer handoff reports the Phase 0 smoke test (`TESTING_STRATEGY_2026-09-18.md`) emits a `loggerId` filter warning, with no further detail passed along. Originally relayed as provisional `BACKLOG-416`; renumbered here (see `BACKLOG-423`).
 
 **Needed:** locate the actual warning text and the smoke test file, reproduce, then scope.
 
@@ -10513,7 +10517,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 ---
 
-### BACKLOG-376 — RBAC Refactor Beyond the Current 5-Role Hierarchy
+### BACKLOG-427 — RBAC Refactor Beyond the Current 5-Role Hierarchy
 
 **Status:** OPEN — auth-critical decision record, no design session run yet
 **Priority:** HIGH — auth-critical per peer handoff; `CLAUDE.md`'s Explicit Out of Scope caps roles at Super Admin → Competition Admin → Team Manager → Logger → Viewer, so any refactor here is a scope decision first, not just an implementation task
@@ -10528,7 +10532,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 ---
 
-### BACKLOG-377 — Silent-Failure Gaps: Competitions Page Second-Stage Fetches + Team Page Season-Selector Refetch
+### BACKLOG-428 — Silent-Failure Gaps: Competitions Page Second-Stage Fetches + Team Page Season-Selector Refetch
 
 **Status:** OPEN
 **Priority:** MEDIUM — known gap, not yet reported by a real user
@@ -10541,14 +10545,14 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 ---
 
-### BACKLOG-378 — Housekeeping: tsc-to-Zero Initiative + Nav Type-Scale Inconsistency
+### BACKLOG-429 — Housekeeping: tsc-to-Zero Initiative + Nav Type-Scale Inconsistency
 
 **Status:** OPEN — not started, low urgency
 **Priority:** LOW — peer handoff explicitly places both under NEXT/LATER, not blocking
 
 **Problem:** Two small, unrelated housekeeping items from the peer handoff, bundled here since neither is large enough to justify its own entry: (1) item 18, a "tsc-to-zero" initiative — no dedicated baseline-reduction effort is currently tracked in `BACKLOG.md` beyond the routine zero-new-errors check every commit already does; the baseline itself has floated between the high-teens and high-40s across sessions depending on which `.next/types` cache artifacts are present at check time (see recent entries' own `tsc --noEmit` evidence lines). (2) items 25/26, "mostly resolved/N/A," with one small nav type-scale inconsistency still open — no detail on which nav or what the inconsistency is was passed along.
 
-**Needed:** before starting either, re-locate the peer's own source numbering doc (see `BACKLOG-376`'s source note) for the actual detail behind items 18/25/26 — this entry currently only has the one-line summary relayed in the handoff.
+**Needed:** before starting either, re-locate the peer's own source numbering doc (see `BACKLOG-427`'s source note) for the actual detail behind items 18/25/26 — this entry currently only has the one-line summary relayed in the handoff.
 
 **Found:** peer session, handoff received 2026-09-25.
 
