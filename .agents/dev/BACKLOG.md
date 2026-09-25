@@ -295,6 +295,8 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
   **What this does NOT prove**: true cross-environment isolation — that a staging broadcast can no longer reach a prod viewer, or vice versa. That would need a real prod-origin viewer connected at the same time as a staging test event, which wasn't attempted (no live prod match running, not worth the risk of testing against real prod traffic for a same-session verification). The room-prefix logic is symmetric and was code-reviewed carefully (prod defaults were preserved throughout), but isolation itself remains logically-verified, not live-verified.
   **Status:** BUG-074 stays OPEN — this closes the specific live-broadcast leakage risk demonstrated by BUG-108's testing this session, not the bug's full original scope. **Correction, same session — `JWT_SECRET` sharing was NOT part of the remaining risk**: JWT secrets were already rotated and separated per environment back on 2026-07-01 (see line 290 above, and `SYSTEM_CRITICALITY_MAP.md`'s own "JWT secret rotation" row) — an error introduced into this entry's session-44 text by not cross-checking against that already-recorded correction. What genuinely remains open: the originally-recommended real fix (a second, independent Railway service for staging) hasn't been built, and cross-environment isolation itself is unverified live — flag for whenever a real dual-environment test is safe to run (e.g. a scheduled prod match with a simultaneous staging smoke test).
 
+  **Stale-claim flag, 2026-09-25:** a peer session's offline-first-architecture handoff referred to "WS isolation" (its item 20) as "not started." That's inaccurate against this entry's own history — session 44 already shipped and deployed the room-prefixing workaround (`ea9454f`), which this entry's own text originally called "not recommended" but later built anyway once it became clear the full second-Railway-service fix wasn't happening soon. What's actually still true and unstarted: the second, independent Railway service (the originally-recommended real fix), and live cross-environment isolation verification. Not re-litigating the peer's framing — just recording the discrepancy so the next session doesn't treat "not started" as license to skip reading this entry's real history.
+
 - **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** SHIPPED — session 38D. Two root causes fixed: (1) `isLiveStatus` check in polling effect (line 163) and toast effect (line 181) used `=== 'LIVE' || === 'HALF_TIME'` — now uses module-level `LIVE_STATES.has()` covering all 7 live-ish period values; (2) `sharedSocket?.disconnect()` called at `connect_error` attempt 5, permanently killing Socket.IO reconnect loop — removed; added `reconnect_failed` listener with 30 s manual retry loop (`socket.connect()`). `LIVE_STATES` moved to module scope so effects and render share the same constant. Pending: Railway-down staging verify (amber toast, polling active, reconnect recovery). **NOTIF-12 (accepted risk):** offline notification queuing — notifications fired during a WS/server outage are lost; no retry queue exists. Accepted at MVP with a handful of viewers. Production-level concern to revisit at scale.
 
 **Assessed, not live-tested, session 47C:** attempted to verify this as part of a pass through the stale-SHIPPED pile. No safe way found to force a real WS disconnect from the Browser tool without either (a) actually taking down the shared Railway instance (affects staging *and* prod simultaneously, per `BUG-074` — a real cost for a test, not a free one), or (b) the app exposing its socket instance globally for scripted manipulation, which it correctly does not (module-scoped, not attached to `window` — confirmed via direct JS inspection). Left as `SHIPPED`, not force-tested tonight; the actual "Railway down" scenario remains the only real way to verify this end-to-end.
@@ -2463,6 +2465,8 @@ Two auth systems coexist: custom JWT (active) and `next-auth@4.24.13` (vestigial
 #### Required Changes
 
 Audit all imports of `next-auth` across the codebase. If confirmed unused, remove the package and any associated config files (`[...nextauth]` route if it exists).
+
+**Priority re-flag, 2026-09-25:** a peer session's offline-first-architecture handoff (see `BACKLOG-376`) re-raised this as "auth-critical" alongside an RBAC refactor, filed as an OPEN decision record needing a real session — a higher bar than this entry's original `Priority: Low` (filed 2026-06-05, framed as dead-weight package removal). Not independently re-assessed this session; flagging the discrepancy rather than changing the priority unilaterally. Also see `SYSTEM_AUDIT.md` §15 item 7, which independently confirmed this dual-auth-system gap predates the 2026-06-08 handoff.
 
 ---
 
@@ -10454,5 +10458,98 @@ consent screen (Richard: "the google auth worked, i have logged it").
 - Observed result: Richard confirmed the sign-in worked and the session/account was properly logged in — the originally reported symptom is resolved
 - Pending items: none
 **Files:** `src/app/api/auth/callback/google/route.ts`, `src/contexts/AuthContext.tsx`, `src/app/api/auth/me/route.ts`.
+
+---
+
+### BACKLOG-372 — Initial-Load-Failure Handling Unverified on 4 Public Detail Pages
+
+**Status:** OPEN — filed from peer handoff, not yet independently verified
+**Priority:** HIGH — flagged as blocking dev promotion in the peer session's own NOW classification; touches Flow C (public livescore) and its adjacent detail pages
+
+**Problem:** `/matches/[id]`, `/live`, `/teams/[id]`, and `/competitions/[id]` need their initial-load failure path verified under a real network-offline condition, not just a code read — confirming the viewer sees a clear stale/error state rather than a silent blank or frozen page, per `CLAUDE.md`'s Real-time rule ("Viewer must see stale data clearly on failure, not a crash"). Originally relayed as provisional `BACKLOG-417` in a peer "Brixpsorts match page" session's handoff, 2026-09-25; renumbered here since 417 was never a real filed entry — this checkout's highest entry at handoff time was `BACKLOG-371`.
+
+**Needed:** real network-offline emulation (not a code-only review) against each of the 4 pages.
+
+**Found:** peer session ("Brixpsorts match page"), handoff received 2026-09-25.
+
+---
+
+### BACKLOG-373 — sw-user.js Dead Background Sync Handlers: Delete vs. Build Real Queue
+
+**Status:** OPEN — decision needed before work starts
+**Priority:** LOW — well-defined, not blocking
+
+**Problem:** `sw-user.js` has Background Sync event handlers with zero callers anywhere in the codebase. Decision needed: delete the dead code, or build a real offline-queue behind it. Originally relayed as provisional `BACKLOG-414`; renumbered here (see `BACKLOG-372`'s note on why 414-417 were never real entries).
+
+**Branch already exists:** `fix/backlog-414-dead-sync-handlers`, off `feature/ui-redesign` tip `fdb5071`, no commits yet. The branch name references the peer session's provisional number (414), not this entry's real number (373) — cosmetic mismatch only, no commits at risk. Rename the branch if it bothers a future reader, or just note the mapping when work starts.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-374 — ESLint Config Crashes
+
+**Status:** OPEN — logged only, cause not yet investigated
+**Priority:** LOW per peer handoff, unconfirmed — no repro steps, error text, or affected command were passed along
+
+**Problem:** Peer handoff reports "eslint config crashes" with no further detail. Originally relayed as provisional `BACKLOG-415`; renumbered here (see `BACKLOG-372`).
+
+**Needed:** first session to touch this must reproduce and document the actual crash before scoping a fix — this entry currently has no evidence beyond a one-line mention.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-375 — Smoke Test's loggerId Filter Warning
+
+**Status:** OPEN — logged only, cause not yet investigated
+**Priority:** LOW per peer handoff, unconfirmed
+
+**Problem:** Peer handoff reports the Phase 0 smoke test (`TESTING_STRATEGY_2026-09-18.md`) emits a `loggerId` filter warning, with no further detail passed along. Originally relayed as provisional `BACKLOG-416`; renumbered here (see `BACKLOG-372`).
+
+**Needed:** locate the actual warning text and the smoke test file, reproduce, then scope.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-376 — RBAC Refactor Beyond the Current 5-Role Hierarchy
+
+**Status:** OPEN — auth-critical decision record, no design session run yet
+**Priority:** HIGH — auth-critical per peer handoff; `CLAUDE.md`'s Explicit Out of Scope caps roles at Super Admin → Competition Admin → Team Manager → Logger → Viewer, so any refactor here is a scope decision first, not just an implementation task
+
+**Problem:** Peer handoff item 16 flags an RBAC refactor as needed, filed as an OPEN decision record requiring a real session. No further detail on what's driving the need (a specific gap? a new role tier?) was passed along.
+
+**Related:** `BACKLOG-009` (next-auth dual-system removal) is the adjacent auth-critical item from the same handoff (peer's item 17) — see the priority-re-flag note added to that entry.
+
+**Source note:** the peer handoff refers to "items 16/17/18/20/25/26" from a numbered list this session could not locate in `.agents/` (checked `SYSTEM_AUDIT.md`, `BACKSCOPE.md`, `BACKLOG_INDEX_2026-07-30.md`, `SYSTEM_ARCHITECTURE.md` — none contain a matching 1-26 list). It likely lives in a doc on the peer's own branch/worktree not yet merged to `dev`. Treat the item numbers as relayed, not independently verified against a primary source.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-377 — Silent-Failure Gaps: Competitions Page Second-Stage Fetches + Team Page Season-Selector Refetch
+
+**Status:** OPEN
+**Priority:** MEDIUM — known gap, not yet reported by a real user
+
+**Problem:** Peer handoff identifies two known silent-failure call sites: the competitions page's second-stage fetches (standings/matches/brackets/leaders) and the team page's season-selector refetch both fail silently on error — no distinguishable error state reaches the viewer, the same failure class `CLAUDE.md`'s Error Handling rules require surfacing ("All errors must surface in both UI and server logs — no silent failures").
+
+**Fix (not built):** surface a visible error/stale state rather than a silent blank result at both call sites.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-378 — Housekeeping: tsc-to-Zero Initiative + Nav Type-Scale Inconsistency
+
+**Status:** OPEN — not started, low urgency
+**Priority:** LOW — peer handoff explicitly places both under NEXT/LATER, not blocking
+
+**Problem:** Two small, unrelated housekeeping items from the peer handoff, bundled here since neither is large enough to justify its own entry: (1) item 18, a "tsc-to-zero" initiative — no dedicated baseline-reduction effort is currently tracked in `BACKLOG.md` beyond the routine zero-new-errors check every commit already does; the baseline itself has floated between the high-teens and high-40s across sessions depending on which `.next/types` cache artifacts are present at check time (see recent entries' own `tsc --noEmit` evidence lines). (2) items 25/26, "mostly resolved/N/A," with one small nav type-scale inconsistency still open — no detail on which nav or what the inconsistency is was passed along.
+
+**Needed:** before starting either, re-locate the peer's own source numbering doc (see `BACKLOG-376`'s source note) for the actual detail behind items 18/25/26 — this entry currently only has the one-line summary relayed in the handoff.
+
+**Found:** peer session, handoff received 2026-09-25.
 
 ---
