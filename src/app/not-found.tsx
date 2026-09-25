@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Home, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 // BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031)
@@ -17,6 +17,8 @@ import Link from 'next/link';
 // );
 
 export default function NotFoundPage() {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8 overflow-hidden">
       {/* Background Effects */}
@@ -28,8 +30,10 @@ export default function NotFoundPage() {
           <circle cx="50" cy="50" r="20" fill="none" stroke="white" strokeWidth="0.5" />
         </svg>
         
-        {/* Floating basketballs */}
-        {[...Array(5)].map((_, i) => (
+        {/* Floating basketballs -- purely decorative, infinite-loop motion. Skipped
+            entirely when the user prefers reduced motion (no static replacement
+            needed since these add nothing but movement). */}
+        {!prefersReducedMotion && [...Array(5)].map((_, i) => (
           <motion.div
             key={i}
             className="absolute w-8 h-8 rounded-full bg-gradient-to-br from-orange-600 to-orange-800"

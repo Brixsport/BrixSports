@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Home, RefreshCcw, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 // BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031)
@@ -27,6 +27,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
   // are handled separately by Next.js's notFound()/not-found.tsx. There is
   // no reliable way to know a real HTTP status here, so we no longer guess one.
   const errorCode = '500';
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     // Log error to console for debugging
@@ -46,9 +47,10 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
         <div className="absolute top-0 right-1/4 w-32 h-32 bg-white/5 rounded-full blur-3xl" />
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-64 h-32 bg-blue-500/10 rounded-full blur-3xl" />
         
-        {/* Crowd noise effect - animated dots */}
+        {/* Crowd noise effect - animated dots. Purely decorative, infinite-loop
+            motion -- skipped entirely when the user prefers reduced motion. */}
         <div className="absolute bottom-0 left-0 right-0 h-1/3 opacity-20">
-          {[...Array(50)].map((_, i) => (
+          {!prefersReducedMotion && [...Array(50)].map((_, i) => (
             <motion.div
               key={i}
               className="absolute w-1 h-1 bg-white rounded-full"

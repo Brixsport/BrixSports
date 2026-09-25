@@ -12315,3 +12315,39 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files removed:** `src/hooks/useUserProfile.ts`, `src/hooks/useUserActivity.ts`, `src/components/ActivityFeed.tsx`, `src/hooks/useLoggerAnalytics.ts`, `src/hooks/usePullToRefresh.ts`, `src/hooks/useViewportHeight.ts`, `src/app/admin/competitions/page-enhanced.tsx`, `src/db/schema-enhanced.ts`.
 
 ---
+
+### BACKLOG-416 — Reduced-Motion Support for Decorative 404/Error Page Animations (Later-bucket item 22)
+
+**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Priority:** Low/Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` M2.
+
+**Process note:** a parallel agent did this fix first, correctly and completely, in its own isolated worktree, then stalled mid-session (no progress for 600s — this session had 4 agents running concurrently under real machine load) before it could report back or push. Reviewed its uncommitted diff directly in its worktree rather than respawning it, confirmed the approach was sound, and reapplied the same fix in this worktree by hand (its worktree was based on an older commit where `error.tsx`/`not-found.tsx` still had the `isClient` hydration gate `BACKLOG-410`'s parallel item-25/26 pass would have removed — that gate no longer exists in this branch's current files, confirmed by reading them fresh before editing, so the fix here is simpler than the agent's own diff, not a divergence from it).
+
+**Finding:** `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` M2 — 5 bouncing/rotating basketballs (`src/app/not-found.tsx`) and 50 pulsing "crowd noise" dots (`src/app/error.tsx`), both `repeat: Infinity`, fully decorative, no reduced-motion escape hatch. A project-wide grep confirmed zero existing `prefers-reduced-motion`/`useReducedMotion` usage anywhere in `src/` before this fix. These two were prioritized because they sit on the 404 and crash pages — where a confused/frustrated, potentially vestibular-sensitive user is most likely to linger with no way to opt out.
+
+**Fix:** added framer-motion's built-in `useReducedMotion()` hook (already a dependency, no new install) to both components. When true, the decorative animated arrays are skipped entirely (`!prefersReducedMotion && [...Array(n)].map(...)`) rather than rendered in a static replacement — the simpler option, and correct since these elements are purely decorative and add nothing but movement.
+
+**Explicitly not touched:** the one-shot entrance/fade-in `motion` elements elsewhere on both pages (not infinite loops, out of scope for M2), and `BottomNav.tsx`'s spring-based active-tab indicator (purposeful/state-driven, explicitly excluded from the audit finding).
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` — see this session's running baseline check; hook called unconditionally at each component's top level (rules-of-hooks safe), both decorative arrays live inside `pointer-events-none` absolutely-positioned containers so skipping them doesn't reflow anything.
+- Observed result: NOT live-tested.
+- Pending items: on the staging preview — with the browser/OS set to `prefers-reduced-motion: reduce`, load a nonexistent route and trigger the error boundary, confirm both pages render with the basketballs/dots absent and everything else unchanged; with no preference set, confirm the animations still play.
+**Files:** `src/app/error.tsx`, `src/app/not-found.tsx`.
+
+---
+
+### BACKLOG-419 — OPEN, NOT STARTED: Later-Bucket Items 25-26 ("Low-Priority Watch Items")
+
+**Status:** OPEN, not started — filed 2026-09-25 per Richard's explicit instruction not to respawn the agent that was assigned this and to just file it if no real work exists yet.
+**Priority:** Low, matching the "low-priority watch items" label these two items were given when the Later bucket was first sequenced.
+
+**What happened:** an agent was dispatched for these two items, mapped (as an assumption, flagged at dispatch time since 25/26 never had concrete content) onto the two lowest-severity open findings in `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md`'s "Low" section — L1 (nav-label type-scale inconsistency between `BottomNav.tsx` and `page.tsx`) and L2 (the `isClient` hydration gate blocking 404/error page render until client mount). The agent's worktree turned out to be sitting on a stale/confused checkout (its `git status` showed unrelated pre-existing dirty files from a different branch entirely, and its own log topped out at `dev`'s pre-session tip) — it never reached either fix. No code changes, no commit, nothing to salvage.
+
+**Current state of the two findings, re-checked directly against this branch before filing this as still-open:**
+- **L2 no longer applies.** `error.tsx`/`not-found.tsx` in this branch already have no `isClient` gate — already removed by earlier work on `feature/ui-redesign`, before this session. Confirmed by reading both files directly while doing `BACKLOG-416`'s reduced-motion fix in the same two files.
+- **L1 is still real and unaddressed.** `BottomNav.tsx`'s nav labels use `text-[10px]` (an arbitrary Tailwind value); `page.tsx`'s desktop top-nav links (now plain `<Link>`s after this session's `BACKLOG-406`/`407` work) use `text-xs`. Both serve the same "nav label" role at two different sizes with no shared token. Not fixed here — genuinely not started, filed as-is rather than rushed.
+
+**Files (when picked up):** `src/components/BottomNav.tsx`, `src/app/page.tsx`.
+---
