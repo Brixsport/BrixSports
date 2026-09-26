@@ -4,10 +4,13 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-    Layers, Search, Loader2, Users, ArrowRight,
+    Layers, Search, Loader2, Users, ArrowRight, Pencil, X,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
+import { ToastContainer } from '@/components/admin/Toast';
+import { useToast } from '@/hooks/useToast';
+import ImageUpload from '@/components/ImageUpload';
 
 interface Team {
     id: string;
@@ -21,6 +24,102 @@ interface Team {
 }
 
 const SPORT_FILTERS = ['All', 'Football', 'Basketball', 'Volleyball', 'Track & Field'] as const;
+
+interface TeamEditModalProps {
+    team: Team;
+    onSubmit: (updates: { logo: string; shortName: string; color: string }) => Promise<void>;
+    onClose: () => void;
+    isSubmitting: boolean;
+}
+
+function TeamEditModal({ team, onSubmit, onClose, isSubmitting }: TeamEditModalProps) {
+    const [logo, setLogo] = useState(team.logo || '');
+    const [shortName, setShortName] = useState(team.shortName || '');
+    const [color, setColor] = useState(team.color || '#1a1a1a');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await onSubmit({ logo, shortName, color });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-[#0a0a0a] rounded-[32px] border border-white/10 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between p-8 pb-4">
+                    <h2 className="text-2xl font-display italic uppercase">Edit Team</h2>
+                    <button type="button" onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-8 pt-4 space-y-6">
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Team Logo</label>
+                        <ImageUpload
+                            value={logo}
+                            onChange={setLogo}
+                            aspectRatio="square"
+                            maxSize={2}
+                            className="w-32 h-32"
+                            folder="brixsports/teams/logos"
+                            publicId={team.id}
+                            tags={['team-logo']}
+                            context={{ alt: `${team.name} logo` }}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Short Name</label>
+                        <input
+                            type="text"
+                            value={shortName}
+                            onChange={(e) => setShortName(e.target.value)}
+                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            placeholder="e.g., ABU"
+                            maxLength={10}
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Brand Color</label>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="color"
+                                value={color}
+                                onChange={(e) => setColor(e.target.value)}
+                                className="w-12 h-12 rounded-xl border border-white/10 bg-[#121212] cursor-pointer"
+                            />
+                            <input
+                                type="text"
+                                value={color}
+                                onChange={(e) => setColor(e.target.value)}
+                                className="flex-1 bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                placeholder="#1a1a1a"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/10 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="flex-1 py-3 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-primary/90 transition-all disabled:opacity-50"
+                        >
+                            {isSubmitting ? 'Saving...' : 'Save Changes'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
 
 function InitialsAvatar({ name, color }: { name: string; color: string }) {
     const initials = name
@@ -48,6 +147,9 @@ function TeamsPageContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [sportFilter, setSportFilter] = useState<string>('All');
+    const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+    const [isSavingTeam, setIsSavingTeam] = useState(false);
+    const { toasts, removeToast, success, error: showErrorToast } = useToast();
 
     useEffect(() => {
         if (!authLoading && !user) {
@@ -71,6 +173,31 @@ function TeamsPageContent() {
         };
         fetchTeams();
     }, []);
+
+    const handleSaveTeam = async (updates: { logo: string; shortName: string; color: string }) => {
+        if (!editingTeam) return;
+        setIsSavingTeam(true);
+        try {
+            const res = await fetch(`/api/admin/teams/${editingTeam.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || 'Failed to update team');
+            }
+            setTeams((prev) =>
+                prev.map((t) => (t.id === editingTeam.id ? { ...t, ...updates } : t))
+            );
+            success('Team updated');
+            setEditingTeam(null);
+        } catch (err) {
+            showErrorToast(err instanceof Error ? err.message : 'Failed to update team');
+        } finally {
+            setIsSavingTeam(false);
+        }
+    };
 
     const filtered = useMemo(() => {
         return teams.filter((t) => {
@@ -200,6 +327,15 @@ function TeamsPageContent() {
                                             </span>
                                         </div>
                                     </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingTeam(team)}
+                                        className="p-2 rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                                        aria-label={`Edit ${team.name}`}
+                                    >
+                                        <Pencil size={14} />
+                                    </button>
                                 </div>
 
                                 <div className="text-[10px] font-bold text-white/30 uppercase tracking-wide mb-5 truncate">
@@ -218,6 +354,17 @@ function TeamsPageContent() {
                     </div>
                 )}
             </div>
+
+            {editingTeam && (
+                <TeamEditModal
+                    team={editingTeam}
+                    onSubmit={handleSaveTeam}
+                    onClose={() => setEditingTeam(null)}
+                    isSubmitting={isSavingTeam}
+                />
+            )}
+
+            <ToastContainer toasts={toasts} onClose={removeToast} />
         </div>
     );
 }
