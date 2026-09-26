@@ -39,10 +39,19 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
             return;
         }
 
-        // Show prompt after 30 seconds for iOS users who haven't installed
+        // Show prompt after 30 seconds for iOS users who haven't installed --
+        // but only as an escalation once the lighter IOSInstallBanner has
+        // already been shown and dismissed. Both were previously scheduled
+        // independently (banner near-instantly, this card at 30s), so a
+        // first-time iOS visitor got two separate install nags stacked for
+        // the same action. Re-check at fire time (not just at mount) so a
+        // banner dismissed after this effect ran is still honored.
         if (isIOSDevice && !isStandalone) {
             setTimeout(() => {
-                setShowPrompt(true);
+                const bannerDismissed = localStorage.getItem(`brix-${appType}-ios-banner-dismissed`);
+                if (bannerDismissed) {
+                    setShowPrompt(true);
+                }
             }, 30000);
         }
     }, [appType]);

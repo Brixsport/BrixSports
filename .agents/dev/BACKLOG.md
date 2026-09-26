@@ -12351,3 +12351,74 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Files (when picked up):** `src/components/BottomNav.tsx`, `src/app/page.tsx`.
 ---
+
+### BACKLOG-430 — RESOLVED: iOS Install Prompt Stacking (Banner + Card Shown Together)
+
+**Status:** RESOLVED — 2026-09-27, commit pending push.
+**Priority:** High — found during a `/product-team-review` pass on PWA banners; confirmed in code, not speculative.
+
+**Numbering note:** this branch's own ceiling was 422; `dev`'s was independently renumbered to 429 (see `BACKLOG-423`'s numbering note on that branch, a different, unrelated entry — a peer session caught the same-number collision risk once already). Picked 430, past both known ceilings, to avoid re-creating that exact collision on merge.
+
+**Finding:** `PWAProvider.tsx` mounts `InstallPrompt`, `IOSInstallPrompt` (full card), and `IOSInstallBanner` (top banner) unconditionally together, with no mutual exclusion. On iOS: the banner appears near-instantly (if not previously dismissed), and the card independently fires 30 seconds later for the identical "add to home screen" action — each tracked by its own separate localStorage dismiss key. A first-time iOS visitor got two separate install nags stacked in one session.
+
+**Fix:** `IOSInstallPrompt`'s 30-second timer now checks `brix-${appType}-ios-banner-dismissed` at fire time before showing the card — the card only escalates after the banner has already been shown and dismissed, instead of running on an independent timer. Checked at fire time (not just at mount) so a banner dismissed after the effect first ran is still honored.
+
+**Also found in the same review pass, not fixed here:**
+- Install-prompt copy overpromises push notifications on iOS (`IOSInstallPrompt`'s "Pro tip" claims push works post-install; `PWA_LIMITATIONS.md` documents this requires iOS 16.4+ and isn't feature-detected).
+- No differentiated urgency in install copy for `appType='admin'` (loggers) vs viewers, despite `PWA_LIMITATIONS.md`'s own recommendation that loggers specifically need to install (Safari kills their SW after ~30s backgrounded, threatening the 120-min session-persistence requirement).
+- Whether `BUG-075` (manifest scope mismatch blocking correct iOS install) is actually resolved was not re-verified this pass.
+- `OfflineIndicator` + `OfflineBadge` render together unconditionally in the same provider — same class of pattern, not inspected for actual redundancy.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: read `PWAProvider.tsx` directly, confirmed all three install components mount unconditionally with independent dismiss-key tracking before making the change.
+- Observed result: NOT live-tested yet — pending a real iOS Safari pass (or DevTools mobile-Safari-equivalent emulation) confirming the card no longer appears within the same session as an un-dismissed banner.
+- Pending items: live verification; the three related-but-unfixed findings above, logged separately if picked up.
+
+**Files:** `src/components/pwa/IOSInstallPrompt.tsx`.
+
+---
+
+### BACKLOG-431 — OPEN: Hydration Error (React #418) on `/` and `/matches/[id]`, Root Cause Not Yet Isolated
+
+**Status:** OPEN, investigation in progress — not resolved, not fixed. Filed so this doesn't get lost or re-discovered from scratch.
+**Priority:** HIGH — confirmed real, currently-open, affects real production traffic (not just the manual test that surfaced it).
+
+**Numbering note:** see `BACKLOG-430` above — picked past both branches' known ceilings for the same collision-avoidance reason.
+
+**Found via two independent paths:**
+1. A live manual DevTools-Offline hard-reload test against this branch's staging preview reproduced `/matches/[id]` crashing to the app's generic root error boundary (`src/app/error.tsx`, no local error boundary exists for this route) on a cold/never-cached-this-session URL. A second navigation to the identical URL, after shell assets were cached, correctly showed `MatchDetailClient.tsx`'s own resilient `loadError: 'load-failed'` state instead — so the crash is not a missing-resilient-UI problem (that pattern already works correctly once mounted), it's something failing before the component gets a chance to run its own error handling.
+2. Sentry (`brixsport` project, issue `BRIXSPORT-3`, id `7686133141`, "Hydration Error") independently shows the same error class occurring in real production traffic on real Mobile Safari/iOS devices, 17+ events over the past month, escalating, tagged to the site root `/` (not specifically `/matches/[id]`) — meaning this is likely a shared, global cause affecting more than one route, not something isolated to the match detail page.
+
+**Confirmed root-cause class:** the browser console (captured live during the manual test) shows `Uncaught Error: Minified React error #418; args[]=text` — React's own de-minified message template for #418 is *"Hydration failed because the server rendered %s didn't match the client"* with `%s` = `text`, i.e. a text-content mismatch, not a structural/tag mismatch. Normally React treats a text-only hydration mismatch as recoverable (patches the subtree client-side, logs a warning, doesn't crash) — the fact that this became an **uncaught, page-crashing** error rather than a silent recoverable patch is itself part of the mystery and not yet explained.
+
+**Ruled out this session (checked directly, not assumed):**
+- `page.tsx`'s SSR data fetch (`getMatchSeoData`, `BACKLOG-403`) — already wrapped in try/catch, confirmed present in the exact commit (`b29304b`) that was live-tested.
+- `MatchDetailClient.tsx`'s client-side fetch handling (`BACKLOG-394`) — already correct, confirmed by the warm-reload test above.
+- No render-time `Date`/`Intl`/`toLocaleString`/`navigator.` usage found in `layout.tsx`, `MatchDetailClient.tsx`, `AdBanner.tsx`, `OfflineIndicator.tsx`, `ThemeProvider.tsx`, `BottomNav.tsx`, or `GlobalNotificationListener.tsx` — the classic hydration-mismatch triggers aren't in any of the obvious globally-rendered candidates checked so far.
+- Sentry's raw event JSON (fetched directly via the API) has no `exception`/`stacktrace` entries at all — this SDK captures hydration errors as a synthetic `type: "generic"` event tied to a Session Replay, not as a thrown-exception object with a component stack. The in-app "Hydration Error Diff" viewer (reconstructed from the linked Replay, not from event JSON) showed one visible structural difference between server and client render — an extra small pill/badge present only on the client side, bottom-right of viewport — but its actual text content is masked/redacted by Sentry's default PII scrubbing, so it couldn't be identified from that view alone.
+- `next.config.ts` already has Sentry source-map upload wired (`withSentryConfig`, `authToken: process.env.SENTRY_AUTH_TOKEN`) — but the Vercel project's `SENTRY_AUTH_TOKEN` env var is flagged **"Needs Attention"** in the Vercel dashboard (confirmed by Richard directly). This is likely why de-minified traces aren't showing up cleanly and should be fixed independently of this bug (see `BACKLOG-432`).
+
+**Not yet tried / next real steps:**
+- Watch the actual Session Replay recording (`replayId: 000bc2f14ead449f9c75894161e31eb3` or `287de8a6ab8b4e9697bf98b51d1af50e` on issue `7686133141`) — this would show the real visual content at the moment of the crash, unmasked, unlike the redacted diff viewer.
+- Once `BACKLOG-432` (Sentry auth token) is fixed, future occurrences of this error should carry a real de-minified stack trace, making this much faster to root-cause going forward even if this specific historical event can't be recovered.
+- Broaden the render-time-unsafe-pattern search beyond the components checked so far (this was not an exhaustive sweep of the whole `src/` tree, just the most likely globally-rendered candidates).
+
+**Do not attempt a speculative fix without confirming the actual component** — multiple plausible candidates were checked and ruled out already; guessing further risks a change that doesn't address the real cause while looking like progress.
+
+**Files:** none changed — investigation only, no fix applied yet.
+
+---
+
+### BACKLOG-432 — OPEN: `SENTRY_AUTH_TOKEN` Flagged "Needs Attention" in Vercel (brixsports-staging project)
+
+**Status:** OPEN — found while investigating `BACKLOG-431`, not yet fixed.
+**Priority:** Medium — doesn't block anything directly today, but silently degrades Sentry's usefulness for every future production error (no de-minified stack traces) until fixed.
+
+**Finding:** In the `brixsports-staging` Vercel project's Environment Variables settings, the `SENTRY_...` (auth token) variable shows a "Needs Attention" badge, confirmed by Richard directly in the Vercel dashboard. `next.config.ts`'s `withSentryConfig` call references this exact var (`authToken: process.env.SENTRY_AUTH_TOKEN`) to upload source maps on every production build. If the token is invalid/expired/wrong-scope, source maps silently fail to upload — Sentry issues keep working, they just show minified/obfuscated stack traces instead of real file and function names, which is exactly the wall hit while investigating `BACKLOG-431`.
+
+**Fix needed:** open the flagged variable in Vercel, see what it's actually complaining about (expired, wrong project scope, revoked), and regenerate/replace it in Sentry's own token settings if needed. Not something fixable from a code change — this is a Vercel/Sentry dashboard configuration task.
+
+**Files:** none — configuration-only, no code change.
+
+---
