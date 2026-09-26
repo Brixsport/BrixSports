@@ -16,7 +16,7 @@ const SIZE_PX: Record<string, number> = { sm: 32, md: 40, lg: 48 };
 // the name into a consistent hue gives each team its own stable color instead
 // (same team always gets the same color, no randomness), and a thin border
 // gives the disc definition against either a light or dark page background.
-function hashColor(name: string): string {
+export function hashColor(name: string): string {
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -27,7 +27,7 @@ function hashColor(name: string): string {
 
 const FALLBACK_BORDER = '1px solid rgba(128, 128, 128, 0.35)';
 
-function getInitials(name: string): string {
+export function getInitials(name: string): string {
     // Match alphanumeric words only, so punctuation-heavy names like
     // "BUSALYMPICS (FOOTBALL)" produce "BF", not "B(" from a naive
     // space-split grabbing the paren as a "word".
