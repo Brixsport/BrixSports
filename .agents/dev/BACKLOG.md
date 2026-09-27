@@ -11717,17 +11717,15 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-419 — `sw-user.js`'s `sync-favorites` / `sync-profile` Background Sync Handlers Have No Callers Anywhere in `src/`
 
-**Status:** OPEN — low priority, cleanup, not a live functional gap.
+**Status:** RESOLVED — 2026-09-27, deleted. Richard's call: option (a), delete the dead handlers.
 **Priority:** Low.
 **Found:** 2026-09-18, while grounding the `BACKLOG-394` P2 design pass against `public/sw-user.js`.
 
-**Finding:** `public/sw-user.js` defines a `sync` event handler for tags `sync-favorites` and `sync-profile` (`syncFavorites()`, `syncProfile()`, and an `openDB()` creating a `BrixsportDB` with `pendingFavorites`/`pendingProfile` stores). A repo-wide grep of `src/` for `pendingFavorites`, `pendingProfile`, `sync-favorites`, `sync-profile` returns zero hits — nothing in the app writes to those stores or calls `sync.register()` with those tags. The handlers are unreachable scaffolding, not a working offline queue for favorites/profile edits.
+**Finding:** `public/sw-user.js` defined a `sync` event handler for tags `sync-favorites` and `sync-profile` (`syncFavorites()`, `syncProfile()`, and an `openDB()` creating a `BrixsportDB` with `pendingFavorites`/`pendingProfile` stores). A repo-wide grep of `src/` for `pendingFavorites`, `pendingProfile`, `sync-favorites`, `sync-profile` returned zero hits — nothing in the app wrote to those stores or called `sync.register()` with those tags. The handlers were unreachable scaffolding, not a working offline queue for favorites/profile edits.
 
-**Why it matters (and why only Low):** it is not the iOS Background Sync gap `PWA_LIMITATIONS.md` documents for the Logger (`BACKLOG-107`) — that concern doesn't apply to code that never runs. The actual consequence: a Fan who favourites a team or edits their profile while offline gets a plain failed request, with no queueing, on every platform. `BACKLOG-226`'s note that the iOS Background-Sync fallback "already exists" refers to the Logger's `admin-offline-queue.ts` path, not this one. Also note the Fan Account Blueprint (`userFavorites`, `userFollows`, `userPreferences`) now makes favourites a real feature, so this may stop being hypothetical.
+**Fix:** deleted the dead block wholesale — the `sync` event listener, `syncFavorites()`, `syncProfile()`, and `openDB()`/its IndexedDB store setup (`public/sw-user.js`, was lines 440-512). Re-confirmed zero callers immediately before deleting (both this file and a repo-wide `src/` grep for the sync tags and `registration.sync.register`). `node --check public/sw-user.js` clean after.
 
-**Not verified:** grep only; not checked whether a dynamic string construction elsewhere could reference these names. Recommend one confirming look before deleting.
-
-**Options, Richard's call (not assumed):** (a) delete the dead handlers; (b) actually build a viewer offline write queue for favourites/profile, reusing `BACKLOG-107`'s page-level `online`/`visibilitychange` drain pattern so it works on iOS, since Background Sync alone would not.
+**Why delete rather than build (b):** the Fan Account Blueprint (`userFavorites`, `userFollows`, `userPreferences`) does make favourites a real feature now, so an offline write queue for it may stop being hypothetical — but Background Sync itself is the wrong foundation for it regardless (documented iOS-broken, `PWA_LIMITATIONS.md`/`BACKLOG-107`), so keeping this dead scaffold around wouldn't have saved any real work toward that feature. If/when a Fan offline-favourites queue gets built, it should reuse the Logger's `admin-offline-queue.ts` `online`/`visibilitychange`-drain pattern — the same conclusion the original entry already pointed at — not resurrect this handler.
 
 ---
 
@@ -12001,6 +11999,20 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
+**Walkthrough continuation, 2026-09-27 (the remaining surfaces from the rate-limit cutoff):**
+
+- **`/login`** — clean. Renders correctly, no console errors. Did not submit the form (real credentials/session side effects, out of scope for a passive walkthrough).
+- **`/signup`** — clean. Renders correctly. Did not submit the form (real account creation — explicit-permission territory, not attempted).
+- **`/news`** — clean, and worth recording precisely: the list initially read as empty on a fast text-grab, which would have been a false "orphaned page" finding — the API (`GET /api/news?limit=20`) does return 3 real articles, and a slower/full read confirmed all 3 render (a "Featured" section plus the full list below it). Logging the near-miss so a future pass doesn't need to re-discover that a quick read can undercount async content on this page.
+- **`/lineup-builder`** — clean, renders the team gallery, no console errors. Not interacted with beyond loading (🔴 High Volatility, observation only per `CLAUDE.md`).
+- **NEW BUG FOUND — `/transfers`:** every visible transfer record shows the identical malformed date **"Apr 28, 57956"** (a 5-digit year). Same bug class as this entry's own High #1 ("Invalid Date" on a live match card) — a stringified-epoch or date-math issue reaching production, on a surface the original walkthrough never reached. Not root-caused this pass (would need the actual stored value for one of these transfer rows, which needs DB access this session doesn't have — same constraint as Medium #11). Filing as a new High-priority item under this entry rather than a separate number, since it's the same underlying bug class as #1.
+- **`/docs`** — renders cleanly (developer documentation: architecture, database, API reference, deployment). Worth flagging once, not investigating further here since it's adjacent to the audit session's own in-progress security findings: this is internal developer documentation, publicly reachable with zero authentication.
+- **Admin section (`/admin`)** — loads correctly with a real signed admin JWT (`dev/gen-admin-token-backlog348.mjs`, 2h token, injected via cookie + localStorage), Operations Monitor renders real data (active loggers, live/upcoming matches, team counts), no console errors. Confirms the already-tracked risk (admin fully reachable, not newly gated) rather than finding anything new — matches CLAUDE.md's Live Event Readiness Checklist line on 🔴 features still being exposed.
+
+**Walkthrough is now functionally complete** across all originally-listed surfaces. One new bug found (`/transfers` malformed date); everything else on the remaining surfaces checked clean.
+
+---
+
 **Full-platform pre-promotion audit status, 2026-09-17/18:** 6 of 7 background agents reported fully (`db-inspector` → `BACKLOG-395`, `flow-checker` → `BACKLOG-396`, `security` → `BACKLOG-397` **BLOCKED**, `code-reviewer` → `BACKLOG-398`, architecture/tech-debt → `BACKLOG-400`, static product-design → `BACKLOG-399`); the 7th (live walkthrough) got through 8 real surfaces with substantial findings (`BACKLOG-401`) before a session rate limit cut it off mid-`/login`-check — genuinely incomplete, worth resuming. **Two independent CRITICAL security findings from two different audit angles (`BACKLOG-397`'s API-level findings, `BACKLOG-398`'s chat-spoofing finding) both point the same direction: this branch should not merge to `dev`/`main` until at minimum the FPL password-hash leak, the `approvedBy` mass-assignment gap, the `/api/matches` POST mass-assignment, and the chat identity-spoofing bug are fixed.**
 
 ---
@@ -12185,9 +12197,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-409 — Homepage Bell Icon Opened Settings Instead of Notifications
+### BACKLOG-409 — RESOLVED: Homepage Bell Icon Opened Settings Instead of Notifications
 
-**Status:** SHIPPED — 2026-09-24, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — live-verified 2026-09-27 on the staging preview.
 **Priority:** Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` M1 (Later-bucket item 23).
 
 **Finding:** `src/app/page.tsx` (top nav, the only Bell icon in the app) showed an unread-count dot — the universal "notifications" affordance — but its `onClick` called `setIsSettingsOpen(true)`, opening `SettingsOverlay`. A real `/notifications` page and `src/components/Notifications.tsx` already existed and were never wired to it — the audit's own read was "a wiring leftover, not an intentional choice," confirmed here: `Settings` is already reachable elsewhere (`/profile`'s "System Settings" and "Privacy & Security" quick actions, both to `/profile/settings`), so the bell was never the only path to Settings.
@@ -12200,17 +12212,17 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 3. `isSettingsOpen`/`setIsSettingsOpen` and the `SettingsOverlay` render in `page.tsx` are now unreachable from anywhere in this file (the bell was the only trigger) — left in place rather than removed, since deleting a whole overlay is dead-code-sweep scope (Later-bucket item 21), not this fix's job.
 
 **Evidence:**
-- Commit: pending (this session)
+- Commit: already on `feature/ui-redesign`.
 - Verified by: `tsc --noEmit` 18 errors (baseline unchanged, zero new, none in `page.tsx`); source read confirming Settings stays reachable via `/profile`.
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview — clicking the bell navigates to `/notifications`, not the settings overlay; `/profile` → "System Settings" still opens `/profile/settings`; the badge dot still renders when the local `useNotifications()` queue is non-empty.
+- Observed result: **LIVE-VERIFIED, 2026-09-27.** Confirmed `[aria-label="Notifications"]` on the bell button; clicking it (via a real DOM click, not a synthetic one that skips React's handler) navigated to `/notifications`, which rendered the real page ("NOTIFICATIONS", "All (0)", "Unread (0)", "No notifications yet") — not the settings overlay.
+- Not independently re-checked this pass: `/profile` → "System Settings" still opens `/profile/settings" (unchanged code path, not re-clicked); the badge-dot behavior.
 **Files:** `src/app/page.tsx`.
 
 ---
 
-### BACKLOG-410 — Mobile Menu Sheet Polish: Icon Rows, Drag Handle, Visual Grouping
+### BACKLOG-410 — RESOLVED: Mobile Menu Sheet Polish: Icon Rows, Drag Handle, Visual Grouping
 
-**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — live-verified 2026-09-27 on the staging preview at 375px.
 **Priority:** Low — visual finish on `BACKLOG-406`'s bottom sheet, not a new capability.
 
 **What changed (`src/app/page.tsx`):** the sheet's 5 top-level items (Teams, Players, All Competitions, Lineup Builder, News) were plain text `<Link>`s with no icon, no hover state beyond underline-adjacent color, and no visual weight matching `BottomNav`'s icon+label pattern used everywhere else in the app. Added a shared `MenuRow` component (icon + label + trailing chevron, `rounded-xl` hover/active background, 44px min height kept from `BACKLOG-406`) so the sheet reads as a real menu rather than a link list. Icons: `Users` (Teams), `User` (Players), `Trophy` (Competitions, matching the icon already used for the competition group headers on the same page — `BACKLOG-407`), `ListChecks` (Lineup Builder), `Newspaper` (News) — all already-available `lucide-react` exports, no new dependency. Added a purely decorative drag-handle bar at the top of the sheet (native-bottom-sheet visual convention; Radix's own Escape/overlay/X close behavior does the real work, confirmed working pre-existing) and a divider before Lineup Builder to separate "browse" items from it.
@@ -12218,10 +12230,10 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Deliberately not done:** no active-route highlighting on the rows — the sheet only ever renders while the user is on `/` (per `BACKLOG-406`'s own known limitation, the top bar and hamburger are homepage-only), so every row would always read as "not current" and the state would be dead weight.
 
 **Evidence:**
-- Commit: pending (this session)
+- Commit: already on `feature/ui-redesign`.
 - Verified by: `tsc --noEmit` — see this session's running baseline check.
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview at 375px — each row shows its icon, hover/active background, and chevron; the drag handle renders above the "Menu" title; the divider sits between the competitions block and Lineup Builder; tapping any row still navigates and closes the sheet (behavior unchanged from `BACKLOG-406`, only presentation changed).
+- Observed result: **LIVE-VERIFIED, 2026-09-27.** At 375px, opened the sheet via its real "Open menu" button and inspected the actual DOM: the Teams row has a real `<svg>` icon with class `rounded-xl ... hover:bg-muted ... active:bg-muted/70` (the `MenuRow` styling exactly as described); Lineup Builder's row also has an icon, and its immediately-preceding sibling is a `<div class="my-1 border-t border-border/60">` — the divider; the dialog's first child is `<div class="mx-auto mt-1 h-1 w-10 rounded-full bg-border">` — the drag handle. All three described elements confirmed present with the exact described styling, not just "a menu opened."
+- Not independently re-tested: tap-to-navigate-and-close behavior (unchanged code path from `BACKLOG-406`, not re-exercised).
 **Files:** `src/app/page.tsx`.
 
 ---
@@ -12278,9 +12290,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-414 — `basketball/leaderboard/mvp` Had Two Fully Unbounded Queries
+### BACKLOG-414 — RESOLVED: `basketball/leaderboard/mvp` Had Two Fully Unbounded Queries
 
-**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — live-verified 2026-09-27, endpoint returns cleanly with the fix in place.
 **Priority:** Medium — the one real, currently-true gap found while following up on a parallel agent's per-sport API investigation (Later-bucket item 19). Filed as its own item rather than as a generic "fix findings 2+3 on all 9 routes" task, because re-verifying against this branch's actual current state (not the investigation's base) showed the other 8 routes and the field-leak finding no longer apply here — see below.
 
 **Context — a stale-base correction, not a disagreement with the investigation's method:** a parallel agent (working in its own worktree, branched from `origin/dev`) investigated Later-bucket item 19 (per-sport `/api/basketball/*` and `/api/football/*` vs. the generic `/api/matches` tree) and reported two real bugs across all 9 sport-specific routes: a CLAUDE.md-banned-field leak on 4 of them, and a missing `.limit()` on all 9. Before touching anything, re-checked every one of the 9 routes directly against `feature/ui-redesign` (this session's actual branch), per this project's "verify before concluding" convention — `origin/dev` is behind this branch.
@@ -12292,10 +12304,10 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Fix:** added `.limit(2000)` to both queries — generous relative to the platform's actual basketball match/player volume today.
 
 **Evidence:**
-- Commit: pending (this session)
+- Commit: already on `feature/ui-redesign`.
 - Verified by: `tsc --noEmit` — see this session's running baseline check.
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview — `GET /api/basketball/leaderboard/mvp` returns the same leaderboard shape and row count as before (no behavior change expected at today's data volume). Also pending: the investigation agent's own `BACKLOG.md` entry (filed in its separate, unmerged worktree/branch) needs its Findings 2/3 corrected or cross-referenced to this entry once that branch is merged, so the stale claim doesn't ship as-is.
+- Observed result: **LIVE-VERIFIED, 2026-09-27.** `GET /api/basketball/leaderboard/mvp` (signed in as admin via injected JWT) returned `200 {"success":true,"leaderboard":[]}` — clean, no error, correct shape. Staging currently has zero basketball MVP data, so this doesn't exercise the `.limit(2000)` boundary itself, but confirms the fix didn't break the endpoint.
+- Still pending: the investigation agent's own `BACKLOG.md` entry (separate, unmerged worktree/branch) needing its Findings 2/3 corrected or cross-referenced once that branch merges — not something this session can do from here.
 **Files:** `src/app/api/basketball/leaderboard/mvp/route.ts`.
 
 ---
@@ -12539,5 +12551,36 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 - Observed result: NOT yet live-tested against the deployed behavior (the fix needs a fresh deploy before a real click can confirm the fallback shows immediately) — the *symptom* was confirmed live by Richard before the fix, not the fix itself yet.
 - Pending items: after this commit deploys, click into a match from `/` on the staging preview and confirm the spinner appears immediately (no dead-feeling delay), not just eventually.
 **Files:** `src/app/matches/[id]/loading.tsx` (new).
+
+### BACKLOG-435 — OPEN: Double-Submission Dedup Guard Fails Under Real Concurrency (Readiness Checklist D2)
+
+**Status:** OPEN on this branch — bug reproduced live via stress test (5/5 trials), and the fix (`be87e76`) is now separately confirmed to work (5/5 trials held, see updated Evidence below) — but that commit is not yet merged into `feature/ui-redesign` or this branch, so nothing here has actually changed yet. Do not close as RESOLVED until `be87e76` (or equivalent) is present in this branch's own history.
+**Priority:** Critical — directly blocks the Live Event Readiness Checklist's "double event submission is prevented or deduplicated" line, and is the same class of bug as `BUG-196`/`BACKLOG-151` (score/stat inflation from duplicate writes), just reproduced from a different angle.
+
+**Numbering note:** genuine cross-branch collision, hit twice while filing this one entry — flagged explicitly so it isn't missed at merge time. `feature/testing-strategy-phases-1-5` (peer session "testing-strategy") independently found and fixed the identical bug, filed under their own `BACKLOG-433` (commit `be87e76`, "fix(events): close dual-logger dedup race with an atomic insert", now `RESOLVED` on their branch per their `4bf03d9`). First attempt: on *this* branch (`feature/ui-redesign`), `BACKLOG-433` is already taken by the unrelated, already-resolved `loading.tsx` bug directly above this entry. Second attempt (`BACKLOG-434`): also already taken, on *their* branch this time — their `f919461` files `BACKLOG-434` for an unrelated Phase 4 WS-broadcast test. Verified both collisions directly against `origin/feature/testing-strategy-phases-1-5`'s actual `BACKLOG.md` content before renumbering, rather than taking either report on faith. Landed on `BACKLOG-435` — confirmed free on both branches' `BACKLOG.md`/`BACKLOG_ARCHIVE.md` at time of filing. When the branches merge, reconcile this entry + their `be87e76`/`BACKLOG-433` as the same underlying issue, not two separate bugs.
+
+**Symptom:** a rapid burst of truly concurrent identical event submissions (double-tap, or a client retry racing the original request) can each pass the dedup check and each insert, multiplying both the event row count and `matches.homeScore`/`awayScore` for what should be a single real-world goal.
+
+**Root cause:** `src/app/api/matches/[id]/events/route.ts`'s dedup guard (the `BACKLOG-151` fix, 2026-09-10) runs its SELECT-then-INSERT check *inside* `db.transaction()`, which looks atomic and was verified as closing the race for the original 2-real-logger live test. Under Turso/libSQL, wrapping a check-then-act pattern in `db.transaction()` does not actually serialize two concurrent transactions the way a traditional single-writer SQLite file would — two (or more) concurrent transactions can each run their SELECT before either has committed its INSERT, so each sees "no existing row" and each proceeds to insert.
+
+**Reproduction (this session, live against staging):** disposable `matchType: 'friendly'` test match (`d1d2-test-79XyLGXfBI`), real logger (`logger_1767968844029`), real player (`i7VBmo4RZkk5Q6_Zixw2I`) — see `.agents/dev/RUNLOG.md`'s 2026-09-27 D2 entries for full detail.
+- First single trial (8-way `Promise.all`, identical `{type:'Goal', minute:17, playerId, teamId}`): dedup HELD — 1 DB row, `home_score`=1.
+- 5-trial follow-up (10-way concurrency each, distinct `minute` per trial so trials can't cross-contaminate): dedup FAILED in **5/5 trials** — DB row counts of 10, 10, 7, 10, 9 for what should each be a single event, `matches.home_score` inflated to match. Confirmed via direct `SELECT COUNT(*) FROM match_events WHERE match_id=? AND type='Goal' AND minute=? AND player_id=?` and `SELECT home_score FROM matches WHERE id=?` — not HTTP status codes (per `.agents/rules/backlog.md`, status codes alone aren't evidence; all 46 duplicate POSTs across the 5 failing trials also returned HTTP 201, `"Event created successfully"`, with no client-visible error at all).
+
+**Fix (exists, not yet on this branch):** peer session's `be87e76` replaces the SELECT-then-INSERT pattern with a single atomic `INSERT ... WHERE NOT EXISTS (SELECT ...)` statement — no separate check-then-act step for Turso to race. Their own validation was at 2-way concurrency (21/21 passes, direct-SQL + real API, now `RESOLVED` on their branch). Not re-derived here per explicit agreement with that session (Richard + the peer session were already coordinating getting it pushed/deployed).
+
+**Concurrency-level note:** this entry's own stress test runs at 10-way concurrency, higher than the fix's original 2-way validation — so the fix-verification re-run below isn't just corroborating their result, it's independent evidence the fix holds at a concurrency level nobody had tested yet. It held clean (see below); if a future re-run at even higher concurrency ever fails, that would be a *new* finding beyond what `be87e76` covers, not a reopening of this same bug — file it separately rather than folding it back in here.
+
+**Evidence (bug reproduction):**
+- Commit: none on this branch at time of reproduction.
+- Verified by: live stress test against staging DB, direct `match_events`/`matches.home_score` reads (see RUNLOG).
+- Observed result: dedup guard fails 5/5 trials under 10-way real concurrency; single 8-way trial passed once (non-deterministic race, consistent with the peer session's own "3 of 4" finding at their tested concurrency).
+
+**Evidence (fix verification — but NOT yet on this branch):**
+- Commit: `be87e76` on `feature/testing-strategy-phases-1-5` (pushed to origin 2026-09-27, still not merged into `feature/ui-redesign` or this branch as of this entry).
+- Verified by: `dev/d2-double-submit-stress-test-multi.mjs` re-run with fresh minutes (30-34, no collision with the earlier failing trials on the same disposable match) against `https://brixsports-staging-5fbvhu002-brixsports-projects.vercel.app` — the actual preview deployment of the `be87e76` commit, confirmed live via the GitHub deployments API by the peer session before handing it off.
+- Observed result: 5/5 trials held — each 10-way concurrent burst produced exactly 1 HTTP 201 (the other 9 got the dedup-hit 200) and exactly 1 DB row. Direct contrast with the un-fixed code's 5/5 failures above.
+- Pending items: this is evidence that the fix works, not evidence that this branch is fixed. Merge `be87e76` (or an equivalent atomic-insert fix) into this branch/`feature/ui-redesign`, then either re-run the same script against this branch's own deployment or treat this evidence block as sufficient (same commit, same fix) and flip this entry to RESOLVED once the merge is confirmed in `git log`.
+**Files:** `src/app/api/matches/[id]/events/route.ts` (fix target, not yet touched here); `dev/d1d2-setup.mjs`, `dev/d2-double-submit-stress-test.mjs`, `dev/d2-double-submit-stress-test-multi.mjs` (new, this session, gitignored).
 
 ---
