@@ -12240,9 +12240,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-413 — Copy/Tone Cleanup: Raw Error Code in Signup Toast, Sport-Voice Mismatch Between Error Pages
+### BACKLOG-413 — RESOLVED: Copy/Tone Cleanup: Raw Error Code in Signup Toast, Sport-Voice Mismatch Between Error Pages
 
-**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — 2026-09-27, live-verified via the deployment-protection bypass against the current staging preview.
 **Priority:** Low/Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` M4 and L3 (Later-bucket item 24).
 
 **M4 fix (`src/app/signup/page.tsx`):** the registration-failure toast showed a raw internal error code (`{(error as any).code}`) to every user, unconditionally — a smaller-scale repeat of the C1 pattern already fixed in `error.tsx` this session. Now gated behind `process.env.NODE_ENV === 'development'`, same condition `error.tsx` already uses, so a non-technical user sees only the human-readable message.
@@ -12254,10 +12254,11 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Deliberately not done:** a full copy/voice rewrite of either page beyond the flagged lines, or a written style guide — the audit's own words were "neither page's voice is wrong on its own," so this is a targeted consistency fix, not a creative-direction change Richard hasn't weighed in on.
 
 **Evidence:**
-- Commit: pending (this session)
+- Commit: already on `feature/ui-redesign` (confirmed present at `916d567`, not actually still pending as an earlier note said).
 - Verified by: `tsc --noEmit` — see this session's running baseline check.
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview — signup failure toast shows no error code in prod build; `/nonexistent-url` and a forced render crash show the updated copy in both light and dark mode; both pages' "back" buttons read identically ("Back Home" / "Back to Home").
+- Observed result: **LIVE-VERIFIED**, 2026-09-27 — navigated the Browser pane to a nonexistent route on the current staging preview (`x-vercel-protection-bypass` cookie, Richard's own automation secret, used once to authenticate the pane, not logged). Page text exactly matches the described copy: "OUT OF BOUNDS!", "missed the target completely", "ancient sporting wisdom, probably", "Back Home" button.
+- **Light/dark mode item is inapplicable, not skipped**: confirmed via `document.documentElement.className` + computed background that the app is dark-only right now regardless of browser `prefers-color-scheme` — `ThemeProvider` is `enableSystem={false}`, `defaultTheme="dark"` (by design, most of the app still hardcodes dark-only classes). There is no light mode to check today; this pending item doesn't apply until that changes.
+- **Not verified this pass**: the signup-toast error-code gating (`src/app/signup/page.tsx`) and forcing an actual `error.tsx` render crash — both need either a deliberate bad signup request or a real crash trigger, neither attempted here. The `not-found.tsx` half of L3 is fully confirmed; `error.tsx`'s copy is unchanged code (`error.tsx` line grep already confirmed the string is present) but its live rendering wasn't independently re-triggered this pass.
 **Files:** `src/app/signup/page.tsx`, `src/app/not-found.tsx`, `src/app/error.tsx`.
 
 ---
@@ -12434,5 +12435,27 @@ Sentry MCP got connected mid-investigation, giving direct queryable access inste
 **Fix needed:** open the flagged variable in Vercel, see what it's actually complaining about (expired, wrong project scope, revoked), and regenerate/replace it in Sentry's own token settings if needed. Not something fixable from a code change — this is a Vercel/Sentry dashboard configuration task.
 
 **Files:** none — configuration-only, no code change.
+
+---
+
+### BACKLOG-433 — RESOLVED: Missing `loading.tsx` Made `/matches/[id]` Navigation Feel Unresponsive
+
+**Status:** RESOLVED (fix applied) — 2026-09-27. **Live test on the actual updated behavior NOT yet run** (needs a fresh deploy of this commit before a click can be re-tested).
+**Priority:** High — direct, reproducible perceived-performance bug reported live by Richard while investigating `BACKLOG-431` on the same route.
+
+**Symptom (Richard, live):** clicking a match card / navigating to a match from `/` "looks unresponsive for a while until it now goes itself" — a real, felt delay with zero feedback before the page finally changes.
+
+**Root cause:** no `loading.tsx` exists anywhere in `src/app/` — not at `/matches/[id]/`, not at the root. `src/app/matches/[id]/page.tsx` is a fully dynamic Server Component (`getMatchSeoData` does a live Drizzle DB read before rendering anything). Without a `loading.tsx` boundary, Next.js has no static shell to prefetch for this route and no fallback to show immediately on navigation — a click has to wait for the entire server round-trip (confirmed via the `BACKLOG-431` trace pull: the `/matches/:id` navigation span for one real occurrence took 2835ms, with `GET /api/matches/[id]` alone taking ~1.1s server-side) with nothing on screen until it suddenly appears.
+
+**Fix:** added `src/app/matches/[id]/loading.tsx`, reusing the exact spinner markup `MatchDetailClient.tsx` already shows in its own internal `loading` state, so the route-level fallback and the component's own loading state look identical — no new visual language introduced.
+
+**Possible relevance to `BACKLOG-431`:** not claimed as a fix for the hydration error — genuinely unclear whether changing how this route streams affects the timing window that produces the text mismatch. Flagging the connection since both were found via the same click/navigation, not asserting causation.
+
+**Evidence:**
+- Commit: pending push (this session).
+- Verified by: `tsc --noEmit` after adding the file — see this session's running baseline check.
+- Observed result: NOT yet live-tested against the deployed behavior (the fix needs a fresh deploy before a real click can confirm the fallback shows immediately) — the *symptom* was confirmed live by Richard before the fix, not the fix itself yet.
+- Pending items: after this commit deploys, click into a match from `/` on the staging preview and confirm the spinner appears immediately (no dead-feeling delay), not just eventually.
+**Files:** `src/app/matches/[id]/loading.tsx` (new).
 
 ---
