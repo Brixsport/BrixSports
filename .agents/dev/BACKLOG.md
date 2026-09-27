@@ -12394,3 +12394,22 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 - Pending items: deploy and re-run `tests/smoke/dual-logger-race.test.ts` itself against the real API before calling this `RESOLVED`.
 
 ---
+
+### BACKLOG-434 — Phase 4 (`TESTING_STRATEGY_2026-09-18.md`) Real-Time WS Broadcast Test Written But Never Run
+
+**Status:** OPEN, not started (in the sense of live verification — the script itself is written and committed). Filed 2026-09-27 specifically so this doesn't quietly fall off the radar the way `BACKLOG-400`'s own Phases 1-5 sat unscoped for over a week before this session picked them up.
+**Priority:** Medium — not a known bug, just an untested test. Low urgency on its own, but cheap to close and shouldn't linger.
+
+**What exists:** `tests/smoke/realtime-broadcast.test.ts` — extends Phase 1's real-concurrent-request pattern with a genuine `socket.io-client` connection, asserting `event:new`/`match:score:updated` arrive on the `match:{matchId}` room within 5s of the triggering `POST`, per `CLAUDE.md`'s own latency target. Code is written, committed, `tsc --noEmit` clean.
+
+**Why it's not run:** needs `NEXT_PUBLIC_WS_URL` (or `WS_SERVER_URL`) pointed at the real Railway WS server backing whichever environment `BASE_URL` targets. `.env.local`'s current value (`http://localhost:3001`) is a local-dev placeholder — this project's convention is not to run local dev at all (see feedback memory), so this value is never going to be the right one to test against.
+
+**To close this out:** get the real staging Railway WS URL from Richard, then run:
+```
+BASE_URL=https://brixsports-staging.vercel.app NEXT_PUBLIC_WS_URL=<real-url> npx tsx tests/smoke/realtime-broadcast.test.ts
+```
+If it passes, flip this entry to `RESOLVED` with the evidence block. If it fails, that's itself a real finding (same spirit as `BACKLOG-433`) — file it as its own entry rather than silently patching the test to pass.
+
+**Found:** `BACKLOG-400`'s Phase 4 implementation, session 81, 2026-09-27 — filed as its own tracked item per Richard's explicit ask, rather than leaving it as a buried note in `BUILD_JOURNAL.md`.
+
+---
