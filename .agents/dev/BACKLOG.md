@@ -12467,4 +12467,28 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 - Pending items: after this commit deploys, click into a match from `/` on the staging preview and confirm the spinner appears immediately (no dead-feeling delay), not just eventually.
 **Files:** `src/app/matches/[id]/loading.tsx` (new).
 
+### BACKLOG-434 — OPEN: Double-Submission Dedup Guard Fails Under Real Concurrency (Readiness Checklist D2)
+
+**Status:** OPEN — reproduced live via stress test, fix NOT applied on this branch (a working fix already exists elsewhere, see below).
+**Priority:** Critical — directly blocks the Live Event Readiness Checklist's "double event submission is prevented or deduplicated" line, and is the same class of bug as `BUG-196`/`BACKLOG-151` (score/stat inflation from duplicate writes), just reproduced from a different angle.
+
+**Numbering note:** this is a genuine cross-branch collision, flagged explicitly so it isn't missed at merge time. `feature/testing-strategy-phases-1-5` (peer session "testing-strategy", unpushed as of this entry) independently found and fixed the identical bug, and their commit message calls it `BACKLOG-433` (commit `be87e76`, "fix(events): close dual-logger dedup race with an atomic insert"). On *this* branch (`feature/ui-redesign`), `BACKLOG-433` is already taken by the unrelated, already-resolved `loading.tsx` bug directly above this entry — so this is filed as `BACKLOG-434` here. When the branches merge, reconcile these as the same underlying issue (this entry + their `be87e76`), not two separate bugs.
+
+**Symptom:** a rapid burst of truly concurrent identical event submissions (double-tap, or a client retry racing the original request) can each pass the dedup check and each insert, multiplying both the event row count and `matches.homeScore`/`awayScore` for what should be a single real-world goal.
+
+**Root cause:** `src/app/api/matches/[id]/events/route.ts`'s dedup guard (the `BACKLOG-151` fix, 2026-09-10) runs its SELECT-then-INSERT check *inside* `db.transaction()`, which looks atomic and was verified as closing the race for the original 2-real-logger live test. Under Turso/libSQL, wrapping a check-then-act pattern in `db.transaction()` does not actually serialize two concurrent transactions the way a traditional single-writer SQLite file would — two (or more) concurrent transactions can each run their SELECT before either has committed its INSERT, so each sees "no existing row" and each proceeds to insert.
+
+**Reproduction (this session, live against staging):** disposable `matchType: 'friendly'` test match (`d1d2-test-79XyLGXfBI`), real logger (`logger_1767968844029`), real player (`i7VBmo4RZkk5Q6_Zixw2I`) — see `.agents/dev/RUNLOG.md`'s 2026-09-27 D2 entries for full detail.
+- First single trial (8-way `Promise.all`, identical `{type:'Goal', minute:17, playerId, teamId}`): dedup HELD — 1 DB row, `home_score`=1.
+- 5-trial follow-up (10-way concurrency each, distinct `minute` per trial so trials can't cross-contaminate): dedup FAILED in **5/5 trials** — DB row counts of 10, 10, 7, 10, 9 for what should each be a single event, `matches.home_score` inflated to match. Confirmed via direct `SELECT COUNT(*) FROM match_events WHERE match_id=? AND type='Goal' AND minute=? AND player_id=?` and `SELECT home_score FROM matches WHERE id=?` — not HTTP status codes (per `.agents/rules/backlog.md`, status codes alone aren't evidence; all 46 duplicate POSTs across the 5 failing trials also returned HTTP 201, `"Event created successfully"`, with no client-visible error at all).
+
+**Fix (exists, not yet on this branch):** peer session's `be87e76` replaces the SELECT-then-INSERT pattern with a single atomic `INSERT ... WHERE NOT EXISTS (SELECT ...)` statement — no separate check-then-act step for Turso to race. Their report: 16/16 passing direct-to-Turso trials post-fix. Not re-derived here per explicit agreement with that session (Richard + the peer session were already coordinating getting it pushed/deployed) — re-run `dev/d2-double-submit-stress-test-multi.mjs` against the fixed deployment once it lands; that becomes the closing evidence for both this entry and their `BACKLOG-433`/`be87e76` in one pass.
+
+**Evidence:**
+- Commit: none on this branch (fix lives on `feature/testing-strategy-phases-1-5`, commit `be87e76`, not yet pushed/merged as of this entry).
+- Verified by: live stress test against staging DB, direct `match_events`/`matches.home_score` reads (see RUNLOG).
+- Observed result: dedup guard fails 5/5 trials under 10-way real concurrency; single 8-way trial passed once (non-deterministic race, consistent with the peer session's own "3 of 4" finding at their tested concurrency).
+- Pending items: pull/merge `be87e76` (or an equivalent atomic-insert fix) into this branch, then re-run `dev/d2-double-submit-stress-test-multi.mjs` against the fixed deployment and update this entry to RESOLVED with that evidence.
+**Files:** `src/app/api/matches/[id]/events/route.ts` (fix target, not yet touched here); `dev/d1d2-setup.mjs`, `dev/d2-double-submit-stress-test.mjs`, `dev/d2-double-submit-stress-test-multi.mjs` (new, this session, gitignored).
+
 ---
