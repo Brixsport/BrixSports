@@ -52,7 +52,23 @@ export interface RealFixtures {
     otherLoggerToken: string;
 }
 
-/** Pulls real, existing rows to act with -- never creates fixture users/teams/players, only throwaway matches. */
+/**
+ * Pulls real admin/logger/competition rows (safe -- nobody "follows" an
+ * admin account or a competition label the way they follow a team), but
+ * creates FRESH SYNTHETIC teams and a player rather than pulling real ones.
+ *
+ * Real incident, 2026-09-27 (found by a peer session, confirmed here too):
+ * `SELECT id, name FROM teams WHERE sport = 'Football' LIMIT 2` grabbed the
+ * same two long-seeded real teams every run. `POST .../events` with a real
+ * scoring event calls the real `sendMatchEventNotification()` ->
+ * `webpush.sendNotification()` -- not a no-op. Those two teams have 10 and 1
+ * real followers respectively, several with real registered push
+ * subscriptions (confirmed via direct DB query) -- meaning real staging
+ * users almost certainly received real "GOAL!" push notifications for fake
+ * test events across this session's test runs. A team that doesn't exist
+ * until this function creates it, seconds before the test, cannot have any
+ * followers by construction -- closes this for good, not just this once.
+ */
 export async function loadRealFixtures(): Promise<RealFixtures> {
     const adminRow = await db.execute(`SELECT id, email FROM users WHERE role = 'admin' LIMIT 1`);
     if (adminRow.rows.length === 0) throw new Error('no admin user found in staging DB');
@@ -64,13 +80,20 @@ export async function loadRealFixtures(): Promise<RealFixtures> {
     const logger = loggerList[0];
     const otherLogger = loggerList[1] ?? loggerList[0];
 
-    const teamsRows = await db.execute(`SELECT id, name FROM teams WHERE sport = 'Football' LIMIT 2`);
-    if (teamsRows.rows.length < 2) throw new Error('need at least 2 Football teams in staging DB');
-    const [home, away] = teamsRows.rows as unknown as { id: string; name: string }[];
-
-    const playerRow = await db.execute({ sql: `SELECT id, name FROM players WHERE team_id = ? LIMIT 1`, args: [home.id] });
-    if (playerRow.rows.length === 0) throw new Error(`no player found for home team ${home.id}`);
-    const player = playerRow.rows[0] as unknown as { id: string; name: string };
+    const runId = nanoid(8);
+    const home = { id: `synthetic-home-${runId}`, name: `Synthetic Home ${runId}` };
+    const away = { id: `synthetic-away-${runId}`, name: `Synthetic Away ${runId}` };
+    for (const [team, shortName] of [[home, 'SYH'], [away, 'SYA']] as const) {
+        await db.execute({
+            sql: `INSERT INTO teams (id, name, short_name, logo, university, color, sport) VALUES (?, ?, ?, ?, ?, ?, 'Football')`,
+            args: [team.id, team.name, shortName, 'https://placeholder.test/logo.png', 'Synthetic Test University', '#374151'],
+        });
+    }
+    const player = { id: `synthetic-player-${runId}`, name: `Synthetic Player ${runId}` };
+    await db.execute({
+        sql: `INSERT INTO players (id, name, jersey_name, number, team_id, position, university) VALUES (?, ?, ?, 9, ?, 'Forward', 'Synthetic Test University')`,
+        args: [player.id, player.name, player.name, home.id],
+    });
 
     const competitionRow = await db.execute(`SELECT id, season FROM competitions LIMIT 1`);
     if (competitionRow.rows.length === 0) throw new Error('no competition found in staging DB');
@@ -81,6 +104,13 @@ export async function loadRealFixtures(): Promise<RealFixtures> {
     const otherLoggerToken = jwt.sign({ userId: otherLogger.id, email: otherLogger.email, role: 'logger' }, JWT_SECRET!, { expiresIn: '1h' });
 
     return { admin, logger, otherLogger, home, away, player, competition, adminToken, loggerToken, otherLoggerToken };
+}
+
+/** Deletes the synthetic team/player rows loadRealFixtures() creates. Call in afterAll alongside deleteMatch(). */
+export async function cleanupFixtures(fx: RealFixtures): Promise<void> {
+    await db.execute({ sql: `DELETE FROM players WHERE id = ?`, args: [fx.player.id] });
+    await db.execute({ sql: `DELETE FROM teams WHERE id = ?`, args: [fx.home.id] });
+    await db.execute({ sql: `DELETE FROM teams WHERE id = ?`, args: [fx.away.id] });
 }
 
 /** Creates a throwaway match directly in the DB (bypassing POST /api/matches) so matches-route.test.ts can test that route in isolation. */

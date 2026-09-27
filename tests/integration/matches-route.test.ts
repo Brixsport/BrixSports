@@ -3,7 +3,7 @@
 // actually reject banned/admin-only fields sent in the body, not just
 // document that it should) and the public list's own loggerId strip.
 import { describe, it, expect, afterAll } from 'vitest';
-import { BASE_URL, authHeaders, loadRealFixtures, newThrowawayMatchId, deleteMatch, db, type RealFixtures } from './helpers';
+import { BASE_URL, authHeaders, loadRealFixtures, cleanupFixtures, newThrowawayMatchId, deleteMatch, db, type RealFixtures } from './helpers';
 
 describe('matches route — creation allow-list and public field exposure', () => {
     let fx: RealFixtures;
@@ -11,6 +11,7 @@ describe('matches route — creation allow-list and public field exposure', () =
 
     afterAll(async () => {
         for (const id of createdMatchIds) await deleteMatch(id);
+        if (fx) await cleanupFixtures(fx);
         if (createdMatchIds.length > 0) {
             const placeholders = createdMatchIds.map(() => '?').join(',');
             const row = await db.execute({ sql: `SELECT COUNT(*) as c FROM matches WHERE id IN (${placeholders})`, args: createdMatchIds });

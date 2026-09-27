@@ -96,13 +96,28 @@ async function main() {
         console.warn('  WARN: only one logger account exists in the DB -- simulating dual-logger concurrency with one account firing twice, not two distinct human accounts.');
     }
 
-    const teamsRows = await db.execute(`SELECT id, name FROM teams WHERE sport = 'Football' LIMIT 2`);
-    if (teamsRows.rows.length < 2) throw new Error('need at least 2 Football teams in DB');
-    const [home, away] = teamsRows.rows as unknown as { id: string; name: string }[];
-
-    const playerRow = await db.execute({ sql: `SELECT id, name FROM players WHERE team_id = ? LIMIT 1`, args: [home.id] });
-    if (playerRow.rows.length === 0) throw new Error(`no player found for home team ${home.id}`);
-    const scorer = playerRow.rows[0] as unknown as { id: string; name: string };
+    // BACKLOG incident, 2026-09-27: this used to SELECT the first 2 real
+    // Football teams -- a real, currently-deployed sendMatchEventNotification()
+    // fires on every scoring event this test posts, and those two teams had
+    // real followers with real registered push subscriptions. Real staging
+    // users almost certainly received real "GOAL!" notifications for fake
+    // test goals across this session's runs. Fresh synthetic teams/player,
+    // created here and deleted in cleanup(), cannot have any followers by
+    // construction -- closes this for good.
+    const runId = nanoid(6);
+    const home = { id: `synthetic-home-${runId}`, name: `Synthetic Home ${runId}` };
+    const away = { id: `synthetic-away-${runId}`, name: `Synthetic Away ${runId}` };
+    for (const [team, shortName] of [[home, 'SYH'], [away, 'SYA']] as const) {
+        await db.execute({
+            sql: `INSERT INTO teams (id, name, short_name, logo, university, color, sport) VALUES (?, ?, ?, ?, ?, ?, 'Football')`,
+            args: [team.id, team.name, shortName, 'https://placeholder.test/logo.png', 'Synthetic Test University', '#374151'],
+        });
+    }
+    const scorer = { id: `synthetic-player-${runId}`, name: `Synthetic Player ${runId}` };
+    await db.execute({
+        sql: `INSERT INTO players (id, name, jersey_name, number, team_id, position, university) VALUES (?, ?, ?, 9, ?, 'Forward', 'Synthetic Test University')`,
+        args: [scorer.id, scorer.name, scorer.name, home.id],
+    });
 
     // A real, non-friendly competitionId is required for BUG-235's assertion:
     // updatePlayerStats() is skipped entirely for matchType 'friendly'
@@ -126,27 +141,16 @@ async function main() {
             await db.execute({ sql: `DELETE FROM match_events WHERE match_id = ?`, args: [matchId] });
             await db.execute({ sql: `DELETE FROM match_logger_assignments WHERE match_id = ?`, args: [matchId] });
             await db.execute({ sql: `DELETE FROM matches WHERE id = ?`, args: [matchId] });
-            console.log(`\ncleanup: removed throwaway match ${matchId} and its stats row`);
+            await db.execute({ sql: `DELETE FROM players WHERE id = ?`, args: [scorer.id] });
+            await db.execute({ sql: `DELETE FROM teams WHERE id = ?`, args: [home.id] });
+            await db.execute({ sql: `DELETE FROM teams WHERE id = ?`, args: [away.id] });
+            console.log(`\ncleanup: removed throwaway match ${matchId}, synthetic teams/player, and stats row`);
         } catch (err) {
             console.error(`cleanup warning: may need manual cleanup for ${matchId}:`, err);
         }
     }
 
     try {
-        // A player-stats row for this exact (player, season, competition) must
-        // not already exist, or Scenario B's "+2" assertion below would be
-        // measuring a pre-existing baseline, not this test's own writes.
-        const preExisting = await db.execute({
-            sql: `SELECT id, goals FROM football_player_stats WHERE player_id = ? AND season = ? AND competition_id = ?`,
-            args: [scorer.id, competition.season, competition.id],
-        });
-        if (preExisting.rows.length > 0) {
-            throw new Error(
-                `player ${scorer.id} already has a football_player_stats row for season=${competition.season} competitionId=${competition.id} -- ` +
-                `pick a different scorer/competition so this test doesn't corrupt real historical stats.`
-            );
-        }
-
         const createRes = await fetch(`${BASE_URL}/api/matches`, {
             method: 'POST',
             headers: authHeaders(adminToken),

@@ -3,7 +3,7 @@
 // duplicate guard (BUG-008's original fix, and isLoggerAssigned's own
 // primary caller/consumer).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { BASE_URL, authHeaders, loadRealFixtures, newThrowawayMatchId, deleteMatch, db, type RealFixtures } from './helpers';
+import { BASE_URL, authHeaders, loadRealFixtures, cleanupFixtures, newThrowawayMatchId, deleteMatch, db, type RealFixtures } from './helpers';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 
 describe('assign-logger route', () => {
@@ -27,6 +27,7 @@ describe('assign-logger route', () => {
 
     afterAll(async () => {
         await deleteMatch(matchId);
+        await cleanupFixtures(fx);
         expect(await db.execute({ sql: `SELECT COUNT(*) as c FROM matches WHERE id = ?`, args: [matchId] })
             .then(r => Number((r.rows[0] as any).c))).toBe(0);
     });
