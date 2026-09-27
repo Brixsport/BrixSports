@@ -86,6 +86,8 @@ async function fail(message: string): Promise<never> {
 }
 
 let matchId: string | null = null;
+let syntheticTeamIds: string[] = [];
+let syntheticPlayerId: string | null = null;
 
 async function cleanup() {
     if (!matchId) return;
@@ -93,7 +95,9 @@ async function cleanup() {
         await db.execute({ sql: `DELETE FROM match_events WHERE match_id = ?`, args: [matchId] });
         await db.execute({ sql: `DELETE FROM match_logger_assignments WHERE match_id = ?`, args: [matchId] });
         await db.execute({ sql: `DELETE FROM matches WHERE id = ?`, args: [matchId] });
-        console.log(`cleanup: removed throwaway match ${matchId}`);
+        if (syntheticPlayerId) await db.execute({ sql: `DELETE FROM players WHERE id = ?`, args: [syntheticPlayerId] });
+        for (const teamId of syntheticTeamIds) await db.execute({ sql: `DELETE FROM teams WHERE id = ?`, args: [teamId] });
+        console.log(`cleanup: removed throwaway match ${matchId} and synthetic teams/player`);
     } catch (err) {
         console.error(`cleanup warning: failed to remove ${matchId} -- may need manual cleanup:`, err);
     }
@@ -111,13 +115,26 @@ async function main() {
     if (loggerRow.rows.length === 0) return fail('no logger account found in DB -- cannot sign a logger token');
     const logger = loggerRow.rows[0] as unknown as { id: string; email: string; name: string };
 
-    const teamsRows = await db.execute(`SELECT id, name FROM teams WHERE sport = 'Football' LIMIT 2`);
-    if (teamsRows.rows.length < 2) return fail('need at least 2 Football teams in DB');
-    const [home, away] = teamsRows.rows as unknown as { id: string; name: string }[];
-
-    const playerRow = await db.execute({ sql: `SELECT id, name FROM players WHERE team_id = ? LIMIT 1`, args: [home.id] });
-    if (playerRow.rows.length === 0) return fail(`no player found for home team ${home.id}`);
-    const scorer = playerRow.rows[0] as unknown as { id: string; name: string };
+    // BACKLOG incident, 2026-09-27: never pull real teams for a test that
+    // posts a real scoring event -- sendMatchEventNotification() is live,
+    // and real teams can have real followers with real push subscriptions.
+    // Fresh synthetic teams/player, deleted in cleanup(), can't have any.
+    const runId = nanoid(6);
+    const home = { id: `synthetic-home-${runId}`, name: `Synthetic Home ${runId}` };
+    const away = { id: `synthetic-away-${runId}`, name: `Synthetic Away ${runId}` };
+    for (const [team, shortName] of [[home, 'SYH'], [away, 'SYA']] as const) {
+        await db.execute({
+            sql: `INSERT INTO teams (id, name, short_name, logo, university, color, sport) VALUES (?, ?, ?, ?, ?, ?, 'Football')`,
+            args: [team.id, team.name, shortName, 'https://placeholder.test/logo.png', 'Synthetic Test University', '#374151'],
+        });
+    }
+    const scorer = { id: `synthetic-player-${runId}`, name: `Synthetic Player ${runId}` };
+    await db.execute({
+        sql: `INSERT INTO players (id, name, jersey_name, number, team_id, position, university) VALUES (?, ?, ?, 9, ?, 'Forward', 'Synthetic Test University')`,
+        args: [scorer.id, scorer.name, scorer.name, home.id],
+    });
+    syntheticTeamIds = [home.id, away.id];
+    syntheticPlayerId = scorer.id;
 
     const adminToken = jwt.sign({ userId: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET!, { expiresIn: '1h' });
     const loggerToken = jwt.sign({ userId: logger.id, email: logger.email, role: 'logger' }, JWT_SECRET!, { expiresIn: '1h' });

@@ -2,7 +2,7 @@
 // against real staging -- auth gates, the FINISHED-match write-lock
 // (BACKLOG-153), and the public-response field strip (NDPR compliance).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { BASE_URL, authHeaders, loadRealFixtures, newThrowawayMatchId, deleteMatch, db, type RealFixtures } from './helpers';
+import { BASE_URL, authHeaders, loadRealFixtures, cleanupFixtures, newThrowawayMatchId, deleteMatch, db, type RealFixtures } from './helpers';
 
 describe('events route — auth and lifecycle gates', () => {
     let fx: RealFixtures;
@@ -45,6 +45,7 @@ describe('events route — auth and lifecycle gates', () => {
     afterAll(async () => {
         await deleteMatch(liveMatchId);
         await deleteMatch(finishedMatchId);
+        await cleanupFixtures(fx);
         expect(await db.execute({ sql: `SELECT COUNT(*) as c FROM matches WHERE id IN (?, ?)`, args: [liveMatchId, finishedMatchId] })
             .then(r => Number((r.rows[0] as any).c))).toBe(0);
     });

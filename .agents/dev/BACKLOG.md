@@ -12592,3 +12592,27 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 **Files:** `src/app/api/matches/[id]/events/route.ts` (fix target, not yet touched here); `dev/d1d2-setup.mjs`, `dev/d2-double-submit-stress-test.mjs`, `dev/d2-double-submit-stress-test-multi.mjs` (new, this session, gitignored).
 
 ---
+
+### ~~BACKLOG-437~~ — RESOLVED: Test Scripts Sent Real Push Notifications to Real Staging Users for Fake Goals
+
+**Status:** RESOLVED — 2026-09-27, same day found and fixed. Real, live incident, not a theoretical risk.
+**Priority:** CRITICAL while live (real users receiving fabricated notifications is a genuine trust/product issue, not just noisy test output), now closed.
+
+**What happened:** every test script this session that posts a real scoring event (`tests/smoke/critical-flows.ts`, `tests/smoke/dual-logger-race.test.ts`, `tests/smoke/realtime-broadcast.test.ts`, and the three `tests/integration/*.test.ts` files via shared `loadRealFixtures()`) pulled `SELECT id, name FROM teams WHERE sport = 'Football' LIMIT 2` — the same two long-seeded real teams (`busa-joga`/`Joga-Bonito`, `busa-wolves`/`Wolves FC`) every single run. `POST /api/matches/[id]/events` calls a real, non-stubbed `sendMatchEventNotification()` -> `webpush.sendNotification()` for a `Goal` event. **Found independently by a peer session** ("Full-Platform Pre-Promotion Audit"), which caught the identical pattern in `across-BrixSports`'s own D1/D2 test and flagged that this branch's scripts likely had the same flaw — confirmed true here by direct DB query, not assumed from the peer's report alone.
+
+**Confirmed real impact:** `Joga-Bonito` has 10 real followers (`user_favorites`), 3 distinct users among them with real registered `push_subscriptions` (including `admin-001` across 3 separate device subscriptions). `Wolves FC` has 1 follower, 0 push subscriptions. Across this session's test runs (`dual-logger-race.test.ts` alone ran 9+ times, each posting up to 3 real `Goal` events per run), real staging users with real push subscriptions almost certainly received real "⚽ GOAL!" push notifications for fake test goals. No way to un-send an already-delivered push notification — this is disclosed, not silently corrected. Unlike the peer's own incident, no lingering incorrect match state was left visible on `/live` (every script's own cleanup already deleted its throwaway match after each run), so the only lasting effect is the notifications already sent.
+
+**Fix:** every affected script/helper now creates fresh synthetic teams (`synthetic-home-<id>`/`synthetic-away-<id>`) and a synthetic player via direct `INSERT` before creating the match, and deletes them in its own cleanup alongside the match — a team that doesn't exist until seconds before the test runs cannot have any followers or push subscriptions by construction. Applied to all 4 script files plus the shared `tests/integration/helpers.ts` (`loadRealFixtures()`/new `cleanupFixtures()`), with all 3 integration test files' `afterAll` hooks updated to call it.
+
+**Verified:** re-ran `tests/smoke/dual-logger-race.test.ts` against the deployed preview post-fix — all 5 assertions passed (both the notification-safety fix and the `BACKLOG-436` dedup fix itself, confirmed together, no regression). `tsc --noEmit`: 18 pre-existing errors, unchanged, zero new.
+
+**Not done:** `dev/d2-double-submit-stress-test-multi.mjs` and `dev/d1d2-setup.mjs` (the peer's own scripts, gitignored, not in this repo's tracked history) were not fixed here — out of scope for this branch, flagged to that session directly instead.
+
+**Evidence:**
+- Verified by: direct DB query confirming real followers + push subscriptions on the two teams every prior run used; direct DB query confirming the fix's synthetic teams are correctly created and deleted; a full post-fix run of `tests/smoke/dual-logger-race.test.ts` against the deployed preview, 5/5 assertions passed.
+- Observed result: incident confirmed real (10 + 1 followers, 3 real push subscriptions on the more-followed team); fix confirmed working (synthetic teams created/used/deleted correctly, dedup test still passes).
+- Pending items: none for this entry. Any future test script that posts a real scoring event must create its own synthetic teams/players — do not reuse this project's convention of pulling `SELECT ... LIMIT N` real rows for anything that can trigger a live side effect (notifications, WS broadcasts to real subscribers, etc.).
+
+**Files:** `tests/integration/helpers.ts`, `tests/integration/events-route.test.ts`, `tests/integration/assign-logger-route.test.ts`, `tests/integration/matches-route.test.ts`, `tests/smoke/critical-flows.ts`, `tests/smoke/dual-logger-race.test.ts`, `tests/smoke/realtime-broadcast.test.ts`.
+
+---
