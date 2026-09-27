@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/db/schema';
-import { eq, asc, and, sql, gt, isNull } from 'drizzle-orm';
+import { eq, asc, and, sql, gt, isNull, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification } from '@/lib/socket';
@@ -289,27 +289,68 @@ export async function POST(
 
         await db.transaction(async (tx) => {
             if (playerId) {
+                // BACKLOG-433: the previous version of this guard ran the
+                // dedup SELECT and the INSERT as two separate statements
+                // inside this same db.transaction(), on the assumption that
+                // Turso's transaction gives the same read-blocks-on-
+                // uncommitted-write isolation a local SQLite file connection
+                // would. Live-tested 4x with two genuinely concurrent
+                // requests (Promise.all): 3 of 4 runs reproduced BUG-196's
+                // original symptom exactly -- both requests' SELECT ran
+                // before either had committed, both saw "no existing row",
+                // both inserted, score double-counted. Turso's remote/HTTP
+                // transaction protocol does not appear to serialize
+                // concurrent transactions' reads against each other's
+                // uncommitted writes the way a single-process SQLite file
+                // connection does.
+                //
+                // Fixed by collapsing the check and the insert into ONE
+                // atomic statement (INSERT ... SELECT ... WHERE NOT EXISTS).
+                // A single SQL statement is atomic at the SQLite engine
+                // level regardless of the higher-level transaction/isolation
+                // semantics for multi-statement transactions over HTTP --
+                // there is no window between "check" and "act" left for a
+                // second concurrent request to land in, because they are
+                // the same database operation. created_at is stored as unix
+                // seconds (confirmed directly against real rows in staging,
+                // not assumed) -- matches.$inferInsert's own timestamp mode
+                // for this column, replicated by hand here since a raw sql
+                // fragment used as a literal SELECT source has no access to
+                // Drizzle's column-level encode/decode mapping.
                 const dedupWindowStart = new Date(Date.now() - 10_000);
-                const [existingEvent] = await tx
-                    .select()
-                    .from(matchEvents)
-                    .where(
-                        and(
-                            eq(matchEvents.matchId, matchId),
-                            eq(matchEvents.type, type),
-                            eq(matchEvents.minute, minute),
-                            eq(matchEvents.playerId, playerId),
-                            gt(matchEvents.createdAt, dedupWindowStart)
-                        )
+                const result: any = await tx.run(sql`
+                    INSERT INTO match_events
+                        (id, match_id, type, minute, second, period, team_id, player_id, related_player_id, detail, is_eye_point, value, logger_id, logger_name, created_at)
+                    SELECT ${newEvent.id}, ${newEvent.matchId}, ${newEvent.type}, ${newEvent.minute}, ${newEvent.second}, ${newEvent.period}, ${newEvent.teamId}, ${newEvent.playerId}, ${newEvent.relatedPlayerId}, ${newEvent.detail}, ${newEvent.isEyePoint ? 1 : 0}, ${newEvent.value}, ${newEvent.loggerId}, ${newEvent.loggerName}, ${Math.floor(newEvent.createdAt.getTime() / 1000)}
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM match_events
+                        WHERE match_id = ${matchId} AND type = ${type} AND minute = ${minute} AND player_id = ${playerId} AND created_at > ${Math.floor(dedupWindowStart.getTime() / 1000)}
                     )
-                    .limit(1);
-                if (existingEvent) {
+                `);
+
+                if ((result.rowsAffected ?? 0) === 0) {
+                    // Deduped -- fetch whatever matching row already exists to
+                    // return in the response (best-effort, same as before).
+                    const [existingEvent] = await tx
+                        .select()
+                        .from(matchEvents)
+                        .where(
+                            and(
+                                eq(matchEvents.matchId, matchId),
+                                eq(matchEvents.type, type),
+                                eq(matchEvents.minute, minute),
+                                eq(matchEvents.playerId, playerId),
+                                gt(matchEvents.createdAt, dedupWindowStart)
+                            )
+                        )
+                        .orderBy(desc(matchEvents.createdAt))
+                        .limit(1);
                     dedupHit = existingEvent;
                     return;
                 }
+            } else {
+                await tx.insert(matchEvents).values(newEvent);
             }
-
-            await tx.insert(matchEvents).values(newEvent);
 
             if (isScoringEvent && !isPenaltyShootout) {
                 const points = SCORING_POINT_VALUES[upperType] ?? 1;
