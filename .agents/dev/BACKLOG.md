@@ -12616,3 +12616,28 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 **Files:** `tests/integration/helpers.ts`, `tests/integration/events-route.test.ts`, `tests/integration/assign-logger-route.test.ts`, `tests/integration/matches-route.test.ts`, `tests/smoke/critical-flows.ts`, `tests/smoke/dual-logger-race.test.ts`, `tests/smoke/realtime-broadcast.test.ts`.
 
 ---
+
+### BACKLOG-438 — RESOLVED: 3 CVE-Level Dependency Bumps (`next`, `drizzle-orm`, `next-auth`), Plus 2 Dead Files Removed As a Direct Consequence
+
+**Status:** RESOLVED — 2026-09-27, commit pending push.
+**Priority:** Critical — closes 2 of the repo's 5 CRITICAL Dependabot alerts (both unauthenticated RCEs in `next`) plus ~29 of 55 HIGH alerts, out of a full 114-alert triage Richard asked for.
+
+**Full triage (114 alerts) reported directly to Richard in chat, not duplicated here in full** — short version: 5 critical / 55 high / 49 medium / 5 low, heavily concentrated (`next` alone = 31 alerts). This entry covers only the 3 bumps actually executed this pass.
+
+**Bumped, all pinned to exact versions per this project's own dependency policy:**
+- `next`: `15.3.8` → `15.5.24` — fixes both CRITICAL unauthenticated-RCE alerts (AVIF image optimization, Windows-hosted servers) plus the large majority of the 31 `next`-tagged HIGH alerts (SSRF, DoS, middleware/auth bypass). By far the single highest-leverage fix in the whole list.
+- `drizzle-orm`: `0.44.7` → `0.45.2` — fixes a SQL-injection-via-improper-identifier-escaping CVE in the ORM's own code, not app code. Checked the actual 0.45.0 release notes before bumping: only a pg-native pool-detection fix, an added (not removed) subquery capability, a typo fix, an `$onUpdate` bugfix, and a date-mapper fix specific to the `bun-sql:postgresql` driver (this project uses `@libsql/client`/Turso, so that one doesn't apply) — no breaking changes identified.
+- `next-auth`: `4.24.13` → `4.24.15` — fixes a critical email-normalization bug. Same minor version, patch-only, and the package is already flagged vestigial/unused in production per `BACKLOG-412` — about as low-risk a bump as exists.
+
+**Real incident during this bump, not just a routine install:** the first `npm install` attempt got killed mid-operation by a session/environment boundary (not a deliberate action), which left the **shared** `node_modules` (this worktree's copy is a junction to the main checkout's, per this project's own worktree convention) in a genuinely broken state — `node_modules/next` was missing its `package.json`/`bin`/etc., only `dist/` remained, while `package-lock.json` still showed the old version. This would have broken any build/dev/test command in ANY worktree using that junction, including `dev` itself, while at least 3 peer sessions were concurrently active. Re-ran `npm install` (properly backgrounded this time) to let npm reconcile and repair it — confirmed fixed (all 3 packages at correct versions, `node_modules/next`'s file structure intact again) before proceeding. Peer sessions were given a heads-up before the repair and an all-clear after.
+
+**2 files deleted as a direct, necessary consequence — not scope creep:** the bump surfaded 138 new `tsc` errors, but every single one was confined to exactly `src/components/error/BasketballRimScene.tsx` and `src/components/error/SoccerGoalScene.tsx` — the Three.js scene components already `BACKSCOPED` (2026-06-11, "Three.js removed for perf/deprecation, reinstate when: lightweight replacement built") out of `error.tsx`/`not-found.tsx`'s actual render path. Confirmed via grep that both files are referenced ONLY from commented-out import lines — zero real importers anywhere. Since `CLAUDE.md`'s own rule requires zero new `tsc` errors before commit, and these two files were already 100% unreachable dead code (not something this bump broke, just something a dependency's type resolution now flags), deleting them was the clean fix — same precedent as `BACKLOG-420`'s dead-code sweep. Re-ran `tsc --noEmit` after deleting: back to the exact original 18-error baseline, confirmed via a line-by-line diff, zero new errors.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: `tsc --noEmit` before (18 baseline errors) → immediately after the 3 bumps (156 errors, 138 new, all in the 2 dead files) → after deleting the 2 dead files (18 errors again, diffed against the original baseline, confirmed identical).
+- Observed result: `node_modules/next/package.json` reports `15.5.24`, `node_modules/drizzle-orm/package.json` reports `0.45.2`, `node_modules/next-auth/package.json` reports `4.24.15`; `package-lock.json` updated to match.
+- Pending items: full live-verification of the 3 critical flows against a fresh deployment of this commit (not done this pass — a version bump this significant deserves the same manual click-through CLAUDE.md requires for any change touching those flows, not just a clean `tsc`). The remaining ~85 Dependabot alerts (xlsx with no upstream fix, socket.io family, sharp, nodemailer, @tiptap/core, plus the transitive build-tooling-only set) are still open, triaged but not fixed — see the chat-reported triage for the full breakdown and recommended order.
+**Files:** `package.json`, `package-lock.json`, `src/components/error/BasketballRimScene.tsx` (deleted), `src/components/error/SoccerGoalScene.tsx` (deleted).
+
+---
