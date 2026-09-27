@@ -11931,7 +11931,7 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Critical (both):**
 1. ~~**Zero automated test coverage anywhere in the repo**~~ — **RESOLVED, first pass. Commit `629c6dc`, EXECUTED and PASSED 2026-09-18.** `tests/smoke/critical-flows.ts` run via `npx tsx tests/smoke/critical-flows.ts` against `https://brixsports-staging.vercel.app` (real API endpoints, deliberately never a rendered page per `BACKLOG-402`). Result: match created (Flow A), logger assigned, appeared correctly, event posted as that logger (Flow B), public `GET /api/matches/[id]` reflected the goal (`homeScore: 1`) in **758ms** — well under CLAUDE.md's 5000ms target (Flow C) — throwaway match/event/assignment cleaned up after. **This is the first automated, regression-guarded confirmation any of the Three Critical Flows have ever had in this project's history** — every prior "flows intact" verdict (including `BACKLOG-396`'s) was a manual code trace. **Recommendation, not yet built:** a `.github/workflows/` CI check wiring this into PR/branch-promotion gating. One real decision before it's built, flagged by the session that wrote the test and not assumed: this script writes real rows to whatever `TURSO_CONNECTION_URL` points at — in CI that means every PR run hits shared staging with live inserts/deletes unless pointed at a dedicated ephemeral DB instead. **This is Richard's call, not engineering's to assume either way.**
 **Phases 1-5 of `TESTING_STRATEGY_2026-09-18.md` (the plan this item's own Recommendation led to), implemented 2026-09-27, branch `feature/testing-strategy-phases-1-5` off `feature/ui-redesign`:**
-- **Phase 1 (`tests/smoke/dual-logger-race.test.ts`)** — built and run live 4x against staging. Found a real CRITICAL regression, not a clean pass: filed separately as `BACKLOG-433` (`BUG-196`'s transactional dedup guard doesn't reliably hold under genuine concurrent requests against Turso). Double-submission dedup check folded into the same script rather than a separate one, per the strategy doc's own framing.
+- **Phase 1 (`tests/smoke/dual-logger-race.test.ts`)** — built and run live 4x against staging. Found a real CRITICAL regression, not a clean pass: filed separately as `BACKLOG-436` (`BUG-196`'s transactional dedup guard doesn't reliably hold under genuine concurrent requests against Turso; filed as 433 originally, renumbered on merge into `feature/ui-redesign` — see that entry's own numbering note). Double-submission dedup check folded into the same script rather than a separate one, per the strategy doc's own framing.
 - **Phase 2 (Vitest unit tests, zero DB/network)** — 46 tests across 4 files, all passing: `match-state-manager.ts`'s state-transition table (`canRecordEvent`/`transitionStatus`/`isValidTransition`), `team-logo.tsx`'s `getInitials`/`hashColor`/`isValidLogo`, `competitionDraw.ts`'s full draw pipeline, and `multiLogger.ts`'s `mergeEvents`/`detectConflicts`/`getLoggerReliability` (substituted for the doc's originally-named "events/route.ts dedup-key logic" target, which turned out to be inline DB-transaction logic, not a pure function — `isLoggerAssigned` similarly turned out to be DB-coupled, moved to Phase 3 instead of Phase 2 for the same reason). `vitest@3.2.7` added as the only new dependency (not 5.x — its `engines` field excludes this machine's Node 25).
 - **Phase 3 (Vitest integration tests against real staging Turso DB)** — 11 tests across `events-route`/`assign-logger-route`/`matches-route`, run live against `https://brixsports-staging.vercel.app`. 10 passed. The 1 failure is real and important: re-opened `BACKLOG-397` CRITICAL #3 — see that entry, the mass-assignment fix exists in source on `feature/ui-redesign` but was never merged to `dev`, so it isn't actually protecting the deployed environment. All throwaway rows cleaned up, `COUNT(*)=0` confirmed after every run.
 - **Phase 4 (`tests/smoke/realtime-broadcast.test.ts`, WS broadcast assertion extending Phase 1's pattern)** — written, NOT live-verified. `.env.local`'s `NEXT_PUBLIC_WS_URL` points at `localhost:3001` (a local-dev value); the real deployed Railway WS server URL for staging wasn't available this session. **Handoff: run this script with the correct `NEXT_PUBLIC_WS_URL`/`WS_SERVER_URL` before treating Phase 4 as done.**
@@ -12007,8 +12007,8 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-402 — `brixsports-staging.vercel.app` Was Serving a ~73-Hour-Stale Page Cache Throughout Today's Live-Verification Passes
 
-**Status:** OPEN — found 2026-09-18 while live-verifying `BACKLOG-399`'s contrast fix; root cause narrowed but not confirmed, needs Richard's Vercel dashboard access to close.
-**Priority:** High — not a code bug, but it means **every "confirmed live on `brixsports-staging.vercel.app`" claim made against this alias needs to be treated as unverified** until this is understood, including some of this session's own earlier entries.
+**Status:** RESOLVED — root cause confirmed 2026-09-27 directly from the Vercel dashboard (Richard, `brixsports-staging` project → Deployments list). **Not a misconfiguration.** Every deployment tagged **Production** in that list is a `dev`-branch commit (most recent: `8b2e971`, Sep 15); every `feature/ui-redesign`/`fix/*` commit is tagged **Preview**, including commits from Sep 18 — the same session that measured the ~73hr staleness. `brixsports-staging.vercel.app`'s stable alias is Vercel's standard Production-Branch behavior, correctly bound to `dev`, not a stale or one-time-set alias as originally hypothesized. It was never going to reflect `feature/ui-redesign`'s commits — it only advances on a `dev` push, and the last one before the Sep 18 check was 3 days (~73 hours) earlier. Matches the measurement exactly.
+**Priority:** High while open — not a code bug, but it meant **every "confirmed live on `brixsports-staging.vercel.app`" claim made against this alias needed to be treated as unverified** until this was understood, including some of this session's own earlier entries. Closed now that the cause is confirmed and the mitigation was already correct.
 
 **Problem, directly measured:** a `fetch('/', {cache:'no-store'})` against `https://brixsports-staging.vercel.app/login` returned `age: 263469` (~73 hours) with `x-vercel-cache: HIT` and `x-nextjs-prerender: 1` — the HTML page was edge-cached from roughly 3 days before this session, predating essentially all of today's commits. This produced a real false reading: the same page's `bg-primary` button computed to `oklch(0.6 0.2 250)` (the OLD, pre-`BACKLOG-399`-fix value), even though `globals.css` in the actual latest commit has `--primary: oklch(0.48 0.2 250)`. Fetching `/api/matches` (a dynamic route, not statically cached) on the same alias returned `age: 0` / `x-vercel-cache: MISS` — so the **serverless functions are current, only the static/ISR-cached pages are stale.** Confirmed NOT a service-worker caching issue: unregistering the SW and clearing all caches, then hard-reloading, still returned the stale value.
 
@@ -12018,7 +12018,7 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Retroactive impact:** re-examine which of this session's "confirmed live on `brixsports-staging.vercel.app`" claims happened before vs. after the alias went stale — the `not-found.tsx` dark/light theme-toggle check earlier this session (logged against `BACKLOG-399`) tested a *mechanism* (token-based theming reacting to a theme switch) that would look identical whether today's specific commit was live or not, so it does NOT actually confirm today's fix was deployed — only that theming works at all. The actual `BACKLOG-399` contrast-fix confirmation (5.95:1, logged there) came from the fresh per-deployment URL, after this bug was found, and is trustworthy.
 
-**Not done:** confirming the actual Vercel dashboard domain-assignment setting (needs Richard's access); a permanent fix; auditing every earlier "live confirmed" claim this session against which URL was actually used.
+**No fix needed** — working as designed. The alias will naturally start reflecting `feature/ui-redesign`'s work once this branch merges to `dev` and `dev` is pushed. Until then, the interim rule above (use the per-deployment preview URL for pre-merge verification) remains standing practice, not a workaround for a bug — it's just how to correctly test a branch that isn't `dev` yet. **Not done:** auditing every earlier "live confirmed" claim this session against which URL was actually used (low priority now that the cause is understood and not a moving target).
 
 ---
 
@@ -12255,9 +12255,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ---
 
-### BACKLOG-413 — Copy/Tone Cleanup: Raw Error Code in Signup Toast, Sport-Voice Mismatch Between Error Pages
+### BACKLOG-413 — RESOLVED: Copy/Tone Cleanup: Raw Error Code in Signup Toast, Sport-Voice Mismatch Between Error Pages
 
-**Status:** SHIPPED — 2026-09-25, commit pending push. **Live test NOT yet run** — not RESOLVED.
+**Status:** RESOLVED — 2026-09-27, live-verified via the deployment-protection bypass against the current staging preview.
 **Priority:** Low/Medium — closes `PRODUCT_DESIGN_STATIC_AUDIT_2026-09-17.md` M4 and L3 (Later-bucket item 24).
 
 **M4 fix (`src/app/signup/page.tsx`):** the registration-failure toast showed a raw internal error code (`{(error as any).code}`) to every user, unconditionally — a smaller-scale repeat of the C1 pattern already fixed in `error.tsx` this session. Now gated behind `process.env.NODE_ENV === 'development'`, same condition `error.tsx` already uses, so a non-technical user sees only the human-readable message.
@@ -12269,10 +12269,11 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Deliberately not done:** a full copy/voice rewrite of either page beyond the flagged lines, or a written style guide — the audit's own words were "neither page's voice is wrong on its own," so this is a targeted consistency fix, not a creative-direction change Richard hasn't weighed in on.
 
 **Evidence:**
-- Commit: pending (this session)
+- Commit: already on `feature/ui-redesign` (confirmed present at `916d567`, not actually still pending as an earlier note said).
 - Verified by: `tsc --noEmit` — see this session's running baseline check.
-- Observed result: NOT live-tested.
-- Pending items: on the staging preview — signup failure toast shows no error code in prod build; `/nonexistent-url` and a forced render crash show the updated copy in both light and dark mode; both pages' "back" buttons read identically ("Back Home" / "Back to Home").
+- Observed result: **LIVE-VERIFIED**, 2026-09-27 — navigated the Browser pane to a nonexistent route on the current staging preview (`x-vercel-protection-bypass` cookie, Richard's own automation secret, used once to authenticate the pane, not logged). Page text exactly matches the described copy: "OUT OF BOUNDS!", "missed the target completely", "ancient sporting wisdom, probably", "Back Home" button.
+- **Light/dark mode item is inapplicable, not skipped**: confirmed via `document.documentElement.className` + computed background that the app is dark-only right now regardless of browser `prefers-color-scheme` — `ThemeProvider` is `enableSystem={false}`, `defaultTheme="dark"` (by design, most of the app still hardcodes dark-only classes). There is no light mode to check today; this pending item doesn't apply until that changes.
+- **Not verified this pass**: the signup-toast error-code gating (`src/app/signup/page.tsx`) and forcing an actual `error.tsx` render crash — both need either a deliberate bad signup request or a real crash trigger, neither attempted here. The `not-found.tsx` half of L3 is fully confirmed; `error.tsx`'s copy is unchanged code (`error.tsx` line grep already confirmed the string is present) but its live rendering wasn't independently re-triggered this pass.
 **Files:** `src/app/signup/page.tsx`, `src/app/not-found.tsx`, `src/app/error.tsx`.
 
 ---
@@ -12367,7 +12368,9 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files (when picked up):** `src/components/BottomNav.tsx`, `src/app/page.tsx`.
 ---
 
-### ~~BACKLOG-433~~ — CRITICAL: `BUG-196`'s Transactional Dedup Guard Does Not Reliably Hold Under Real Concurrent Requests Against the Deployed Turso DB
+### ~~BACKLOG-436~~ — CRITICAL: `BUG-196`'s Transactional Dedup Guard Does Not Reliably Hold Under Real Concurrent Requests Against the Deployed Turso DB
+
+**Numbering note:** filed as `BACKLOG-433` on `feature/testing-strategy-phases-1-5` originally (commit `be87e76`, `4bf03d9`, `44a53aa` all say 433 in their messages — not rewritten, per this project's own established renumbering convention). Renumbered to `436` while merging into `feature/ui-redesign`: that branch's own `BACKLOG-433` (a different, already-merged `loading.tsx` fix) is the canonical one on the base branch this PR merges into, so this entry moves rather than the base branch's existing content. `434` (this branch's own Phase 4 WS test) and `435` (`test/live-readiness-d1-d2`'s independent stress-test finding) are also already claimed.
 
 **Status:** RESOLVED — 2026-09-27. Fix deployed to a real Vercel preview (`feature/testing-strategy-phases-1-5`, pushed to `origin` per Richard's go-ahead) and `tests/smoke/dual-logger-race.test.ts` re-run 5 times end-to-end through the real API against that preview — **5/5 passed**, on top of the 16/16 raw-SQL-level runs from before deployment. **Re-opened, didn't newly discover, `CLAUDE.md`'s Live Event Readiness Checklist item "Two simultaneous loggers do not conflict or overwrite."** That line reads `[x] RESOLVED — session 2026-09-10` **on `feature/ui-redesign`'s `CLAUDE.md` specifically** (confirmed as a genuine branch divergence, not a misread — `dev`'s own `CLAUDE.md` still correctly says OPEN) — based on one post-fix re-test, which this session's 3-of-4-failures finding showed wasn't enough confidence for a race condition. Now closed for real with 21 total passing runs across two independent verification methods.
 **Priority:** CRITICAL — a live match with two assigned loggers (a completely normal, supported configuration, not an edge case) can have a single real goal double-counted if both loggers submit it within the same instant, corrupting the public score in front of real viewers.
@@ -12410,8 +12413,131 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 ```
 BASE_URL=https://brixsports-staging.vercel.app NEXT_PUBLIC_WS_URL=<real-url> npx tsx tests/smoke/realtime-broadcast.test.ts
 ```
-If it passes, flip this entry to `RESOLVED` with the evidence block. If it fails, that's itself a real finding (same spirit as `BACKLOG-433`) — file it as its own entry rather than silently patching the test to pass.
+If it passes, flip this entry to `RESOLVED` with the evidence block. If it fails, that's itself a real finding (same spirit as `BACKLOG-436`) — file it as its own entry rather than silently patching the test to pass.
 
 **Found:** `BACKLOG-400`'s Phase 4 implementation, session 81, 2026-09-27 — filed as its own tracked item per Richard's explicit ask, rather than leaving it as a buried note in `BUILD_JOURNAL.md`.
+
+---
+
+### BACKLOG-430 — RESOLVED: iOS Install Prompt Stacking (Banner + Card Shown Together)
+
+**Status:** RESOLVED — 2026-09-27, commit pending push.
+**Priority:** High — found during a `/product-team-review` pass on PWA banners; confirmed in code, not speculative.
+
+**Numbering note:** this branch's own ceiling was 422; `dev`'s was independently renumbered to 429 (see `BACKLOG-423`'s numbering note on that branch, a different, unrelated entry — a peer session caught the same-number collision risk once already). Picked 430, past both known ceilings, to avoid re-creating that exact collision on merge.
+
+**Finding:** `PWAProvider.tsx` mounts `InstallPrompt`, `IOSInstallPrompt` (full card), and `IOSInstallBanner` (top banner) unconditionally together, with no mutual exclusion. On iOS: the banner appears near-instantly (if not previously dismissed), and the card independently fires 30 seconds later for the identical "add to home screen" action — each tracked by its own separate localStorage dismiss key. A first-time iOS visitor got two separate install nags stacked in one session.
+
+**Fix:** `IOSInstallPrompt`'s 30-second timer now checks `brix-${appType}-ios-banner-dismissed` at fire time before showing the card — the card only escalates after the banner has already been shown and dismissed, instead of running on an independent timer. Checked at fire time (not just at mount) so a banner dismissed after the effect first ran is still honored.
+
+**Also found in the same review pass, not fixed here:**
+- Install-prompt copy overpromises push notifications on iOS (`IOSInstallPrompt`'s "Pro tip" claims push works post-install; `PWA_LIMITATIONS.md` documents this requires iOS 16.4+ and isn't feature-detected).
+- No differentiated urgency in install copy for `appType='admin'` (loggers) vs viewers, despite `PWA_LIMITATIONS.md`'s own recommendation that loggers specifically need to install (Safari kills their SW after ~30s backgrounded, threatening the 120-min session-persistence requirement).
+- Whether `BUG-075` (manifest scope mismatch blocking correct iOS install) is actually resolved was not re-verified this pass.
+- `OfflineIndicator` + `OfflineBadge` render together unconditionally in the same provider — same class of pattern, not inspected for actual redundancy.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: read `PWAProvider.tsx` directly, confirmed all three install components mount unconditionally with independent dismiss-key tracking before making the change.
+- Observed result: NOT live-tested yet — pending a real iOS Safari pass (or DevTools mobile-Safari-equivalent emulation) confirming the card no longer appears within the same session as an un-dismissed banner.
+- Pending items: live verification; the three related-but-unfixed findings above, logged separately if picked up.
+
+**Files:** `src/components/pwa/IOSInstallPrompt.tsx`.
+
+---
+
+### BACKLOG-431 — OPEN: Hydration Error (React #418) on `/` and `/matches/[id]`, Root Cause Not Yet Isolated
+
+**Status:** OPEN, investigation in progress — not resolved, not fixed. Filed so this doesn't get lost or re-discovered from scratch.
+**Priority:** HIGH — confirmed real, currently-open, affects real production traffic (not just the manual test that surfaced it).
+
+**Numbering note:** see `BACKLOG-430` above — picked past both branches' known ceilings for the same collision-avoidance reason.
+
+**Found via two independent paths:**
+1. A live manual DevTools-Offline hard-reload test against this branch's staging preview reproduced `/matches/[id]` crashing to the app's generic root error boundary (`src/app/error.tsx`, no local error boundary exists for this route) on a cold/never-cached-this-session URL. A second navigation to the identical URL, after shell assets were cached, correctly showed `MatchDetailClient.tsx`'s own resilient `loadError: 'load-failed'` state instead — so the crash is not a missing-resilient-UI problem (that pattern already works correctly once mounted), it's something failing before the component gets a chance to run its own error handling.
+2. Sentry (`brixsport` project, issue `BRIXSPORT-3`, id `7686133141`, "Hydration Error") independently shows the same error class occurring in real production traffic on real Mobile Safari/iOS devices, 17+ events over the past month, escalating, tagged to the site root `/` (not specifically `/matches/[id]`) — meaning this is likely a shared, global cause affecting more than one route, not something isolated to the match detail page.
+
+**Confirmed root-cause class:** the browser console (captured live during the manual test) shows `Uncaught Error: Minified React error #418; args[]=text` — React's own de-minified message template for #418 is *"Hydration failed because the server rendered %s didn't match the client"* with `%s` = `text`, i.e. a text-content mismatch, not a structural/tag mismatch. Normally React treats a text-only hydration mismatch as recoverable (patches the subtree client-side, logs a warning, doesn't crash) — the fact that this became an **uncaught, page-crashing** error rather than a silent recoverable patch is itself part of the mystery and not yet explained.
+
+**Ruled out this session (checked directly, not assumed):**
+- `page.tsx`'s SSR data fetch (`getMatchSeoData`, `BACKLOG-403`) — already wrapped in try/catch, confirmed present in the exact commit (`b29304b`) that was live-tested.
+- `MatchDetailClient.tsx`'s client-side fetch handling (`BACKLOG-394`) — already correct, confirmed by the warm-reload test above.
+- No render-time `Date`/`Intl`/`toLocaleString`/`navigator.` usage found in `layout.tsx`, `MatchDetailClient.tsx`, `AdBanner.tsx`, `OfflineIndicator.tsx`, `ThemeProvider.tsx`, `BottomNav.tsx`, or `GlobalNotificationListener.tsx` — the classic hydration-mismatch triggers aren't in any of the obvious globally-rendered candidates checked so far.
+- Sentry's raw event JSON (fetched directly via the API) has no `exception`/`stacktrace` entries at all — this SDK captures hydration errors as a synthetic `type: "generic"` event tied to a Session Replay, not as a thrown-exception object with a component stack. The in-app "Hydration Error Diff" viewer (reconstructed from the linked Replay, not from event JSON) showed one visible structural difference between server and client render — an extra small pill/badge present only on the client side, bottom-right of viewport — but its actual text content is masked/redacted by Sentry's default PII scrubbing, so it couldn't be identified from that view alone.
+- `next.config.ts` already has Sentry source-map upload wired (`withSentryConfig`, `authToken: process.env.SENTRY_AUTH_TOKEN`) — but the Vercel project's `SENTRY_AUTH_TOKEN` env var is flagged **"Needs Attention"** in the Vercel dashboard (confirmed by Richard directly). This is likely why de-minified traces aren't showing up cleanly and should be fixed independently of this bug (see `BACKLOG-432`).
+
+**Not yet tried / next real steps:**
+- Watch the actual Session Replay recording (`replayId: 000bc2f14ead449f9c75894161e31eb3` or `287de8a6ab8b4e9697bf98b51d1af50e` on issue `7686133141`) — this would show the real visual content at the moment of the crash, unmasked, unlike the redacted diff viewer.
+- Once `BACKLOG-432` (Sentry auth token) is fixed, future occurrences of this error should carry a real de-minified stack trace, making this much faster to root-cause going forward even if this specific historical event can't be recovered.
+- Broaden the render-time-unsafe-pattern search beyond the components checked so far (this was not an exhaustive sweep of the whole `src/` tree, just the most likely globally-rendered candidates).
+
+**Do not attempt a speculative fix without confirming the actual component** — multiple plausible candidates were checked and ruled out already; guessing further risks a change that doesn't address the real cause while looking like progress.
+
+**Update, same day, later (Sentry MCP now connected) — reframes this bug, still not root-caused:**
+
+Sentry MCP got connected mid-investigation, giving direct queryable access instead of manual copy-paste. Used it to check the issue and pull the replay/trace tied to the specific event already being investigated:
+
+- `get_sentry_resource` on the issue: **Issue Type: `replay_hydration_error`**, **Seer Actionability: low**, **49 occurrences** (up from 17 earlier the same day — actively recurring), **31 linked replays**, **Users Impacted: 0** (unresolved why user tracking shows 0 despite 49 occurrences — not investigated).
+- `analyze_issue_with_seer` — **blocked**: Sentry API returned 409, "Seer Autofix requires repositories to be connected to this project before a new run can be started." The GitHub repo isn't linked to this Sentry project. Separate config task if Seer's automated analysis is wanted (not filed as its own BACKLOG entry yet — low priority relative to 431/432).
+- Pulled the replay (`000bc2f14ead449f9c75894161e31eb3`) tied to the specific event already being investigated: **Browser: Chrome 153 on Windows**, with a `device: iPhone` tag — near-certainly Chrome DevTools mobile-device emulation, not a real iPhone. Several/many of the 49 occurrences may be dev/QA testing traffic (matching the exact kind of manual testing done this session), not confirmed real end-user impact. Doesn't make the bug less real, but changes how "49 production occurrences, 0 users impacted, escalating" should be weighted for severity.
+- The replay's breadcrumb timeline: `page.view` at T+0 on `/`, then at T+22s a `navigation.push` to the **same URL** (`/` again) immediately followed by the `replay.hydrate-error` breadcrumb — i.e. a client-side re-navigation, not a hard reload, and not a navigation to a different route.
+- Pulled the linked trace (`18ec6e934ae34d6e9524078781a9a42f`, 69 spans) for this same event and got a materially different picture than the issue-level `url` tag suggested: the trace's actual root span is **`/matches/:id [navigation]`**, with `GET /api/matches/[id]`, `GET /api/head-to-head`, and `GET /api/livestreams/active` firing **alongside** `GET /api/football/matches`, `GET /api/basketball/matches`, and `GET /api/other/matches` — the latter three look like the **homepage's own in-flight fetches**, still running at the same time as the match-detail navigation, plus a `ui.interaction.click` span (the click that triggered the navigation).
+
+**Working hypothesis, revised — the "shared layout state" theory above does NOT hold up:**
+
+Checked the specific always-mounted candidates named above, plus the actual mechanics of what "hydration" means for a client-side App Router navigation, and this line of reasoning turned out to be wrong on two counts:
+
+1. **`BottomNav.tsx`, `AdBanner.tsx`, `GlobalNotificationListener.tsx` — no shared/cross-page state found.** `BottomNav`'s only dynamic text (`useAuth()`-driven "Profile"/"Sign In" label) starts at `user=null` identically on server and client, so it's hydration-safe on first mount regardless. `AdBanner`'s `ad` state is fetched once per mount and its dependency (`position`) never changes across a navigation, so its effect doesn't even re-run. `GlobalNotificationListener` has no render-time date/window/navigator usage (only an event-handler-scoped `navigator.vibrate`).
+2. **More fundamentally: persistent layout components (anything outside `{children}` in `layout.tsx`) do not get re-hydrated or reconciled against a fresh server render on a client-side navigation at all** — only the swapped page segment does. So a mismatch in an always-mounted component wouldn't manifest as a hydration error triggered *by this specific navigation* in the first place. Wrong mechanism, not just wrong files.
+
+**Also checked and ruled out:** `src/app/page.tsx`'s module-level `matchesCache` variable (a deliberate `BACKLOG-387` stale-while-revalidate cache, persists across component unmount/remount, initially looked exactly like the kind of "shared mutable state colliding with hydration" pattern being searched for). Read/write sites are both inside `useEffect`/a callback (lines ~189, ~199, ~205-212), never in the render body — the initial render (server and client) always starts from `useState`'s own `[]` default regardless of the module cache's contents. Correctly implemented for its stated purpose; not a hydration risk.
+
+**Sentry MCP's `search_events` against this issue returned zero results** — no structured logs/breadcrumbs beyond what `get_sentry_resource` already surfaced (this SDK genuinely doesn't capture more for this error type; not a query problem).
+
+**Where this actually leaves it (as of the previous round):** the mechanism connecting "click navigates `/` → `/matches/[id]` while the homepage's own fetches are still in flight" to a genuine text-content hydration mismatch is not yet understood, not just unlocated. Everything checked so far based on "shared persistent layout state" reasoning has come back negative, which means either (a) the real cause is something in the *new* page's own render path (`page.tsx` / `MatchDetailClient.tsx`'s very first render tick), or (b) something not yet considered at all.
+
+**Round 3 (per Richard: keep digging static, live repro later) — followed the "new page's own render path" thread specifically:**
+
+- **React version discrepancy, checked and set aside:** Sentry tags this issue's events with `react version: 19.2.0-canary-3fbfb9ba-20250409`, but `package.json` (`react: "^19.0.0"`) and `package-lock.json` (resolved, from the real npm registry: stable `19.2.0`) both say stable. This is very likely just Next.js 15.3.8's normal internal requirement on a specific React canary channel build for its RSC runtime (a widely-known, expected Next.js App Router behavior, not something introduced by this project) — noted, not chased further as a lead since nothing suggests it's unusual for this stack.
+- **`MatchDetailClient.tsx`'s `getNotifiedMatchIds()` (BACKLOG-150, reads `localStorage` directly, wrapped in try/catch so no SSR throw) — re-checked properly this time.** Initially worth suspecting because a `useState` *lazy initializer* reading `localStorage` would run during the actual render pass (server and client can disagree) — but confirmed it is **not** called as a lazy initializer. `isNotifySubscribed` starts at a plain `useState(false)` (identical both sides), and `getNotifiedMatchIds()` is only ever called inside `useEffect` (line ~192) to update it afterward. Same safe pattern as `AuthContext`, `OfflineIndicator`, etc. Ruled out.
+
+**Updated assessment, honestly:** every specific hypothesis checked across all three rounds (10+ components/patterns: `layout.tsx`, `MatchDetailClient.tsx`'s fetch handling, `AdBanner.tsx`, `OfflineIndicator.tsx`, `ThemeProvider.tsx`, `BottomNav.tsx`, `GlobalNotificationListener.tsx`, `page.tsx`'s `matchesCache`, `MatchDetailClient.tsx`'s notify-subscribe state, the React-canary-version angle) has come back clean or ruled out on inspection — this codebase is consistently well-guarded everywhere checked. Static analysis has real, demonstrated diminishing returns at this point, not just a feeling — it's been tried against every plausible candidate reachable by code-reading alone. **A live repro (non-minified build or DevTools open at the moment of the error, to catch React's own un-minified warning naming the component and both mismatched values directly) is genuinely the only remaining path to an exact answer** — continuing to static-search without new information isn't likely to find it. Holding here per Richard's direction until a live repro is possible.
+
+**Files:** none changed — investigation only, no fix applied yet.
+
+---
+
+### BACKLOG-432 — OPEN: `SENTRY_AUTH_TOKEN` Flagged "Needs Attention" in Vercel (brixsports-staging project)
+
+**Status:** OPEN — found while investigating `BACKLOG-431`, not yet fixed.
+**Priority:** Medium — doesn't block anything directly today, but silently degrades Sentry's usefulness for every future production error (no de-minified stack traces) until fixed.
+
+**Finding:** In the `brixsports-staging` Vercel project's Environment Variables settings, the `SENTRY_...` (auth token) variable shows a "Needs Attention" badge, confirmed by Richard directly in the Vercel dashboard. `next.config.ts`'s `withSentryConfig` call references this exact var (`authToken: process.env.SENTRY_AUTH_TOKEN`) to upload source maps on every production build. If the token is invalid/expired/wrong-scope, source maps silently fail to upload — Sentry issues keep working, they just show minified/obfuscated stack traces instead of real file and function names, which is exactly the wall hit while investigating `BACKLOG-431`.
+
+**Fix needed:** open the flagged variable in Vercel, see what it's actually complaining about (expired, wrong project scope, revoked), and regenerate/replace it in Sentry's own token settings if needed. Not something fixable from a code change — this is a Vercel/Sentry dashboard configuration task.
+
+**Files:** none — configuration-only, no code change.
+
+---
+
+### BACKLOG-433 — RESOLVED: Missing `loading.tsx` Made `/matches/[id]` Navigation Feel Unresponsive
+
+**Status:** RESOLVED (fix applied) — 2026-09-27. **Live test on the actual updated behavior NOT yet run** (needs a fresh deploy of this commit before a click can be re-tested).
+**Priority:** High — direct, reproducible perceived-performance bug reported live by Richard while investigating `BACKLOG-431` on the same route.
+
+**Symptom (Richard, live):** clicking a match card / navigating to a match from `/` "looks unresponsive for a while until it now goes itself" — a real, felt delay with zero feedback before the page finally changes.
+
+**Root cause:** no `loading.tsx` exists anywhere in `src/app/` — not at `/matches/[id]/`, not at the root. `src/app/matches/[id]/page.tsx` is a fully dynamic Server Component (`getMatchSeoData` does a live Drizzle DB read before rendering anything). Without a `loading.tsx` boundary, Next.js has no static shell to prefetch for this route and no fallback to show immediately on navigation — a click has to wait for the entire server round-trip (confirmed via the `BACKLOG-431` trace pull: the `/matches/:id` navigation span for one real occurrence took 2835ms, with `GET /api/matches/[id]` alone taking ~1.1s server-side) with nothing on screen until it suddenly appears.
+
+**Fix:** added `src/app/matches/[id]/loading.tsx`, reusing the exact spinner markup `MatchDetailClient.tsx` already shows in its own internal `loading` state, so the route-level fallback and the component's own loading state look identical — no new visual language introduced.
+
+**Possible relevance to `BACKLOG-431`:** not claimed as a fix for the hydration error — genuinely unclear whether changing how this route streams affects the timing window that produces the text mismatch. Flagging the connection since both were found via the same click/navigation, not asserting causation.
+
+**Evidence:**
+- Commit: pending push (this session).
+- Verified by: `tsc --noEmit` after adding the file — see this session's running baseline check.
+- Observed result: NOT yet live-tested against the deployed behavior (the fix needs a fresh deploy before a real click can confirm the fallback shows immediately) — the *symptom* was confirmed live by Richard before the fix, not the fix itself yet.
+- Pending items: after this commit deploys, click into a match from `/` on the staging preview and confirm the spinner appears immediately (no dead-feeling delay), not just eventually.
+**Files:** `src/app/matches/[id]/loading.tsx` (new).
 
 ---
