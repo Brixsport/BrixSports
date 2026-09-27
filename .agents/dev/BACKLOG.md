@@ -12393,6 +12393,8 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 - Observed result: pre-fix, 3/4 failed (double insert, double score). Post-fix (both DB-level and full end-to-end API-level), 21/21 held across all verification runs — exactly 1 `match_events` row every time, correct `home_score`, `player_stats.goals` matching the real event count with no lost writes. Each end-to-end run's throwaway match confirmed deleted via post-cleanup `COUNT(*) = 0`. `tsc --noEmit`: 18 pre-existing errors, unchanged, zero new.
 - Pending items: none for this entry. Independently confirming Turso's exact isolation semantics (see "Not done" above) is optional follow-up context, not a blocker.
 
+**Independent cross-validation, `test/live-readiness-d1-d2` branch (peer session), 2026-09-27, filed there as `BACKLOG-435`** (their own `BACKLOG-433`/`434` were already taken by unrelated entries on their branch, same collision pattern as this session's own): reproduced the pre-fix bug at **10-way** concurrency (higher than this entry's 2-way test) — 5/5 trials failed, DB row counts of 10/10/7/9/10 for what should each be one event. Then re-ran their stress script against this exact fix (`be87e76`) on the same deployed preview — **5/5 held**. Independent confirmation, different script, higher concurrency, same result: the fix holds. Their `BACKLOG-435` stays OPEN on their own branch only because `be87e76` isn't merged there yet, not because the fix failed — reconcile as the same closed issue once branches merge, per their own entry's note.
+
 ---
 
 ### BACKLOG-434 — Phase 4 (`TESTING_STRATEGY_2026-09-18.md`) Real-Time WS Broadcast Test Written But Never Run
