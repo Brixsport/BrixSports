@@ -11717,17 +11717,15 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-419 — `sw-user.js`'s `sync-favorites` / `sync-profile` Background Sync Handlers Have No Callers Anywhere in `src/`
 
-**Status:** OPEN — low priority, cleanup, not a live functional gap.
+**Status:** RESOLVED — 2026-09-27, deleted. Richard's call: option (a), delete the dead handlers.
 **Priority:** Low.
 **Found:** 2026-09-18, while grounding the `BACKLOG-394` P2 design pass against `public/sw-user.js`.
 
-**Finding:** `public/sw-user.js` defines a `sync` event handler for tags `sync-favorites` and `sync-profile` (`syncFavorites()`, `syncProfile()`, and an `openDB()` creating a `BrixsportDB` with `pendingFavorites`/`pendingProfile` stores). A repo-wide grep of `src/` for `pendingFavorites`, `pendingProfile`, `sync-favorites`, `sync-profile` returns zero hits — nothing in the app writes to those stores or calls `sync.register()` with those tags. The handlers are unreachable scaffolding, not a working offline queue for favorites/profile edits.
+**Finding:** `public/sw-user.js` defined a `sync` event handler for tags `sync-favorites` and `sync-profile` (`syncFavorites()`, `syncProfile()`, and an `openDB()` creating a `BrixsportDB` with `pendingFavorites`/`pendingProfile` stores). A repo-wide grep of `src/` for `pendingFavorites`, `pendingProfile`, `sync-favorites`, `sync-profile` returned zero hits — nothing in the app wrote to those stores or called `sync.register()` with those tags. The handlers were unreachable scaffolding, not a working offline queue for favorites/profile edits.
 
-**Why it matters (and why only Low):** it is not the iOS Background Sync gap `PWA_LIMITATIONS.md` documents for the Logger (`BACKLOG-107`) — that concern doesn't apply to code that never runs. The actual consequence: a Fan who favourites a team or edits their profile while offline gets a plain failed request, with no queueing, on every platform. `BACKLOG-226`'s note that the iOS Background-Sync fallback "already exists" refers to the Logger's `admin-offline-queue.ts` path, not this one. Also note the Fan Account Blueprint (`userFavorites`, `userFollows`, `userPreferences`) now makes favourites a real feature, so this may stop being hypothetical.
+**Fix:** deleted the dead block wholesale — the `sync` event listener, `syncFavorites()`, `syncProfile()`, and `openDB()`/its IndexedDB store setup (`public/sw-user.js`, was lines 440-512). Re-confirmed zero callers immediately before deleting (both this file and a repo-wide `src/` grep for the sync tags and `registration.sync.register`). `node --check public/sw-user.js` clean after.
 
-**Not verified:** grep only; not checked whether a dynamic string construction elsewhere could reference these names. Recommend one confirming look before deleting.
-
-**Options, Richard's call (not assumed):** (a) delete the dead handlers; (b) actually build a viewer offline write queue for favourites/profile, reusing `BACKLOG-107`'s page-level `online`/`visibilitychange` drain pattern so it works on iOS, since Background Sync alone would not.
+**Why delete rather than build (b):** the Fan Account Blueprint (`userFavorites`, `userFollows`, `userPreferences`) does make favourites a real feature now, so an offline write queue for it may stop being hypothetical — but Background Sync itself is the wrong foundation for it regardless (documented iOS-broken, `PWA_LIMITATIONS.md`/`BACKLOG-107`), so keeping this dead scaffold around wouldn't have saved any real work toward that feature. If/when a Fan offline-favourites queue gets built, it should reuse the Logger's `admin-offline-queue.ts` `online`/`visibilitychange`-drain pattern — the same conclusion the original entry already pointed at — not resurrect this handler.
 
 ---
 
