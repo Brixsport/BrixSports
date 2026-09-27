@@ -12458,7 +12458,13 @@ If it passes, flip this entry to `RESOLVED` with the evidence block. If it fails
 
 ---
 
-### BACKLOG-431 — OPEN: Hydration Error (React #418) on `/` and `/matches/[id]`, Root Cause Not Yet Isolated
+### BACKLOG-431 — OPEN, live repro attempted 2026-09-27: Hydration Error (React #418) on `/` and `/matches/[id]`, Root Cause Not Yet Isolated
+
+**Round 4 (live repro attempt, per Richard's direct go-ahead):** navigated to `/`, clicked the homepage's actual match-row click handler (`src/app/page.tsx:664`, a plain `onClick={() => router.push(...)}` — confirmed it's NOT a `<Link>`, which also means these rows get zero Next.js prefetch benefit, a separate minor finding) as early as the element existed (~1.3-2.3s after load, timed via a tight poll loop), 3 separate attempts. **Did not reproduce** — all 3 navigated cleanly with no console error. Consistent with a genuinely intermittent race (Sentry shows 49 occurrences over a month, not a reliable-every-time repro), not evidence the bug is gone.
+
+**New lead checked and ruled out during repro attempts:** one attempt's console showed `WebSocket connection ... failed: WebSocket is closed before the connection is established` right at the navigation moment — a plausible-looking new mechanism. Checked `MatchDetailClient.tsx`'s `isConnected` usage directly: every single read (lines 316/332/340/351) is inside a `useEffect`, none in the render body. Same safe pattern as everything else already ruled out. Not the cause.
+
+**Status after 4 rounds: exhausted static analysis (10+ components/patterns) plus 3 live repro attempts, still not root-caused.** Genuinely low-probability-per-load intermittent bug. Recommend: either accept as a known, low-frequency, currently-unlocated issue and revisit once `BACKLOG-432` (Sentry auth token) is fixed so the next natural occurrence carries a real de-minified stack trace, or invest in temporary explicit instrumentation (e.g., a debug build with `reactStrictMode`/verbose logging) if closing this before promotion is a hard requirement — not something more manual click-attempts are likely to resolve efficiently.
 
 **Status:** OPEN, investigation in progress — not resolved, not fixed. Filed so this doesn't get lost or re-discovered from scratch.
 **Priority:** HIGH — confirmed real, currently-open, affects real production traffic (not just the manual test that surfaced it).
