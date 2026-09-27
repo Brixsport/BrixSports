@@ -35,15 +35,20 @@ const DEFAULT_SETTINGS = {
     'features.fpl.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Fantasy Premier League' },
     'features.predictions.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Match predictions' },
     'features.polls.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Polls' },
-    'features.transfers.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Transfer news' },
 
     // High-Volatility Feature Gates (BACKLOG-155) -- defaulted OFF deliberately.
     // defaulting to false means they gate closed
     // automatically rather than depending on someone remembering to flip them.
+    // D3: features.transfers.enabled moved here from the regular Feature Flags
+    // block above -- it was defaulted 'true' despite gating the same
+    // admin/transfers/page.tsx FeatureGate call as the other four (a real gap:
+    // this is the only one of the 5 readiness-checklist 🔴 features whose flag
+    // wasn't actually closed by default before this fix).
     'features.ads.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Advertisements' },
     'features.lineupbuilder.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Lineup Builder' },
     'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'User Management / Access Control admin panel' },
     'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'News Management' },
+    'features.transfers.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Transfers admin panel (news/rumor announcements)' },
 };
 
 // Initialize default settings in database if they don't exist
