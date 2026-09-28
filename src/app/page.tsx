@@ -13,6 +13,7 @@ import GlobalSearch from '@/components/GlobalSearch';
 import { useNotifications } from '@/components/Notifications';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 import { LiveNowSection } from '@/components/livestream';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
 import AdBanner from '@/components/ads/AdBanner';
@@ -64,6 +65,7 @@ export default function Home() {
 
   // Authentication State - use AuthContext instead of local state
   const { user, isAuthenticated } = useAuth();
+  const isFeatureEnabled = useFeatureFlags();
   const [competitions, setCompetitions] = useState<any[]>([]);
 
   const { notifications, addNotification } = useNotifications();
@@ -419,9 +421,11 @@ export default function Home() {
                 <Link href="/players" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   Players
                 </Link>
-                <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
-                  Lineup Builder
-                </Link>
+                {isFeatureEnabled('features.lineupbuilder.enabled') && (
+                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
+                    Lineup Builder
+                  </Link>
+                )}
                 <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   News
                 </Link>
@@ -657,7 +661,7 @@ export default function Home() {
                           <div>
                             {group.matches.map((match: Match, idx: number) => (
                               <React.Fragment key={match.id}>
-                              {idx === 1 && <AdBanner position="inline" />}
+                              {idx === 1 && isFeatureEnabled('features.ads.enabled') && <AdBanner position="inline" />}
                               <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -883,10 +887,13 @@ export default function Home() {
 
             <div className="my-1 border-t border-border/60" />
 
-            {/* Lineup Builder: a plain row, same weight as every other item --
-                no badge/tooltip (BACKLOG-406/407: dropping the promotional
-                treatment on an untested 🔴 High Volatility feature). */}
-            <MenuRow href="/lineup-builder" icon={ListChecks} label="Lineup Builder" onNavigate={() => setIsMenuOpen(false)} />
+            {/* D3/BACKLOG-155: BACKLOG-406/407 already dropped the promotional
+                badge/tooltip treatment on this untested 🔴 High Volatility
+                feature; this now hides the row entirely when its flag is off,
+                since the page itself has zero gating of its own otherwise. */}
+            {isFeatureEnabled('features.lineupbuilder.enabled') && (
+              <MenuRow href="/lineup-builder" icon={ListChecks} label="Lineup Builder" onNavigate={() => setIsMenuOpen(false)} />
+            )}
             <MenuRow href="/news" icon={Newspaper} label="News" onNavigate={() => setIsMenuOpen(false)} />
           </nav>
         </SheetContent>

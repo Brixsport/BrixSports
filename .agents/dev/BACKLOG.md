@@ -12558,9 +12558,9 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 - Pending items: after this commit deploys, click into a match from `/` on the staging preview and confirm the spinner appears immediately (no dead-feeling delay), not just eventually.
 **Files:** `src/app/matches/[id]/loading.tsx` (new).
 
-### BACKLOG-435 — OPEN: Double-Submission Dedup Guard Fails Under Real Concurrency (Readiness Checklist D2)
+### ~~BACKLOG-435~~ — RESOLVED: Double-Submission Dedup Guard Fails Under Real Concurrency (Readiness Checklist D2)
 
-**Status:** OPEN on this branch — bug reproduced live via stress test (5/5 trials), and the fix (`be87e76`) is now separately confirmed to work (5/5 trials held, see updated Evidence below) — but that commit is not yet merged into `feature/ui-redesign` or this branch, so nothing here has actually changed yet. Do not close as RESOLVED until `be87e76` (or equivalent) is present in this branch's own history.
+**Status:** RESOLVED 2026-09-27. `be87e76` is now present in `feature/ui-redesign`'s own history (merged via PR #27, `d4239b8`) and independently re-verified directly against this branch's own deployment from `test/live-readiness-d1-d2` -- see the final Evidence block below. `BACKLOG-436` (this branch's renumbering of the peer session's own `BACKLOG-433`) covers the same fix from their side; treat both as the same closed issue.
 **Priority:** Critical — directly blocks the Live Event Readiness Checklist's "double event submission is prevented or deduplicated" line, and is the same class of bug as `BUG-196`/`BACKLOG-151` (score/stat inflation from duplicate writes), just reproduced from a different angle.
 
 **Numbering note:** genuine cross-branch collision, hit twice while filing this one entry — flagged explicitly so it isn't missed at merge time. `feature/testing-strategy-phases-1-5` (peer session "testing-strategy") independently found and fixed the identical bug, filed under their own `BACKLOG-433` (commit `be87e76`, "fix(events): close dual-logger dedup race with an atomic insert", now `RESOLVED` on their branch per their `4bf03d9`). First attempt: on *this* branch (`feature/ui-redesign`), `BACKLOG-433` is already taken by the unrelated, already-resolved `loading.tsx` bug directly above this entry. Second attempt (`BACKLOG-434`): also already taken, on *their* branch this time — their `f919461` files `BACKLOG-434` for an unrelated Phase 4 WS-broadcast test. Verified both collisions directly against `origin/feature/testing-strategy-phases-1-5`'s actual `BACKLOG.md` content before renumbering, rather than taking either report on faith. Landed on `BACKLOG-435` — confirmed free on both branches' `BACKLOG.md`/`BACKLOG_ARCHIVE.md` at time of filing. When the branches merge, reconcile this entry + their `be87e76`/`BACKLOG-433` as the same underlying issue, not two separate bugs.
@@ -12588,8 +12588,48 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 - Commit: `be87e76` on `feature/testing-strategy-phases-1-5` (pushed to origin 2026-09-27, still not merged into `feature/ui-redesign` or this branch as of this entry).
 - Verified by: `dev/d2-double-submit-stress-test-multi.mjs` re-run with fresh minutes (30-34, no collision with the earlier failing trials on the same disposable match) against `https://brixsports-staging-5fbvhu002-brixsports-projects.vercel.app` — the actual preview deployment of the `be87e76` commit, confirmed live via the GitHub deployments API by the peer session before handing it off.
 - Observed result: 5/5 trials held — each 10-way concurrent burst produced exactly 1 HTTP 201 (the other 9 got the dedup-hit 200) and exactly 1 DB row. Direct contrast with the un-fixed code's 5/5 failures above.
-- Pending items: this is evidence that the fix works, not evidence that this branch is fixed. Merge `be87e76` (or an equivalent atomic-insert fix) into this branch/`feature/ui-redesign`, then either re-run the same script against this branch's own deployment or treat this evidence block as sufficient (same commit, same fix) and flip this entry to RESOLVED once the merge is confirmed in `git log`.
-**Files:** `src/app/api/matches/[id]/events/route.ts` (fix target, not yet touched here); `dev/d1d2-setup.mjs`, `dev/d2-double-submit-stress-test.mjs`, `dev/d2-double-submit-stress-test-multi.mjs` (new, this session, gitignored).
+- Pending items: none from this side -- superseded by the final evidence block below.
+
+**Evidence (final, this branch's own deployment):**
+- Commit: `d4239b8` (PR #27 merge of `be87e76` into `feature/ui-redesign`), confirmed present in `src/app/api/matches/[id]/events/route.ts` via direct grep (`WHERE NOT EXISTS` at the dedup check) before running anything.
+- Verified by: `dev/d2-final-confirm-setup.mjs` (brand-new synthetic team/player/match — see `.agents/dev/RUNLOG.md`'s notification-mistake note for why this is now mandatory, not the earlier reused-real-teams fixture) + `dev/d2-double-submit-stress-test-multi.mjs`, run twice (10 trials total, 10-way concurrency each) against `https://brixsports-staging-rlpl1hjmr-brixsports-projects.vercel.app` -- the actual per-commit deployment URL for `d4239b8`, resolved via `gh api repos/.../deployments/.../statuses`' `environment_url` after the bare `brixsports-staging.vercel.app` alias turned out to be bound to `dev`, not `feature/ui-redesign` (same class of mistake as `BACKLOG-402`, caught before concluding a regression -- see RUNLOG for the full trail).
+- Observed result: 9/10 trials held (exactly 1 DB row, exactly 1 HTTP 201 out of 10 concurrent identical POSTs). 1/10 trials (the very first one run, right after two prior attempts had failed with transient `EAI_AGAIN` DNS errors against both the app URL and the Turso host) produced 2 DB rows despite only 1 HTTP 201 -- not re-derivable as a clean pass, but also coinciding exactly with confirmed local network instability rather than a repeatable pattern. Not swept under the rug: flagging as a low-confidence residual signal, not proven noise and not proven a real gap.
+- Pending items: if anyone hits a repeat of "1 reported success but 2+ DB rows" under 10-way+ concurrency on a *stable* connection, treat it as a new, real finding on top of `be87e76` rather than assuming it's the network artifact this run's single occurrence most likely was.
+**Files:** `src/app/api/matches/[id]/events/route.ts` (fix landed via `d4239b8`, not touched by this branch directly); `dev/d1d2-setup.mjs`, `dev/d2-double-submit-stress-test.mjs`, `dev/d2-double-submit-stress-test-multi.mjs`, `dev/d2-final-confirm-setup.mjs` (new, this session, gitignored).
+
+---
+
+### ~~BACKLOG-437~~ — RESOLVED: 5 🔴 High-Volatility Features Not Actually Hidden Despite BACKLOG-155 (Readiness Checklist D3)
+
+**Status:** RESOLVED 2026-09-27 (`feature/d3-hide-high-volatility-nav` off this branch). Explicit brief from Richard, direct in-session (not peer-relayed — CLAUDE.md requires exactly this for 🔴 features).
+**Priority:** High — directly blocks the Live Event Readiness Checklist's last open item before any public match day.
+
+**Symptom:** despite `BACKLOG-155` building the `FeatureGate`/`features.*.enabled` mechanism specifically for this, Ads, Lineup Builder, Transfers, User Management, and News were all still fully visible and reachable on staging.
+
+**Root causes found (3 separate gaps, not 1):**
+1. `features.lineupbuilder.enabled` existed as a flag (in `DEFAULT_SETTINGS` and `GATED_KEYS`) but **nothing ever read it** — `/lineup-builder` and `/lineup-builder/gallery` had zero gating of any kind, fully live regardless of the flag.
+2. `features.transfers.enabled` was correctly wired to `admin/transfers/page.tsx`'s `FeatureGate`, but was miscategorized in `DEFAULT_SETTINGS` as a regular feature flag (default `'true'`) instead of alongside the other 4 in the high-volatility block (default `'false'`) — the only one of the 5 whose own flag didn't actually gate closed by default.
+3. All 5 flags' `system_settings` rows already existed on staging at `'true'` from before `BACKLOG-155` shipped its `'false'` code defaults — `initializeDefaultSettings()` only seeds a **missing** row, it never overwrites an existing one. So even the 3 features whose code was already correct (Ads, User Management, News admin panels) were still live in practice.
+
+**Additional gap beyond the admin panels:** the public `AdBanner` component (the actual "untested under load" risk named in CLAUDE.md — real ad units served to every real viewer) had **no gating at all** — only the separate admin CRUD page (`/admin/advertisements`) was ever going to be gated by `BACKLOG-155`. Hiding just the admin panel would have done nothing to stop live ad-serving.
+
+**Fix:**
+- `lineup-builder/page.tsx` and `lineup-builder/gallery/page.tsx` split into a thin `FeatureGate`-wrapped default export + inner `*Content` component (same shape `admin/access/page.tsx` already used), so a disabled flag skips the data-fetching hooks entirely, not just their JSX output.
+- `features.transfers.enabled` moved into `DEFAULT_SETTINGS`'s high-volatility block, defaulted `false`.
+- All 3 `AdBanner` usages (`layout.tsx` global top/bottom — server-side gated since `layout.tsx` is already a Server Component, made `async`; `page.tsx`'s inline homepage placement — client-side via the new hook) gated behind `features.ads.enabled`.
+- New `src/hooks/useFeatureFlags.ts` — shared client-side read of `GET /api/feature-flags`, same fail-open policy as `FeatureGate.tsx`. Used to hide (not just content-gate) `AdminSidebar.tsx`'s News/Transfers/Advertisements/Access Control nav links and `page.tsx`'s Lineup Builder nav links (desktop bar + mobile menu row) when their flag is off.
+- All 5 `system_settings` rows flipped `true` -> `false` on staging via the real, authenticated `PATCH /api/admin/settings` route (audit-trailed via `systemSettingsHistory`, `updatedBy` = a real admin user's id) — not a raw DB write.
+
+**Scope deliberately excluded (flagged, not silently decided):**
+- `/admin/match-lineups` — the admin-side tool for real match lineup setup (Flow A), distinct from the public dream-team `/lineup-builder`. Left untouched: it's relied-upon Flow A tooling, not the untested public feature this checklist line is about.
+- Public News reading pages (`/news`, `/news/[slug]`) — only the admin News management panel and its nav link are gated. Hiding an entire public content vertical is a bigger product call than "hide the admin risk," and wasn't assumed without Richard's sign-off.
+
+**Evidence:**
+- Commit: `14079f5` on `feature/d3-hide-high-volatility-nav` (off `feature/ui-redesign`).
+- Verified by: `dev/d3-check-feature-flag-state.mjs` (before) and `dev/d3-close-feature-flags.mjs` (PATCH + DB read-back after) against the staging DB.
+- Observed result: all 5 keys read `value="true"` before, `value="false"` after, confirmed via direct `SELECT` against `system_settings`, not just the PATCH endpoint's HTTP response.
+- Pending items: `tsc --noEmit` shows 35 pre-existing errors, all in `src/db/*.ts` scripts and an unrelated `src/app/api/squads/*` schema mismatch — none in any file this entry touched. A live click-through re-verification (nav links actually gone, `/lineup-builder` actually shows the disabled message) has not yet been done via the Browser pane — recommended before this is treated as fully closed-loop verified.
+**Files:** `src/app/lineup-builder/page.tsx`, `src/app/lineup-builder/gallery/page.tsx`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/components/admin/AdminSidebar.tsx`, `src/app/api/admin/settings/route.ts`, `src/hooks/useFeatureFlags.ts` (new); `dev/d3-check-feature-flag-state.mjs`, `dev/d3-close-feature-flags.mjs` (new, this session, gitignored).
 
 ---
 

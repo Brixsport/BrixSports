@@ -17,6 +17,7 @@ import { useLineupPlacement, type PlacementEntry } from '@/components/lineup/use
 import { getFormationsForAdmin, getFormation } from '@/lib/lineup/formations';
 import { seedPlacementsFromLegacy } from '@/lib/lineup/placement';
 import { BackButton } from '@/components/ui/BackButton';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 
 declare module 'downloadjs';
 
@@ -53,6 +54,19 @@ interface Team {
 }
 
 export default function LineupBuilderPage() {
+    return (
+        <FeatureGate flagKey="features.lineupbuilder.enabled" featureName="Lineup Builder">
+            <LineupBuilderPageContent />
+        </FeatureGate>
+    );
+}
+
+// BACKLOG-155/D3: this used to be the default export itself, running its data
+// fetches and hooks unconditionally on every render. FeatureGate must sit
+// above these hooks, not inside the JSX they return, so a disabled flag skips
+// the fetches entirely instead of just hiding their output -- same shape as
+// admin/access/page.tsx's AccessControlPageContent split.
+function LineupBuilderPageContent() {
     const [teamName, setTeamName] = useState('My Dream Team');
     const [availablePlayers, setAvailablePlayers] = useState<Player[]>([]);
     const [loadingPlayers, setLoadingPlayers] = useState(true);

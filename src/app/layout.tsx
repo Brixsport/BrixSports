@@ -16,6 +16,7 @@ import AdBanner from "@/components/ads/AdBanner";
 import { env } from "@/lib/env";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { isFeatureEnabled } from "@/lib/featureFlags";
 
 export const metadata: Metadata = {
   // Without this, Next.js resolves relative OG/Twitter image URLs (the root
@@ -116,11 +117,17 @@ export const viewport: Viewport = {
   userScalable: true,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // D3/BACKLOG-155: AdBanner renders globally on every page for every viewer
+  // (unlike the other 4 high-volatility features, which only ever ran inside
+  // an admin panel) -- gating just the admin CRUD page at /admin/advertisements
+  // does nothing to stop this from serving live. Server-side check here so a
+  // disabled flag means the component never even mounts, no client fetch/flash.
+  const adsEnabled = await isFeatureEnabled('features.ads.enabled');
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -262,9 +269,9 @@ export default function RootLayout({
                   <NotificationProvider>
                     <SocketProvider>
                       <GlobalNotificationListener />
-                      <AdBanner position="top" />
+                      {adsEnabled && <AdBanner position="top" />}
                       {children}
-                      <AdBanner position="bottom" />
+                      {adsEnabled && <AdBanner position="bottom" />}
                       <BottomNav />
                       <AuthModal />
                     </SocketProvider>

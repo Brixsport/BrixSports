@@ -12,6 +12,7 @@ import {
     Clock,
 } from 'lucide-react';
 import Link from 'next/link';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 
 interface UserXI {
     id: string;
@@ -26,6 +27,16 @@ interface UserXI {
 }
 
 export default function LineupBuilderGalleryPage() {
+    return (
+        <FeatureGate flagKey="features.lineupbuilder.enabled" featureName="Lineup Builder">
+            <LineupBuilderGalleryPageContent />
+        </FeatureGate>
+    );
+}
+
+// Same split as lineup-builder/page.tsx -- FeatureGate above the hooks, not
+// inside their JSX, so a disabled flag skips the gallery's own data fetch too.
+function LineupBuilderGalleryPageContent() {
     const [teams, setTeams] = useState<UserXI[]>([]);
     const [loading, setLoading] = useState(true);
     const [sortBy, setSortBy] = useState('recent');
