@@ -12685,7 +12685,7 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 ### BACKLOG-440 — SHIPPED: `/api/squads` and `/api/squads/eligible` Selected Non-Existent `players.avatar` / `players.level` Columns
 
 **Status:** SHIPPED — 2026-09-28, commit pending push (PR into `feature/ui-redesign`). Live test NOT run.
-**Priority:** Low — both routes have zero callers anywhere in `src/` (see `BACKLOG-321`-era dead-code note: the 7 `squads` tsc errors were deliberately left as dead code), so no user-visible flow is affected. Fixed anyway because the routes are still reachable over HTTP and a type error on a live route is a latent runtime failure.
+**Priority:** Low — both routes have zero callers anywhere in `src/` (see the "Session 55 tsc Sweep" entry: the 7 `squads` tsc errors were deliberately left as confirmed-dead code), so no user-visible flow is affected. Fixed anyway because the routes are still reachable over HTTP and a type error on a live route is a latent runtime failure.
 
 **Root cause:** `players` has no `avatar` or `level` column (`players.image` is the image column; `level` exists only on `competitions`, `schema.ts:249`). Route code introduced in `0e55cd4` selected `players.avatar` and `players.level`, which are `undefined` at runtime. Confirmed not a join: no table joined in either query carries a `level` for the player.
 
