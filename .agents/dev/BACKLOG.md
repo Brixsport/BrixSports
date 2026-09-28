@@ -12681,3 +12681,23 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 **Files:** `package.json`, `package-lock.json`, `src/components/error/BasketballRimScene.tsx` (deleted), `src/components/error/SoccerGoalScene.tsx` (deleted).
 
 ---
+
+### BACKLOG-440 — SHIPPED: `/api/squads` and `/api/squads/eligible` Selected Non-Existent `players.avatar` / `players.level` Columns
+
+**Status:** SHIPPED — 2026-09-28, commit pending push (PR into `feature/ui-redesign`). Live test NOT run.
+**Priority:** Low — both routes have zero callers anywhere in `src/` (see `BACKLOG-321`-era dead-code note: the 7 `squads` tsc errors were deliberately left as dead code), so no user-visible flow is affected. Fixed anyway because the routes are still reachable over HTTP and a type error on a live route is a latent runtime failure.
+
+**Root cause:** `players` has no `avatar` or `level` column (`players.image` is the image column; `level` exists only on `competitions`, `schema.ts:249`). Route code introduced in `0e55cd4` selected `players.avatar` and `players.level`, which are `undefined` at runtime. Confirmed not a join: no table joined in either query carries a `level` for the player.
+
+**Fix (minimal):** `avatar: players.avatar` → `avatar: players.image` (response key `avatar` unchanged so any future consumer is unaffected); dropped the `level` selection from all three select blocks in `eligible/route.ts`. Nothing else touched.
+
+**Not fixed here (separate finding):** `eligible/route.ts`'s `universityPlayers` query is an unbounded `.all()` with no `.limit()`, violating the project's list-endpoint rule. Left out to keep this PR minimal; needs its own entry if the route is kept rather than deleted.
+
+**Evidence:**
+- Commit: pending
+- Verified by: `tsc --noEmit` — squads errors 2 files → 0 (total 11, all pre-existing `src/db/*` script errors).
+- Observed result: no `api/squads` lines in tsc output. Routes NOT exercised over HTTP (build on `feature/ui-redesign` is currently broken by `BACKLOG-439`, no deployable preview).
+- Pending items: live/HTTP check once a green preview exists; decide delete-vs-keep for the dead routes.
+**Files:** `src/app/api/squads/route.ts`, `src/app/api/squads/eligible/route.ts`.
+
+---
