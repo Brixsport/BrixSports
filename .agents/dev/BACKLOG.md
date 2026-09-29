@@ -12717,7 +12717,6 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 
 ---
 
-<<<<<<< HEAD
 ### BACKLOG-442 — OPEN: `POST /api/matches/[id]/events` Has No Rate Limiting
 
 **Status:** OPEN — found 2026-09-29 by the pre-promotion `/engineering-team-review`'s security-agent pass, not fixed.
@@ -12967,5 +12966,17 @@ if (rl.limited) {
 **Fix:** not applied. Follow `BACKLOG-417`'s shape: distinguish "loaded, zero matches" from "failed to load" in `page.tsx`'s state, show a retry state (reusing `LoadFailedState`) instead of falling through to the existing "No matches found" empty-state copy on a genuine fetch failure.
 
 **Found:** 2026-09-29, live-verification session for `BACKLOG-417`, at Richard's explicit request to also check homepage and `/matches/[id]` after the original 3-page scope was already confirmed. Full detail in `.agents/dev/BACKLOG.md`'s `BACKLOG-417` entry and `.agents/dev/RUNLOG.md`, 2026-09-29.
+
+---
+
+### BACKLOG-456 — OPEN: Admin Loggers Page's "Match Coverage" Tab Always Shows 0% / Every Match Unassigned, Regardless of Real Assignment State
+
+**Status:** OPEN — found 2026-09-29 during the critical-flows manual click-through (Flow A: Match Creation → Logger Assignment → Public Appearance), commit `01525de`. **Numbering note:** filed as 455, collided with a same-day peer entry (homepage false "no matches" on fetch failure, directly above) — renumbered to 456 per this project's established collision convention (move the later-filed entry, keep both).
+**Priority:** Medium — misleading admin UI, not a data-integrity or auth issue. The underlying assignment mechanism works correctly; only this dashboard's read is wrong. Real-world risk: an admin trusting this tab could re-assign an already-covered match, or believe a match has no logger when it does.
+**Root cause, confirmed by code read:** `src/app/admin/loggers/page.tsx` computes `unassigned`/`assigned`/coverage % by filtering `activeMatches` on `m.assignedLoggers` (an array field on its local `Match` interface, line 41). `GET /api/matches` (`src/app/api/matches/route.ts`) — the only endpoint this page fetches matches from — never selects or joins `assignedLoggers` onto the response (confirmed: zero matches for the field anywhere under `src/app/api/`). So `m.assignedLoggers` is `undefined` for every match, and the `!m.assignedLoggers || m.assignedLoggers.length === 0` unassigned check is always true. The route does return a legacy `loggerId` column (`matches.loggerId`, admin-only field, line ~204 of the route), but that's a pre-multi-logger single-FK column that the modern `assign-logger` endpoint (`api/matches/[id]/assign-logger/route.ts`, `BACKLOG-452`) never writes to either — it only inserts into the `match_logger_assignments` join table. Two independent gaps compound: the array field the UI actually reads is never populated by any route, and the one field the route does return isn't kept in sync by the modern assignment path.
+**Reproduction:** created a real test match (`Tu6FYDF_Srp5Y4Cfukjfq`, BUSA LEAGUE FOOTBALL fixture), assigned Test Logger via the Match Coverage tab's own "Assign" flow. The `POST .../assign-logger` call returned `200` with a real assignment row (`{"success":true,"assignment":{"id":"K6VdHrhy3dhk2GL5ns2Ts",...,"status":"active"}}`), and the Management tab's per-logger row for Test Logger correctly went from 1 to 2 active matches. But the Match Coverage tab still listed the same match under "UNASSIGNED MATCHES" with an active "ASSIGN" button, and the top `MATCH COVERAGE` stat stayed at `0% / 0/6 MATCHES` — reproduced identically across two separate deployed commits (`312edc0` and `01525de`, the latter already including `BACKLOG-452`'s fix), a `Refresh Data` click, and multiple full page reloads/navigations. Confirms this is not a client cache issue or a symptom `BACKLOG-452`'s dedup fix happens to also cover — it's a separate, still-open bug.
+**Not fixed here** — found during a manual verification pass focused on the Three Critical Flows, not a code-change session. Flow A itself is unaffected (the match correctly appears on the public page with the assignment intact server-side); this only affects the admin oversight dashboard's own display.
+**Suggested fix (not implemented):** either have `GET /api/matches` join `match_logger_assignments` and populate `assignedLoggers` per match (matching what the loggers page's `Match` interface already expects), or have the loggers page fetch coverage from a dedicated endpoint that already has this join (if one exists) instead of deriving it client-side from a field that was never wired up.
+**Files:** `src/app/admin/loggers/page.tsx`, `src/app/api/matches/route.ts` (read-only investigation, no changes made).
 
 ---
