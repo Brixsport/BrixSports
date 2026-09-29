@@ -12704,7 +12704,7 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 
 ### BACKLOG-439 — RESOLVED: `next.config.ts` Header Route Patterns Broke Every Build Under Next 15.5
 
-**Status:** RESOLVED — 2026-09-29, commit pending push.
+**Status:** RESOLVED — 2026-09-29, pushed and live-verified (`ad0a821`).
 **Priority:** Critical — `BACKLOG-438`'s dependency bump broke every Vercel deployment on this branch (both `brixsports-staging` and `brixs2` projects failed from that commit onward), blocking promotion and all further live verification until fixed.
 
 **Root cause:** `next.config.ts`'s `headers()` had two route patterns using a repeating named param glued directly to a literal suffix with no path-separator prefix: `'/sw:path*.js'` and `'/llms:suffix*.txt'`. Next 15.3.8's bundled `path-to-regexp` tolerated this; Next 15.5.24's bumped version does not, and throws `TypeError: Can not repeat "path" without a prefix and suffix` at config-load time — before compilation, before type-checking, before anything. This is why the failure wasn't a type error (the audit session's initial hypothesis, reasonably given `ignoreBuildErrors: true` is already set) and why it broke 100% of builds, not just some. Confirmed by reproducing locally with a real `next build` (not just `tsc`) — it failed in under 10 seconds at the identical error, matching Vercel's failed deployments exactly.
@@ -12716,13 +12716,17 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 - Extracted the compiled `.next/routes-manifest.json` and tested the real generated regexes (not the source patterns) against every relevant path:
   - `/:swfile(sw[^/]*\.js)` → regex `^(?:/(sw[^/]*\.js))(?:/)?$` — **matches** `/sw-user.js` and `/sw-admin.js` (both are used, per `sw-admin.js`/`sw-user.js` both existing in `public/`); does **not** match `/llms.txt`, `/manifest-user.json`, `/sw-user.js.map`, `/nested/sw-user.js`, `/swx.txt`, `/robots.txt`, or `/api/llms.txt` — no over-matching.
   - `/:llmsfile(llms[^/]*\.txt)` → regex `^(?:/(llms[^/]*\.txt))(?:/)?$` — **matches** `/llms.txt` and `/llms-full.txt` (both referenced in `layout.tsx`'s `<link rel="alternate">` tags); same negative set, no false matches.
-- Live deploy + header check on the actual staging preview: pending this push — will paste real `Cache-Control` response headers for `/sw-user.js`, `/sw-admin.js`, and `/llms.txt` once the Vercel deploy of this commit is confirmed green, per the audit session's ask. Not claiming this closed until that's done.
+- **Live deploy + header check, done.** Pushed as `ad0a821`. Both Vercel projects (`brixsports-staging`, `brixs2`) deployed successfully. Fetched real response headers (`HEAD`, `x-vercel-protection-bypass`) from the deployed preview (`brixsports-staging-bxer2gkl9-brixsports-projects.vercel.app`):
+  - `/sw-user.js` → `200`, `Cache-Control: no-store, max-age=0` — BUG-026's rule intact.
+  - `/sw-admin.js` → `200`, `Cache-Control: no-store, max-age=0` — same, both service workers confirmed matched, not just one.
+  - `/llms.txt` → `200`, `Cache-Control: public, max-age=86400`, `Content-Type: text/plain; charset=utf-8`.
+  - `/llms-full.txt` → `200`, same headers as `/llms.txt`.
 
 **Evidence:**
-- Commit: pending (this session)
-- Verified by: local `next build` (green, full detail above), compiled routes-manifest regex testing against 10 paths (positive + negative cases).
-- Observed result: config loads, build completes, header rules match exactly the intended files and nothing else.
-- Pending items: live Vercel deploy confirmation + real response headers on the deployed preview (in progress, will update this entry).
+- Commit: `ad0a821` on `feature/ui-redesign`, pushed and deployed.
+- Verified by: local `next build` (green, full detail above), compiled routes-manifest regex testing against 10 paths, GitHub commit-status check for both Vercel projects (`success`), and a live `HEAD` request with the deployment-protection bypass against the actual deployed preview for all 4 affected paths.
+- Observed result: config loads, build completes, both Vercel deployments succeed, and all 4 header rules fire correctly with the exact values BUG-026/llms.txt originally intended — nothing over-matched, nothing under-matched.
+- Pending items: none. Fully closed.
 **Files:** `next.config.ts`.
 
 ---
