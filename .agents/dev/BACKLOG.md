@@ -12702,6 +12702,91 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 
 ---
 
+### BACKLOG-442 — OPEN: `POST /api/matches/[id]/events` Has No Rate Limiting
+
+**Status:** OPEN — found 2026-09-29 by the pre-promotion `/engineering-team-review`'s security-agent pass, not fixed.
+**Priority:** Medium — real, but requires an already-authenticated, already-assigned actor to exploit, not an anonymous one.
+
+**Problem:** unlike its sibling routes (`GET /api/matches/[id]/route.ts`, `GET /api/matches`), `POST /api/matches/[id]/events` has zero `checkRateLimit` calls (confirmed via grep — zero hits in this file). Combined with the confirmed-real external side effect `BACKLOG-437` found (`sendMatchEventNotification` firing real push notifications), an authenticated assigned logger or admin could loop this endpoint with varying `type`/`playerId`/`minute` combinations (the 10-second dedup window from `BACKLOG-436`/`441` only catches identical `type+minute+playerId`) to fire push notifications at volume. Auth+assignment gate is correct — not exploitable by an unauthenticated or unassigned actor.
+
+**Fix (not applied):** add the same `checkRateLimit(request)` pattern already used in this file's sibling routes, scoped per-match or per-logger rather than per-IP if loggers share a NAT:
+```ts
+import { checkRateLimit } from '@/lib/rate-limit';
+const rl = await checkRateLimit(request, { max: 60 });
+if (rl.limited) {
+  return NextResponse.json({ error: 'Too many requests.' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } });
+}
+```
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-443 — OPEN: `POST /api/players` Has No Field Allow-List (Same Class as `BACKLOG-397`, Lower Risk)
+
+**Status:** OPEN — found 2026-09-29 during the pre-promotion `/engineering-team-review`'s security scan, not fixed.
+**Priority:** Low — admin-gated, and unlike `BACKLOG-397`'s matches case, there's no separate approval gate for players today to bypass.
+
+**Problem:** `src/app/api/players/route.ts:211` does `db.insert(players).values({ ...body, id: playerId, teamId, number, university })` — unbounded spread of the client body into the insert. Lets an admin-authenticated request set `profileId` directly (bypassing the dedicated, validated `link-profiles` admin action) or overwrite `rating`/`eyePoints` outside the real ratings pipeline.
+
+**Fix (not applied):** add an explicit `PLAYER_CREATE_FIELDS` allow-list mirroring `MATCH_CREATE_FIELDS` in `matches/route.ts`, next time this file is touched. Not blocking this promotion — admin-only gate is intact.
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-444 — OPEN: Two Admin Routes Missing `.limit()` Per `CLAUDE.md`'s List-Endpoint Rule
+
+**Status:** OPEN — found 2026-09-29, not fixed.
+**Priority:** Low — naturally bounded by team roster size today, no attacker-controlled unbounded-growth vector. Letter-of-the-rule violation, not a real exposure.
+
+**Problem:** `GET /api/admin/teams/[teamId]/squad` and `GET /api/admin/teams/[teamId]/roster` both query without a `.limit()` clause, violating `CLAUDE.md`'s "every list endpoint MUST have a `.limit()` clause" rule.
+
+**Fix (not applied):** add `.limit()` to both queries, sized to a reasonable max roster size, next time either file is touched.
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-445 — OPEN: `PATCH /api/admin/users` Has No Audit Trail on Role Changes
+
+**Status:** OPEN — found 2026-09-29, informational, not a `CLAUDE.md` rule violation.
+**Priority:** Low.
+
+**Problem:** `src/app/api/admin/users/route.ts:66-113` lets any admin promote any user to `admin` with no additional confirmation, no second-check, and no history row written — unlike `admin/settings`' `PATCH`, which writes to `systemSettingsHistory`. Auth check is correct, role write isn't hardcoded/client-forged. Worth noting given this file sits in the 🔴 User Management zone, but no regression from this cycle's diff.
+
+**Fix (not applied):** consider a `userRoleChangeHistory` table or reusing `systemSettingsHistory`'s pattern, if role-change auditability becomes a real requirement. Not scoped or prioritized yet.
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-446 — OPEN: Seed Script Prints a Literal Password to Console
+
+**Status:** OPEN — found 2026-09-29 during `/audit-toolkit`'s log-sanitization pass, not fixed.
+**Priority:** Low — `src/db/` one-off script, not a live code path, not a real secret (a hardcoded seed default), but bad practice if the script's output is ever captured somewhere persistent (CI logs, shared terminal output).
+
+**Problem:** `src/db/seed-npuga-special.ts:186` — `console.log(\`Password: password123\`)`.
+
+**Fix (not applied):** remove the console.log, or replace with a comment/README note stating the seed default instead of printing it at runtime.
+
+**Found:** pre-promotion `/audit-toolkit`, 2026-09-29.
+
+---
+
+### BACKLOG-447 — OPEN: `xlsx` Dependabot Alert Has No Upstream Fix, Confirmed Reachable
+
+**Status:** OPEN — found 2026-09-27 during the Dependabot triage (match-page session), needs a real decision, not a quick patch.
+**Priority:** Medium — confirmed genuinely reachable via admin spreadsheet import, but no `npm` registry fix exists to bump to.
+
+**Problem:** the `xlsx` package has a known, unpatched vulnerability with no fixed version published. Unlike `next`/`drizzle-orm`/`next-auth` (`BACKLOG-438`), this can't be closed with a version bump.
+
+**Decision needed, Richard's call:** (a) replace `xlsx` with a maintained alternative for the admin spreadsheet import feature, (b) accept the risk with mitigations (e.g., restrict the import feature further, sanitize/validate uploaded files more aggressively), or (c) something else. Not blocking this promotion — flagging for `/backlog-triage` to sequence into Next, not Now.
+
+**Found:** Dependabot triage, match-page session, 2026-09-27. Filed here 2026-09-29 (was reported in chat only, not previously in `BACKLOG.md`).
+
+---
+
 ### BACKLOG-439 — RESOLVED: `next.config.ts` Header Route Patterns Broke Every Build Under Next 15.5
 
 **Status:** RESOLVED — 2026-09-29, pushed and live-verified (`ad0a821`).
