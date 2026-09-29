@@ -66,14 +66,20 @@ const nextConfig: NextConfig = {
       {
         // Service worker files must never be cached by CDN or browser
         // Stale SW files prevent cache invalidation after deploys (BUG-026)
-        source: '/sw:path*.js',
+        // BACKLOG-439: was '/sw:path*.js' -- a repeating :param* with no
+        // prefix/suffix, which path-to-regexp (bumped in Next 15.5) rejects at
+        // config load ("Can not repeat "path" without a prefix and suffix"),
+        // failing every build. Same match (any root-level sw*.js), expressed
+        // as a single named param with a custom regex instead.
+        source: '/:swfile(sw[^/]*\\.js)',
         headers: [
           { key: 'Cache-Control', value: 'no-store, max-age=0' },
         ],
       },
       {
         // Specific headers for llms.txt files
-        source: '/llms:suffix*.txt',
+        // BACKLOG-439: was '/llms:suffix*.txt', same invalid-repeat pattern as above.
+        source: '/:llmsfile(llms[^/]*\\.txt)',
         headers: [
           {
             key: 'Content-Type',

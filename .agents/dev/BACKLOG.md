@@ -12685,18 +12685,137 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 
 ---
 
-### BACKLOG-440 — RESOLVED: `/transfers` Shows "Apr 28, 57956" on Every Record (Malformed Date, `BACKLOG-401`'s New-Bug Finding)
+### BACKLOG-440 — SHIPPED: `/api/squads` and `/api/squads/eligible` Selected Non-Existent `players.avatar` / `players.level` Columns
 
-**Status:** RESOLVED — 2026-09-28, staging DB fix confirmed by direct read-back. Filed above `BACKLOG-439` (the `match-page` session's `next.config.ts` build fix) per the audit session's numbering guidance; checked this branch's own `BACKLOG.md` first, no collision.
-**Priority:** High — every visible row on a real, public-adjacent (`/transfers`, admin-gated but real data) page showed a broken date.
-**Root cause, confirmed by DB read-back (not "would need DB access", the constraint noted when this was first found under `BACKLOG-401`):** `dev/transfers-date-readback.mjs` (read-only) showed the affected `transfers` rows had `announced_at`/`completed_at`/`created_at`/`updated_at` all identical and 13-digit (millisecond-scale, e.g. `1766757668576`) instead of 10-digit (second-scale). The schema's `mode: 'timestamp'` column and every real write path (`src/app/api/transfers/route.ts`, `src/app/api/transfers/[id]/route.ts`) pass a JS `Date` object through Drizzle, which converts to seconds correctly -- only a raw-millisecond direct insert (some earlier, unidentified `dev/` seed/backfill script bypassing the ORM's conversion) could produce this. `transfers/page.tsx`'s `formatDate` then does `new Date(dateString)` on a value the app already treats as seconds, so the ms-scale value gets double-converted into a year-57956 date. **This is a script/seed-data artifact, not a live application bug** -- no application code was changed.
-**Fix:** `dev/transfers-fix-ms-timestamps.mjs` (dry-run by default, `--apply` gated) divided the 5 timestamp columns by 1000 for exactly the affected rows (`col > 100000000000`). Dry run confirmed the same 6 row ids before any write; applied only after Richard's explicit approval mid-session.
+**Status:** SHIPPED — 2026-09-28, commit pending push (PR into `feature/ui-redesign`). Live test NOT run.
+**Priority:** Low — both routes have zero callers anywhere in `src/` (see the "Session 55 tsc Sweep" entry: the 7 `squads` tsc errors were deliberately left as confirmed-dead code), so no user-visible flow is affected. Fixed anyway because the routes are still reachable over HTTP and a type error on a live route is a latent runtime failure.
+
+**Root cause:** `players` has no `avatar` or `level` column (`players.image` is the image column; `level` exists only on `competitions`, `schema.ts:249`). Route code introduced in `0e55cd4` selected `players.avatar` and `players.level`, which are `undefined` at runtime. Confirmed not a join: no table joined in either query carries a `level` for the player.
+
+**Fix (minimal):** `avatar: players.avatar` → `avatar: players.image` (response key `avatar` unchanged so any future consumer is unaffected); dropped the `level` selection from all three select blocks in `eligible/route.ts`. Nothing else touched.
+
+**Not fixed here (separate finding):** `eligible/route.ts`'s `universityPlayers` query is an unbounded `.all()` with no `.limit()`, violating the project's list-endpoint rule. Left out to keep this PR minimal; needs its own entry if the route is kept rather than deleted.
+
 **Evidence:**
-- Commit: n/a (data-only fix, no app code changed)
-- Verified by: direct DB read-back, before and after (`.agents/dev/RUNLOG.md` 2026-09-28)
-- Observed result: 6/6 rows fixed (`rowsAffected` 6 on each of `announced_at`/`completed_at`/`created_at`/`updated_at`; the 5th column, `push_notification_sent_at`, had no non-null values on these rows). Post-write read-back: all 6 rows now show real `2025-12-26` dates; a follow-up `COUNT(*)` for any remaining ms-scale row across those columns returned 0.
-- Pending items: the specific `dev/` script that originally wrote the ms-scale values was not identified (no `git log`/`RUNLOG.md` entry found matching this shape) -- if it's still in use anywhere, it would reintroduce the same bug on the next seed run. Worth a quick grep for `Date.now()` passed directly into a raw insert against `transfers` before this is fully closed out; not done this pass.
-**Files:** `dev/transfers-date-readback.mjs` (new, read-only), `dev/transfers-fix-ms-timestamps.mjs` (new, dry-run/`--apply` gated) -- both gitignored per project convention.
+- Commit: pending
+- Verified by: `tsc --noEmit` — squads errors 2 files → 0 (total 11, all pre-existing `src/db/*` script errors).
+- Observed result: no `api/squads` lines in tsc output. Routes NOT exercised over HTTP (build on `feature/ui-redesign` is currently broken by `BACKLOG-439`, no deployable preview).
+- Pending items: live/HTTP check once a green preview exists; decide delete-vs-keep for the dead routes.
+**Files:** `src/app/api/squads/route.ts`, `src/app/api/squads/eligible/route.ts`.
+
+---
+
+### BACKLOG-442 — OPEN: `POST /api/matches/[id]/events` Has No Rate Limiting
+
+**Status:** OPEN — found 2026-09-29 by the pre-promotion `/engineering-team-review`'s security-agent pass, not fixed.
+**Priority:** Medium — real, but requires an already-authenticated, already-assigned actor to exploit, not an anonymous one.
+
+**Problem:** unlike its sibling routes (`GET /api/matches/[id]/route.ts`, `GET /api/matches`), `POST /api/matches/[id]/events` has zero `checkRateLimit` calls (confirmed via grep — zero hits in this file). Combined with the confirmed-real external side effect `BACKLOG-437` found (`sendMatchEventNotification` firing real push notifications), an authenticated assigned logger or admin could loop this endpoint with varying `type`/`playerId`/`minute` combinations (the 10-second dedup window from `BACKLOG-436`/`441` only catches identical `type+minute+playerId`) to fire push notifications at volume. Auth+assignment gate is correct — not exploitable by an unauthenticated or unassigned actor.
+
+**Fix (not applied):** add the same `checkRateLimit(request)` pattern already used in this file's sibling routes, scoped per-match or per-logger rather than per-IP if loggers share a NAT:
+```ts
+import { checkRateLimit } from '@/lib/rate-limit';
+const rl = await checkRateLimit(request, { max: 60 });
+if (rl.limited) {
+  return NextResponse.json({ error: 'Too many requests.' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } });
+}
+```
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-443 — OPEN: `POST /api/players` Has No Field Allow-List (Same Class as `BACKLOG-397`, Lower Risk)
+
+**Status:** OPEN — found 2026-09-29 during the pre-promotion `/engineering-team-review`'s security scan, not fixed.
+**Priority:** Low — admin-gated, and unlike `BACKLOG-397`'s matches case, there's no separate approval gate for players today to bypass.
+
+**Problem:** `src/app/api/players/route.ts:211` does `db.insert(players).values({ ...body, id: playerId, teamId, number, university })` — unbounded spread of the client body into the insert. Lets an admin-authenticated request set `profileId` directly (bypassing the dedicated, validated `link-profiles` admin action) or overwrite `rating`/`eyePoints` outside the real ratings pipeline.
+
+**Fix (not applied):** add an explicit `PLAYER_CREATE_FIELDS` allow-list mirroring `MATCH_CREATE_FIELDS` in `matches/route.ts`, next time this file is touched. Not blocking this promotion — admin-only gate is intact.
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-444 — OPEN: Two Admin Routes Missing `.limit()` Per `CLAUDE.md`'s List-Endpoint Rule
+
+**Status:** OPEN — found 2026-09-29, not fixed.
+**Priority:** Low — naturally bounded by team roster size today, no attacker-controlled unbounded-growth vector. Letter-of-the-rule violation, not a real exposure.
+
+**Problem:** `GET /api/admin/teams/[teamId]/squad` and `GET /api/admin/teams/[teamId]/roster` both query without a `.limit()` clause, violating `CLAUDE.md`'s "every list endpoint MUST have a `.limit()` clause" rule.
+
+**Fix (not applied):** add `.limit()` to both queries, sized to a reasonable max roster size, next time either file is touched.
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-445 — OPEN: `PATCH /api/admin/users` Has No Audit Trail on Role Changes
+
+**Status:** OPEN — found 2026-09-29, informational, not a `CLAUDE.md` rule violation.
+**Priority:** Low.
+
+**Problem:** `src/app/api/admin/users/route.ts:66-113` lets any admin promote any user to `admin` with no additional confirmation, no second-check, and no history row written — unlike `admin/settings`' `PATCH`, which writes to `systemSettingsHistory`. Auth check is correct, role write isn't hardcoded/client-forged. Worth noting given this file sits in the 🔴 User Management zone, but no regression from this cycle's diff.
+
+**Fix (not applied):** consider a `userRoleChangeHistory` table or reusing `systemSettingsHistory`'s pattern, if role-change auditability becomes a real requirement. Not scoped or prioritized yet.
+
+**Found:** pre-promotion `/engineering-team-review`, security-agent pass, 2026-09-29.
+
+---
+
+### BACKLOG-446 — OPEN: Seed Script Prints a Literal Password to Console
+
+**Status:** OPEN — found 2026-09-29 during `/audit-toolkit`'s log-sanitization pass, not fixed.
+**Priority:** Low — `src/db/` one-off script, not a live code path, not a real secret (a hardcoded seed default), but bad practice if the script's output is ever captured somewhere persistent (CI logs, shared terminal output).
+
+**Problem:** `src/db/seed-npuga-special.ts:186` — `console.log(\`Password: password123\`)`.
+
+**Fix (not applied):** remove the console.log, or replace with a comment/README note stating the seed default instead of printing it at runtime.
+
+**Found:** pre-promotion `/audit-toolkit`, 2026-09-29.
+
+---
+
+### BACKLOG-447 — OPEN: `xlsx` Dependabot Alert Has No Upstream Fix, Confirmed Reachable
+
+**Status:** OPEN — found 2026-09-27 during the Dependabot triage (match-page session), needs a real decision, not a quick patch.
+**Priority:** Medium — confirmed genuinely reachable via admin spreadsheet import, but no `npm` registry fix exists to bump to.
+
+**Problem:** the `xlsx` package has a known, unpatched vulnerability with no fixed version published. Unlike `next`/`drizzle-orm`/`next-auth` (`BACKLOG-438`), this can't be closed with a version bump.
+
+**Decision needed, Richard's call:** (a) replace `xlsx` with a maintained alternative for the admin spreadsheet import feature, (b) accept the risk with mitigations (e.g., restrict the import feature further, sanitize/validate uploaded files more aggressively), or (c) something else. Not blocking this promotion — flagging for `/backlog-triage` to sequence into Next, not Now.
+
+**Found:** Dependabot triage, match-page session, 2026-09-27. Filed here 2026-09-29 (was reported in chat only, not previously in `BACKLOG.md`).
+
+---
+
+### BACKLOG-439 — RESOLVED: `next.config.ts` Header Route Patterns Broke Every Build Under Next 15.5
+
+**Status:** RESOLVED — 2026-09-29, pushed and live-verified (`ad0a821`).
+**Priority:** Critical — `BACKLOG-438`'s dependency bump broke every Vercel deployment on this branch (both `brixsports-staging` and `brixs2` projects failed from that commit onward), blocking promotion and all further live verification until fixed.
+
+**Root cause:** `next.config.ts`'s `headers()` had two route patterns using a repeating named param glued directly to a literal suffix with no path-separator prefix: `'/sw:path*.js'` and `'/llms:suffix*.txt'`. Next 15.3.8's bundled `path-to-regexp` tolerated this; Next 15.5.24's bumped version does not, and throws `TypeError: Can not repeat "path" without a prefix and suffix` at config-load time — before compilation, before type-checking, before anything. This is why the failure wasn't a type error (the audit session's initial hypothesis, reasonably given `ignoreBuildErrors: true` is already set) and why it broke 100% of builds, not just some. Confirmed by reproducing locally with a real `next build` (not just `tsc`) — it failed in under 10 seconds at the identical error, matching Vercel's failed deployments exactly.
+
+**Fix:** replaced both with a single named param plus an inline regex constraint, which `path-to-regexp` still supports: `'/:swfile(sw[^/]*\\.js)'` and `'/:llmsfile(llms[^/]*\\.txt)'`.
+
+**Verification, per the audit session's explicit ask — these rules are load-bearing (BUG-026's stale-service-worker fix), not cosmetic, so matching had to be proven, not assumed:**
+- Full local `next build` (not just `tsc --noEmit`) went green: `Compiled successfully in 16.1min`, `Generating static pages (165/165)`, exit 0. The broken version failed in seconds; this is the actual proof the config loads and the whole app still compiles.
+- Extracted the compiled `.next/routes-manifest.json` and tested the real generated regexes (not the source patterns) against every relevant path:
+  - `/:swfile(sw[^/]*\.js)` → regex `^(?:/(sw[^/]*\.js))(?:/)?$` — **matches** `/sw-user.js` and `/sw-admin.js` (both are used, per `sw-admin.js`/`sw-user.js` both existing in `public/`); does **not** match `/llms.txt`, `/manifest-user.json`, `/sw-user.js.map`, `/nested/sw-user.js`, `/swx.txt`, `/robots.txt`, or `/api/llms.txt` — no over-matching.
+  - `/:llmsfile(llms[^/]*\.txt)` → regex `^(?:/(llms[^/]*\.txt))(?:/)?$` — **matches** `/llms.txt` and `/llms-full.txt` (both referenced in `layout.tsx`'s `<link rel="alternate">` tags); same negative set, no false matches.
+- **Live deploy + header check, done.** Pushed as `ad0a821`. Both Vercel projects (`brixsports-staging`, `brixs2`) deployed successfully. Fetched real response headers (`HEAD`, `x-vercel-protection-bypass`) from the deployed preview (`brixsports-staging-bxer2gkl9-brixsports-projects.vercel.app`):
+  - `/sw-user.js` → `200`, `Cache-Control: no-store, max-age=0` — BUG-026's rule intact.
+  - `/sw-admin.js` → `200`, `Cache-Control: no-store, max-age=0` — same, both service workers confirmed matched, not just one.
+  - `/llms.txt` → `200`, `Cache-Control: public, max-age=86400`, `Content-Type: text/plain; charset=utf-8`.
+  - `/llms-full.txt` → `200`, same headers as `/llms.txt`.
+
+**Evidence:**
+- Commit: `ad0a821` on `feature/ui-redesign`, pushed and deployed.
+- Verified by: local `next build` (green, full detail above), compiled routes-manifest regex testing against 10 paths, GitHub commit-status check for both Vercel projects (`success`), and a live `HEAD` request with the deployment-protection bypass against the actual deployed preview for all 4 affected paths.
+- Observed result: config loads, build completes, both Vercel deployments succeed, and all 4 header rules fire correctly with the exact values BUG-026/llms.txt originally intended — nothing over-matched, nothing under-matched.
+- Pending items: none. Fully closed.
+**Files:** `next.config.ts`.
 
 ---
 
@@ -12711,15 +12830,30 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 **Decision on the broader "how to handle no-logo teams" question:** use the existing shared initials-avatar pattern everywhere, consistently, rather than inventing a second design -- it already exists, is already used correctly in at least one other surface, and looks intentional (colored badge + initials) instead of a raw-text overflow. Did not attempt to source/upload real logos for the ~144 teams still missing one (mostly the NPUGA football roster, per `dev/team-logo-audit.mjs`'s read-only count) -- that's a content/asset-sourcing task, not a code fix, and out of scope for this pass.
 **Evidence:**
 - Commit: pending (this session)
-- Verified by: `tsc --noEmit` (`.agents/dev/RUNLOG.md`/session tooling, not yet in `RUNLOG.md` as a dedicated script since this was a direct code edit) -- identical 35-error baseline before and after, all pre-existing `src/db/`/`src/app/api/squads` errors, zero new.
+- Verified by: `tsc --noEmit` -- identical 35-error baseline before and after, all pre-existing `src/db/`/`src/app/api/squads` errors, zero new.
 - Pending items: not live-verified in a browser -- needs a deployed preview to visually confirm the "Bowen M"-style teams now render a colored initials badge instead of raw text, per this project's own "no local dev, verify on Vercel preview" convention.
 **Files:** `src/app/page.tsx`, `src/lib/utils/team-logo.tsx`, `dev/team-logo-audit.mjs` (new, read-only, gitignored).
 
 ---
 
-### BACKLOG-442 — RESOLVED: COLNAS/COLENG Basketball Teams Had No Logo Despite the Same Colleges' Football Teams Already Having One Uploaded
+### BACKLOG-453 — RESOLVED: `/transfers` Shows "Apr 28, 57956" on Every Record (Malformed Date, `BACKLOG-401`'s New-Bug Finding)
 
-**Status:** RESOLVED — 2026-09-28, staging DB fix confirmed by direct read-back.
+**Status:** RESOLVED — 2026-09-28, staging DB fix confirmed by direct read-back. Numbered 453 (not 440, which collided with the already-merged `/api/squads` fix, PR #30) per coordination with the "Full-Platform Pre-Promotion Audit" peer session, which is itself renumbering its own colliding 441 to 452 -- picked past that new ceiling to avoid a third collision.
+**Priority:** High — every visible row on a real, public-adjacent (`/transfers`, admin-gated but real data) page showed a broken date.
+**Root cause, confirmed by DB read-back (not "would need DB access", the constraint noted when this was first found under `BACKLOG-401`):** `dev/transfers-date-readback.mjs` (read-only) showed the affected `transfers` rows had `announced_at`/`completed_at`/`created_at`/`updated_at` all identical and 13-digit (millisecond-scale, e.g. `1766757668576`) instead of 10-digit (second-scale). The schema's `mode: 'timestamp'` column and every real write path (`src/app/api/transfers/route.ts`, `src/app/api/transfers/[id]/route.ts`) pass a JS `Date` object through Drizzle, which converts to seconds correctly -- only a raw-millisecond direct insert (some earlier, unidentified `dev/` seed/backfill script bypassing the ORM's conversion) could produce this. `transfers/page.tsx`'s `formatDate` then does `new Date(dateString)` on a value the app already treats as seconds, so the ms-scale value gets double-converted into a year-57956 date. **This is a script/seed-data artifact, not a live application bug** -- no application code was changed.
+**Fix:** `dev/transfers-fix-ms-timestamps.mjs` (dry-run by default, `--apply` gated) divided the 5 timestamp columns by 1000 for exactly the affected rows (`col > 100000000000`). Dry run confirmed the same 6 row ids before any write; applied only after Richard's explicit approval mid-session.
+**Evidence:**
+- Commit: n/a (data-only fix, no app code changed)
+- Verified by: direct DB read-back, before and after (`.agents/dev/RUNLOG.md` 2026-09-28)
+- Observed result: 6/6 rows fixed (`rowsAffected` 6 on each of `announced_at`/`completed_at`/`created_at`/`updated_at`; the 5th column, `push_notification_sent_at`, had no non-null values on these rows). Post-write read-back: all 6 rows now show real `2025-12-26` dates; a follow-up `COUNT(*)` for any remaining ms-scale row across those columns returned 0.
+- Pending items: the specific `dev/` script that originally wrote the ms-scale values was not identified (no `git log`/`RUNLOG.md` entry found matching this shape) -- if it's still in use anywhere, it would reintroduce the same bug on the next seed run. Worth a quick grep for `Date.now()` passed directly into a raw insert against `transfers` before this is fully closed out; not done this pass.
+**Files:** `dev/transfers-date-readback.mjs` (new, read-only), `dev/transfers-fix-ms-timestamps.mjs` (new, dry-run/`--apply` gated) -- both gitignored per project convention.
+
+---
+
+### BACKLOG-454 — RESOLVED: COLNAS/COLENG Basketball Teams Had No Logo Despite the Same Colleges' Football Teams Already Having One Uploaded
+
+**Status:** RESOLVED — 2026-09-28, staging DB fix confirmed by direct read-back. Numbered 454 (not 442, which collided with the peer session's rate-limiting finding) per the same coordination noted on `BACKLOG-453`.
 **Reported by:** peer session handoff ("Build out testing strategy Phases 1-5"), relayed by Richard: wire the football university logos to the COLNAS and COLENG basketball teams.
 **Root cause, confirmed by DB read-back:** `dev/team-logo-audit.mjs` (read-only) found exactly 4 relevant rows under Bells University of Technology -- football COLNAS (`mhXc8I0hBxe5W6eCw3do9`) and football COLENG (`k6BgZFG_mtatQ11NZNQb9`) both already have a real Cloudinary `logo` URL; their basketball counterparts (`colnas-basketball`, `coleng-basketball`) both had `logo = ''`. A clean, unambiguous 1:1 mapping (same college, same university, no other candidates).
 **Fix:** `dev/wire-colnas-coleng-basketball-logos.mjs` (dry-run by default, `--apply` gated) copied each football team's `logo` URL onto its basketball counterpart. Script explicitly skips (does not overwrite) if the basketball row already has a non-empty logo or the football source is empty, as a safety guard for future re-runs.
