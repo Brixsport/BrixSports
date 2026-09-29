@@ -12787,6 +12787,58 @@ if (rl.limited) {
 
 ---
 
+### BACKLOG-448 — OPEN: Remaining Dependabot Bumps (`socket.io`/`sharp`/`nodemailer`) and a Transitive `npm audit fix` Pass
+
+**Status:** OPEN — found 2026-09-27 during the Dependabot triage (match-page session), not fixed. Filed here 2026-09-29 (was reported in chat only).
+**Priority:** Medium — real but lower urgency than the 3 CVEs already fixed in `BACKLOG-438`.
+
+**Problem:** of the 114 Dependabot alerts, `next`/`drizzle-orm`/`next-auth` (the 2 CRITICALs + highest-leverage HIGHs) are already bumped (`BACKLOG-438`) and `xlsx` has no fix (`BACKLOG-447`). The rest split into two groups: `socket.io`/`sharp`/`nodemailer` need real but lower-urgency version bumps; the remainder (`brace-expansion`, `js-yaml`, `minimatch`, `nanoid`, `browserslist`, `lodash`, etc.) are transitive, build-tooling-only dependencies — confirmed `lodash`'s vulnerable function isn't even called anywhere in `src/`.
+
+**Fix (not applied):** bump `socket.io`/`sharp`/`nodemailer` individually (exact-pinned, per this project's convention, with the same breaking-change check `BACKLOG-438` did first); run a plain `npm audit fix` for the transitive group rather than manual one-by-one bumps.
+
+**Found:** Dependabot triage, match-page session, 2026-09-27.
+
+---
+
+### BACKLOG-449 — OPEN: No Permanent Regression Guard for `BACKLOG-397` (Mass-Assignment)
+
+**Status:** OPEN — found 2026-09-29 during the `/engineering-team-review`'s testing-strategy pass, not fixed.
+**Priority:** Medium — `BACKLOG-397` was manually confirmed exploitable and manually confirmed fixed in source, but nothing prevents it silently reopening on a future refactor the way it already did once (fixed in source, never merged to `dev` until this promotion).
+
+**Problem:** the existing test suite (`tests/integration/**`, `tests/smoke/**`) has no test asserting that `POST /api/matches` rejects `approvalStatus`/`managerNotes`/`approvedBy`/`loggerId` in the request body for a non-privileged field set. The only verification on record is the one-time manual exploit confirmation from `BACKLOG-397`'s own entry.
+
+**Fix (not applied):** add an integration test to `tests/integration/**` that POSTs a body containing all banned fields and asserts they're absent/ignored in the response and the DB row, mirroring the manual test that originally found the bug.
+
+**Found:** pre-promotion `/engineering-team-review`, testing-strategy pass, 2026-09-29.
+
+---
+
+### BACKLOG-450 — OPEN: `OfflineIndicator` and `OfflineBadge` Render Simultaneously, Redundant UI
+
+**Status:** OPEN — found 2026-09-29 during the `/engineering-team-review`'s click-path-audit pass, not fixed.
+**Priority:** Low — UI polish, not a functional defect. Checked directly: no shared state between the two components (each owns its own local `useState`), so this is not the same class of bug as `BACKLOG-430`'s install-prompt stacking.
+
+**Problem:** `src/components/pwa/OfflineIndicator.tsx` defines both `OfflineIndicator()` (a top banner, auto-hides 3s after reconnecting) and `OfflineBadge()` (a persistent bottom-right pill while offline) — both are imported and rendered from `PWAProvider.tsx`, so a user sees both saying "offline" at once with no coordination between them.
+
+**Fix (not applied):** either suppress the badge while the banner is showing (mirror `BACKLOG-430`'s escalation logic — banner first, badge only after it's been dismissed), or consolidate into one indicator. Not scoped further.
+
+**Found:** pre-promotion `/engineering-team-review`, click-path-audit pass, 2026-09-29.
+
+---
+
+### BACKLOG-451 — OPEN: User Emails Logged on Auth Events
+
+**Status:** OPEN — found 2026-09-29 during `/audit-toolkit`'s log-sanitization pass, not fixed.
+**Priority:** Low — PII in server logs, not a leaked secret/token. Server-side only, not returned to clients.
+
+**Problem:** `src/app/api/auth/login/route.ts:59,73` logs the user's email on a failed/OAuth-no-password login attempt; `src/app/api/auth/forgot-password/route.ts:78` logs the email + `messageId` on a successful reset-email send.
+
+**Fix (not applied):** replace the raw email in these log lines with a hashed/truncated identifier, or the user id, if this project's log aggregation policy requires PII minimization. Not scoped — depends on where these logs actually land (Vercel's own log retention policy) and whether that's already covered by an existing data-handling decision.
+
+**Found:** pre-promotion `/audit-toolkit`, 2026-09-29.
+
+---
+
 ### BACKLOG-439 — RESOLVED: `next.config.ts` Header Route Patterns Broke Every Build Under Next 15.5
 
 **Status:** RESOLVED — 2026-09-29, pushed and live-verified (`ad0a821`).
