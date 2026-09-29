@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matches, teams } from '@/db/schema';
-import { eq, and, inArray, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
+import { matches, teams, matchLoggerAssignments } from '@/db/schema';
+import { eq, and, or, inArray, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { playerRatings } from '@/db/schema-ratings';
@@ -93,7 +93,33 @@ export async function GET(request: NextRequest) {
         const conditions = [];
 
         if (sport) conditions.push(eq(matches.sport, sport));
-        if (loggerId) conditions.push(eq(matches.loggerId, loggerId));
+        if (loggerId) {
+            // BACKLOG-416: matches.loggerId is the pre-multi-logger legacy
+            // column (see src/db/migrations/add-multi-logger-support.ts) --
+            // assignments made via the current POST /assign-logger endpoint
+            // only ever write matchLoggerAssignments, never this column, so
+            // filtering on it alone silently misses every match assigned
+            // through the current flow. OR in an active-assignment subquery
+            // so both the legacy column (if ever populated) and the current
+            // assignment table are honored.
+            conditions.push(
+                or(
+                    eq(matches.loggerId, loggerId),
+                    inArray(
+                        matches.id,
+                        db
+                            .select({ matchId: matchLoggerAssignments.matchId })
+                            .from(matchLoggerAssignments)
+                            .where(
+                                and(
+                                    eq(matchLoggerAssignments.loggerId, loggerId),
+                                    eq(matchLoggerAssignments.status, 'active')
+                                )
+                            )
+                    )
+                )!
+            );
+        }
         if (status) conditions.push(eq(matches.status, status));
         if (matchday) conditions.push(eq(matches.matchday, parseInt(matchday, 10)));
         if (round) conditions.push(eq(matches.round, round));
