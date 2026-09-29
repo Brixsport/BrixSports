@@ -12702,6 +12702,7 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 
 ---
 
+<<<<<<< HEAD
 ### BACKLOG-442 — OPEN: `POST /api/matches/[id]/events` Has No Rate Limiting
 
 **Status:** OPEN — found 2026-09-29 by the pre-promotion `/engineering-team-review`'s security-agent pass, not fixed.
@@ -12836,6 +12837,29 @@ if (rl.limited) {
 **Fix (not applied):** replace the raw email in these log lines with a hashed/truncated identifier, or the user id, if this project's log aggregation policy requires PII minimization. Not scoped — depends on where these logs actually land (Vercel's own log retention policy) and whether that's already covered by an existing data-handling decision.
 
 **Found:** pre-promotion `/audit-toolkit`, 2026-09-29.
+
+---
+
+### BACKLOG-452 — RESOLVED: `assign-logger`'s Dedup Guard Has the Same Turso Transaction-Isolation Race as `BACKLOG-436`
+
+**Status:** RESOLVED — 2026-09-29, found during the pre-promotion `/engineering-team-review` pass (system-design step, independently confirmed by the security agent's own scan). **Renumbered from 441** — that number collided with a same-day, independently-filed finding from a peer branch (homepage `TeamLogo` fix); this entry moved to 452 rather than force the peer's already-complete branch to renumber.
+**Priority:** Medium — data-integrity, not privilege escalation or score corruption. Admin-only endpoint, so exploitation needs two near-simultaneous admin requests, not two independently-racing accounts during live play (the realistic trigger for `BACKLOG-436`). Real consequence: a duplicate active `match_logger_assignments` row can desync remove-logger logic — deleting one duplicate leaves the other "active," so a logger appears removed in the admin UI but keeps live event-logging access.
+
+**Root cause:** identical shape to `BACKLOG-436` — `src/app/api/matches/[id]/assign-logger/route.ts`'s SELECT-then-INSERT, even wrapped in `db.transaction()`, assumed Turso's remote transaction gives the same read-blocks-on-uncommitted-write isolation a local SQLite file connection would. It doesn't. Two concurrent `POST /api/matches/[id]/assign-logger` calls for the same `(matchId, loggerId)` could both pass the `existing` check before either committed, both insert.
+
+**Fix:** mirrors `events/route.ts`'s `BACKLOG-436` fix exactly — collapsed the check+insert into one atomic `INSERT ... SELECT ... WHERE NOT EXISTS` statement via `db.run(sql\`...\`)`, `rowsAffected` replaces the old "did the SELECT find a row" check. `assignedAt` stored as unix seconds by hand (raw SQL literal has no access to Drizzle's `$defaultFn`), matching the same pattern `BACKLOG-436` established.
+
+**Evidence:**
+- Commit: `182d7a6`, branch `fix/assign-logger-atomic-dedup` off `feature/ui-redesign`, PR #31
+- Verified by: `tsc --noEmit` — zero new errors (11 pre-existing baseline, same as `BACKLOG-440`'s check, none in this file)
+- Observed result: not yet live-concurrency-tested (no deployable preview for this branch yet) — code-verified only, same caveat `BACKLOG-436`'s original fix had before its own live re-verification
+- Pending items: a real concurrent-request stress test against a deployed preview, same shape as `BACKLOG-436`'s own verification, before this can be called fully closed rather than code-complete.
+
+**Also flagged, not fixed here:** `BACKLOG-442` — `POST /api/matches/[id]/events` has no rate limiting, unlike its sibling routes.
+
+**Files:** `src/app/api/matches/[id]/assign-logger/route.ts`.
+
+---
 
 ---
 
