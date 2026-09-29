@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Calendar, User, Users, Search, Bell, Menu, ChevronRight, ChevronLeft, Play, ListChecks, Newspaper } from 'lucide-react';
@@ -18,6 +17,7 @@ import { LiveNowSection } from '@/components/livestream';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
 import AdBanner from '@/components/ads/AdBanner';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 
@@ -27,13 +27,6 @@ const BasketballMatchOverlay = dynamic(() => import('@/components/BasketballMatc
 const PlayerProfileOverlay = dynamic(() => import('@/components/PlayerProfileOverlay').then(mod => mod.PlayerProfileOverlay), { ssr: false });
 const SettingsOverlay = dynamic(() => import('@/components/SettingsOverlay').then(mod => mod.SettingsOverlay), { ssr: false });
 const TeamProfileOverlay = dynamic(() => import('@/components/TeamProfileOverlay').then(mod => mod.TeamProfileOverlay), { ssr: false });
-
-// Helper function to validate image paths
-const isValidImagePath = (path: string | undefined): boolean => {
-  if (!path || path.trim() === '') return false;
-  // Check if it's a valid path (starts with / or http)
-  return path.startsWith('/') || path.startsWith('http');
-};
 
 // BACKLOG-387: module-level stale-while-revalidate cache for the homepage's
 // matches fetch. Survives component unmount/remount (a client-side nav away
@@ -674,20 +667,11 @@ export default function Home() {
                                   <div className="flex-1 space-y-2">
                                     {/* Home Team */}
                                     <div className="flex items-center gap-3">
-                                      {isValidImagePath(match.homeTeam?.logo) ? (
-                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-muted">
-                                          <Image
-                                            src={match.homeTeam!.logo}
-                                            alt={match.homeTeam!.name}
-                                            fill
-                                            className="object-cover"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-[10px] font-bold">
-                                          {match.homeTeam?.shortName || 'H'}
-                                        </div>
-                                      )}
+                                      <TeamLogo
+                                        logo={match.homeTeam?.logo}
+                                        name={match.homeTeam?.name || match.homeTeam?.shortName || 'Home Team'}
+                                        size="xs"
+                                      />
                                       <span className="font-medium text-sm text-foreground/90">
                                         {match.homeTeam?.name || 'Home Team'}
                                       </span>
@@ -703,20 +687,11 @@ export default function Home() {
 
                                     {/* Away Team */}
                                     <div className="flex items-center gap-3">
-                                      {isValidImagePath(match.awayTeam?.logo) ? (
-                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-muted">
-                                          <Image
-                                            src={match.awayTeam!.logo}
-                                            alt={match.awayTeam!.name}
-                                            fill
-                                            className="object-cover"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-[10px] font-bold">
-                                          {match.awayTeam?.shortName || 'A'}
-                                        </div>
-                                      )}
+                                      <TeamLogo
+                                        logo={match.awayTeam?.logo}
+                                        name={match.awayTeam?.name || match.awayTeam?.shortName || 'Away Team'}
+                                        size="xs"
+                                      />
                                       <span className="font-medium text-sm text-foreground/90">
                                         {match.awayTeam?.name || 'Away Team'}
                                       </span>

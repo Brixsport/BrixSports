@@ -9,7 +9,7 @@ export function isValidLogo(logo: string | null | undefined): boolean {
     return true;
 }
 
-const SIZE_PX: Record<string, number> = { sm: 32, md: 40, lg: 48 };
+const SIZE_PX: Record<string, number> = { xs: 24, sm: 32, md: 40, lg: 48 };
 
 // A team with no `color` set fell back to a flat gray (#374151) with no border --
 // every uncolored team's avatar read as the same undifferentiated "blob." Hashing
@@ -43,7 +43,7 @@ interface TeamLogoProps {
     logo?: string | null;
     name: string;
     color?: string | null;
-    size?: 'sm' | 'md' | 'lg';
+    size?: 'xs' | 'sm' | 'md' | 'lg';
     className?: string;
 }
 
