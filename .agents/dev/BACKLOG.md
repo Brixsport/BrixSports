@@ -12701,3 +12701,28 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 **Files:** `src/app/api/squads/route.ts`, `src/app/api/squads/eligible/route.ts`.
 
 ---
+
+### BACKLOG-439 — RESOLVED: `next.config.ts` Header Route Patterns Broke Every Build Under Next 15.5
+
+**Status:** RESOLVED — 2026-09-29, commit pending push.
+**Priority:** Critical — `BACKLOG-438`'s dependency bump broke every Vercel deployment on this branch (both `brixsports-staging` and `brixs2` projects failed from that commit onward), blocking promotion and all further live verification until fixed.
+
+**Root cause:** `next.config.ts`'s `headers()` had two route patterns using a repeating named param glued directly to a literal suffix with no path-separator prefix: `'/sw:path*.js'` and `'/llms:suffix*.txt'`. Next 15.3.8's bundled `path-to-regexp` tolerated this; Next 15.5.24's bumped version does not, and throws `TypeError: Can not repeat "path" without a prefix and suffix` at config-load time — before compilation, before type-checking, before anything. This is why the failure wasn't a type error (the audit session's initial hypothesis, reasonably given `ignoreBuildErrors: true` is already set) and why it broke 100% of builds, not just some. Confirmed by reproducing locally with a real `next build` (not just `tsc`) — it failed in under 10 seconds at the identical error, matching Vercel's failed deployments exactly.
+
+**Fix:** replaced both with a single named param plus an inline regex constraint, which `path-to-regexp` still supports: `'/:swfile(sw[^/]*\\.js)'` and `'/:llmsfile(llms[^/]*\\.txt)'`.
+
+**Verification, per the audit session's explicit ask — these rules are load-bearing (BUG-026's stale-service-worker fix), not cosmetic, so matching had to be proven, not assumed:**
+- Full local `next build` (not just `tsc --noEmit`) went green: `Compiled successfully in 16.1min`, `Generating static pages (165/165)`, exit 0. The broken version failed in seconds; this is the actual proof the config loads and the whole app still compiles.
+- Extracted the compiled `.next/routes-manifest.json` and tested the real generated regexes (not the source patterns) against every relevant path:
+  - `/:swfile(sw[^/]*\.js)` → regex `^(?:/(sw[^/]*\.js))(?:/)?$` — **matches** `/sw-user.js` and `/sw-admin.js` (both are used, per `sw-admin.js`/`sw-user.js` both existing in `public/`); does **not** match `/llms.txt`, `/manifest-user.json`, `/sw-user.js.map`, `/nested/sw-user.js`, `/swx.txt`, `/robots.txt`, or `/api/llms.txt` — no over-matching.
+  - `/:llmsfile(llms[^/]*\.txt)` → regex `^(?:/(llms[^/]*\.txt))(?:/)?$` — **matches** `/llms.txt` and `/llms-full.txt` (both referenced in `layout.tsx`'s `<link rel="alternate">` tags); same negative set, no false matches.
+- Live deploy + header check on the actual staging preview: pending this push — will paste real `Cache-Control` response headers for `/sw-user.js`, `/sw-admin.js`, and `/llms.txt` once the Vercel deploy of this commit is confirmed green, per the audit session's ask. Not claiming this closed until that's done.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: local `next build` (green, full detail above), compiled routes-manifest regex testing against 10 paths (positive + negative cases).
+- Observed result: config loads, build completes, header rules match exactly the intended files and nothing else.
+- Pending items: live Vercel deploy confirmation + real response headers on the deployed preview (in progress, will update this entry).
+**Files:** `next.config.ts`.
+
+---
