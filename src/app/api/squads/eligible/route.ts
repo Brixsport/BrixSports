@@ -77,12 +77,11 @@ export async function GET(request: NextRequest) {
                     name: players.name,
                     number: players.number,
                     position: players.position,
-                    avatar: players.avatar,
+                    avatar: players.image,
                     nationality: players.nationality,
                     university: players.university,
                     college: players.college,
                     department: players.department,
-                    level: players.level,
                 })
                 .from(players)
                 .where(eq(players.university, teamData.university))
@@ -96,12 +95,11 @@ export async function GET(request: NextRequest) {
                         name: players.name,
                         number: players.number,
                         position: players.position,
-                        avatar: players.avatar,
+                        avatar: players.image,
                         nationality: players.nationality,
                         university: players.university,
                         college: players.college,
                         department: players.department,
-                        level: players.level,
                     },
                     affiliation: playerTeamAffiliations,
                 })
@@ -142,12 +140,11 @@ export async function GET(request: NextRequest) {
                         name: players.name,
                         number: players.number,
                         position: players.position,
-                        avatar: players.avatar,
+                        avatar: players.image,
                         nationality: players.nationality,
                         university: players.university,
                         college: players.college,
                         department: players.department,
-                        level: players.level,
                     },
                     affiliation: playerTeamAffiliations,
                 })
