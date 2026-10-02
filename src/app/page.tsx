@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -20,6 +20,7 @@ import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
 
 // Lazy load heavy overlay components
 const MatchOverlay = dynamic(() => import('@/components/MatchOverlay').then(mod => mod.MatchOverlay), { ssr: false });
@@ -45,6 +46,13 @@ export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+  // BACKLOG-455: a failed fetch must never render as "No matches found".
+  // loadFailed = never loaded anything (show retry); isStale = a later refresh
+  // failed but earlier data is still on screen. hasLoaded tracks which of the two
+  // a failure is.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [isStale, setIsStale] = useState(false);
+  const hasLoaded = useRef(false);
 
   // Date Filter
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -75,15 +83,26 @@ export default function Home() {
     try {
       if (showLoadingState) setLoading(true);
 
-      const [basketballResponse, footballResponse, otherResponse] = await Promise.all([
+      const responses = await Promise.all([
         fetch('/api/basketball/matches'),
         fetch('/api/football/matches'),
         fetch('/api/other/matches')
       ]);
 
-      const basketballData = await basketballResponse.json();
-      const footballData = await footballResponse.json();
-      const otherData = await otherResponse.json();
+      // BACKLOG-455: all three sources must succeed. A non-OK response used to
+      // fall through (its `success` was just falsy and the sport was silently
+      // skipped); now any failure is a failed load, never a quiet empty list.
+      for (const response of responses) {
+        if (!response.ok) throw new Error(`HTTP ${response.status} from ${response.url}`);
+      }
+      const [basketballData, footballData, otherData] = await Promise.all(
+        responses.map(response => response.json())
+      );
+      for (const body of [basketballData, footballData, otherData]) {
+        if (body?.success !== true || !Array.isArray(body.matches)) {
+          throw new Error('Unexpected matches response shape');
+        }
+      }
 
       const allMatches = [];
 
@@ -181,10 +200,15 @@ export default function Home() {
       }
 
       setMatches(allMatches);
+      hasLoaded.current = true;
+      setLoadFailed(false);
+      setIsStale(false);
       matchesCache = { matches: allMatches, timestamp: Date.now() };
       return allMatches;
     } catch (error) {
       console.error('Error fetching matches:', error);
+      if (hasLoaded.current) setIsStale(true);
+      else setLoadFailed(true);
       return null;
     } finally {
       if (showLoadingState) setLoading(false);
@@ -200,6 +224,7 @@ export default function Home() {
     const isFresh = matchesCache && (Date.now() - matchesCache.timestamp) < MATCHES_CACHE_TTL_MS;
     if (isFresh) {
       setMatches(matchesCache!.matches);
+      hasLoaded.current = true;
       setLoading(false);
       fetchAllMatches(false);
     } else {
@@ -585,7 +610,15 @@ export default function Home() {
           )}
 
           {/* Matches by Date */}
-          {Object.keys(groupedMatches).length > 0 ? (
+          {isStale && !loadFailed && <StaleDataBanner />}
+          {loadFailed ? (
+            <LoadFailedState title="Couldn't load matches" onRetry={() => { setLoadFailed(false); fetchAllMatches(true); }} />
+          ) : loading && matches.length === 0 ? (
+            <div className="py-20 text-center" role="status">
+              <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-foreground/40">Loading matches...</p>
+            </div>
+          ) : Object.keys(groupedMatches).length > 0 ? (
             <div className="space-y-6">
               {Object.entries(groupedMatches).map(([date, dateMatches]: [string, any]) => {
                 // Group matches by competition within the date group
