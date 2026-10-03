@@ -12994,6 +12994,43 @@ if (rl.limited) {
 
 ---
 
+### BACKLOG-457 — OPEN (UNVERIFIED IN FOREGROUND): Flow C Public Page Updates Measured Well Over the 5s Target in a Browser (Median 2–12s by Page, Max 17.6s); the 758ms Readiness Figure Was Not Reproduced
+
+**Status:** OPEN — **post-promotion Next item, not a gate blocker.** **Flow C: not verified; measured over target under hidden-tab conditions.** 2026-10-03, found during the critical-flows click-through's Flow C re-run, preview `brixsports-staging-nsjee7fk6` (commit `f98674e`, Next 15.5.24). Not root-caused. 6 of 9 measurements exceeded the 5s target; treat the absolute numbers as an upper bound until re-measured in a visible tab (n=3 per page, hidden tabs). The first step of the fix is that foreground re-measure.
+**Priority:** Medium until foreground-verified; High if it holds. Flow C is a Critical Flow, and the Live Event Readiness Checklist's "public page updates within 5 seconds" line currently rests on `tests/smoke/critical-flows.ts`'s 758ms figure (`BACKLOG-400`), which this result does not corroborate for real browser pages.
+
+**Decision (Richard, 2026-10-03):** promote without the foreground re-measure; run it **after promotion**, against the promoted environment, and update this entry with the result. The foreground re-measure and the `test:smoke:realtime` run were cancelled for this cycle, and no further staging writes were made after the synthetic-fixture teardown. Until then Flow C stays recorded as "not verified in a foreground tab; measured over target under hidden-tab conditions". Note for whoever updates CLAUDE.md: the Live Event Readiness Checklist line "Public page updates within 5 seconds" cites the 758ms smoke-test figure, which times the public REST API (not a browser page or WebSocket push), so it does not cover this. The re-measure needs a genuinely visible tab (the Browser pane reported `hidden` for every tab; Claude in Chrome was not connected), at least 5 events per page, plus `npm run test:smoke:realtime`, on fresh synthetic fixtures.
+
+**What was done (all on fresh SYNTHETIC fixtures — brand-new teams/players/friendly match, zero possible followers or push subscriptions; the earlier real-team KIN vs WOL run was the mistake this replaces):** drove the **real logger UI** (`/logger`, FootballLogger: GOAL → player → assist), three goals, with three public viewer tabs open at once and a `MutationObserver` in each recording `Date.now()` the instant the displayed score changed. The logger tab wrapped `fetch` to timestamp the `POST /api/matches/[id]/events` request and response. Same browser process, so one clock.
+
+**Measured (ms from the POST response to the viewer's DOM score change):**
+
+| Trial | Homepage `/` | `/live` | `/matches/[id]` |
+|---|---|---|---|
+| 1 | 2136 | 15495 | 4654 |
+| 2 | 7087 | 12181 | 9018 |
+| 3 | 730 | 5880 | 17646 |
+
+Save leg (logger click → POST start ≈ 0.5s; POST start → 201 ≈ 1.0–1.3s) was consistent across all three trials, so the delay is on the **delivery/render side**, not the save. 6 of 9 viewer measurements exceeded 5s; `/live` exceeded it in all 3. Ordering between pages was not stable across trials (match detail was 2nd-fastest in trial 1 and slowest in trial 3), which points to variable delivery (WebSocket push vs a poll/reconnect fallback) rather than one fixed poll interval — not established.
+
+**Evidence tags:** UI-confirmed — scores changed in the three viewer pages after a real logger-UI goal, with the HTTP 201 captured. DB-confirmed — the final match row read 3-0 with 6 events (3 goals + 3 assists) before teardown. Not tested — foreground/visible-tab latency, mobile, a second concurrent logger, any page other than these three.
+
+**Caveats (why this is not yet RESOLVED/closed either way):**
+1. The Browser pane was not displayed on screen, so **every tab reported `document.visibilityState: "hidden"`**, including the one I fronted. Hidden tabs have throttled timers, which can inflate a poll- or timeout-driven update. Real viewers keep the page visible. Needs a foreground re-measure (Claude in Chrome, or the pane brought forward).
+2. n=3 per page — a distribution, not a benchmark.
+3. **What the 758ms actually measures (code read of `tests/smoke/critical-flows.ts` lines 204-230, not run):** a Node script POSTs the goal, starts its timer after the POST returns, then polls the public REST route `GET /api/matches/[id]` until `homeScore` reads 1. It is the API/DB reflecting the score, not a browser page, WebSocket push or React render. So it neither corroborates nor contradicts the browser numbers above; both can be true (the API is current immediately, the pages pick it up late). `realtime-broadcast.test.ts` was not read.
+4. Earlier ad-hoc check on 2026-10-01 (`/live` updated in place within ~6s; `/matches/[id]` once showed no change at 11s and once updated within 8s) is directionally consistent but was not instrumented.
+
+**Next steps (not done):** (a) re-run the same measurement with the viewer tab genuinely foregrounded; (b) run `npm run test:smoke:realtime` against a fresh deploy to separate server-broadcast latency from page render latency; (c) read each page's WebSocket handler and any poll fallback (`/live` consistently slowest here).
+
+**Incidental, not filed:** a friendly match whose players have no active `player_team_affiliations` rows gets an empty roster from `/api/matches/[id]/eligible-players`, so the logger's goal picker says "No player found" even with a published lineup. Real players always have affiliation rows, so this only bit the synthetic fixtures (fixed by adding the rows); noting it in case an admin-created friendly with hand-added players hits the same wall.
+
+**Cleanup:** all synthetic fixtures deleted afterwards (read-back: 0 matches, 0 events, 0 players, 0 teams, 0 affiliations, 0 `football_player_stats` rows). Logged in `.agents/dev/RUNLOG.md`. Scripts (gitignored): `dev/flowc-synthetic-setup.mjs`, `dev/flowc-add-affiliations.mjs`, `dev/flowc-synthetic-teardown.mjs`.
+
+**Files:** none changed (verification only).
+
+---
+
 ### BACKLOG-458 — OPEN (NEXT, post-promotion): Homepage Competitions Fetch Fails Silently, and No Automated Test Covers the Homepage Fetch-Failure Paths — Bundles With `BACKLOG-417`'s Identical Test Gap
 
 **Status:** OPEN — filed 2026-10-03 from the leftover items of `BACKLOG-455` (PR #34 `f98674e`, closed out in PR #35 `8d11775`). Sequenced by the Full-Platform Pre-Promotion Audit orchestrator into the post-promotion "NEXT" bucket; none blocking promotion. Not started.
@@ -13021,9 +13058,9 @@ if (rl.limited) {
 
 ---
 
-### BACKLOG-460 — SHIPPED (code only, not live-verified): "Showing saved data — reconnecting automatically" Banner Hidden on `/` and `/live` at Richard's Request
+### BACKLOG-460 — SHIPPED (live-verified on /live; homepage not tested): "Showing saved data — reconnecting automatically" Banner Hidden on `/` and `/live` at Richard's Request
 
-**Status:** SHIPPED — 2026-10-03, on branch `fix/backlog-460-hide-stale-banner` (off `feature/ui-redesign`), pushed for a preview, no PR yet. **Not live-verified yet** (see Evidence). **Numbering note:** 457 is reserved for the Flow C latency entry above and 458/459 were handed to the testing-strategy session, so this takes 460.
+**Status:** SHIPPED — 2026-10-03, merged into `feature/ui-redesign` via PR #38 (`4ea6bab`). **Live-verified on `/live` only; homepage not tested** (see Evidence). **Numbering note:** 457 is reserved for the Flow C latency entry above and 458/459 were handed to the testing-strategy session, so this takes 460.
 **Priority:** Low — cosmetic hide, reversible in one line. The trade-off below is the real content.
 **Reported by:** Richard, with a screenshot of the banner, asking to hide it for now.
 
@@ -13038,10 +13075,10 @@ if (rl.limited) {
 2. Whether a quieter version (a small dot, or only after N consecutive failed refreshes) should replace the hide before this ships to real viewers. That would keep the "see stale data clearly" rule without the alarm-sized banner.
 
 **Evidence:**
-- Commit: tip of `fix/backlog-460-hide-stale-banner`
+- Commit: `3ebe6d6` on `fix/backlog-460-hide-stale-banner`, merged as `4ea6bab` (PR #38)
 - Verified by: `tsc --noEmit`, one run to a scratchpad file: 11 source errors, all in `src/db/` scripts, identical to the known baseline; zero in `ReadPathStates.tsx`, `page.tsx` or `live/page.tsx`. (The same run printed 79 more from stale generated `.next/types/*` left by an earlier local `next build` in this worktree; those are not source errors.)
-- Observed result: **not verified in a browser.** The banner only renders after a failed refresh, and this project's convention is no local dev, so confirming it needs a deployed preview of this change plus a forced failed refresh.
-- Pending items: push a branch for a preview; force a failed refetch (block the API call) and confirm the banner stays hidden on `/` and `/live` while `LoadFailedState` still appears on a never-loaded failure; decide on question 2.
+- Observed result: A/B on deployed previews, client-side only (no staging writes): on `/live`, with `fetch` forced to reject and the `online` event fired, the OLD build (`nsjee7fk6`) showed "Showing saved data" and the NEW build (`rhtpu7ic0`, commit `5961230`, rebased to `3ebe6d6` with unrelated changes only) did not, while logging the same failed-fetch error (so the failure path ran in both). UI-confirmed. Homepage `/`: not tested -- its refresh runs on a 15s timer and the hidden Browser pane throttled the test past its timeout; it uses the same component and constant. Never-loaded failure still showing `LoadFailedState`: not tested (component untouched by the diff).
+- Pending items: re-check the homepage and the never-loaded retry screen after promotion; decide on question 2 (a quieter indicator, or restore after N consecutive failed refreshes).
 
 **Files:** `src/components/resilience/ReadPathStates.tsx`.
 
