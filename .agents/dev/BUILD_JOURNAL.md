@@ -5986,6 +5986,35 @@ Also caught and corrected mid-session: a peer session flagged `BACKLOG-423`'s nu
 
 ---
 
+### Session 82 — 2026-09-27/28 (`live-readiness-d1d2` worktree; branches `test/live-readiness-d1-d2` -> `feature/d3-hide-high-volatility-nav` -> `docs/close-d2-checklist-line`, all off `feature/ui-redesign`)
+
+**Focus:** Live Event Readiness Checklist workstream D1-D3, relayed by the "Full-Platform Pre-Promotion Audit" peer session; D3 needed Richard's own direct brief (given in-session) because it touches CLAUDE.md's "Do Not Touch Without Explicit Brief" features.
+
+**Built:**
+- **D1** (PR #26, `92f8add`): 120min logger session confirmed structurally (flat 7d JWT in `loggers/auth` + `auth/refresh`, no elapsed-time check in `auth.ts`/`middleware.ts`), then live-verified with rolled-back-`iat` tokens against `GET /api/matches/[id]/loggers`. Checklist line closed.
+- **D2** (`BACKLOG-435`, PR #26 + #29): stress-tested the events dedup guard at 10-way concurrency: 5/5 trials failed pre-fix (10/10/7/10/9 duplicate rows per trial). Fix `be87e76` arrived via PR #27 (`d4239b8`), not written here. Final re-verify on `d4239b8`'s per-commit deployment: 9/10 held. The 1/10 anomaly's two rows were `created_at` 27s apart (outside the 10s dedup window), so a delayed straggler, not a guard hole; documented in `BACKLOG-435`. Side effect worth remembering: a duplicate arriving >10s later is inserted by design.
+- **D3** (`BACKLOG-437`, PR #29, `a87a144`): `BACKLOG-155`'s gating existed but had 3 gaps: `features.lineupbuilder.enabled` had no consumer (`/lineup-builder` + `/gallery` fully ungated); `features.transfers.enabled` defaulted `true`; public `AdBanner` (global in `layout.tsx` + inline in `page.tsx`) had no gating at all. Added thin `FeatureGate` wrapper + `*Content` split to both lineup pages, server-side `isFeatureEnabled` in now-`async` `layout.tsx`, new `src/hooks/useFeatureFlags.ts`, hid admin sidebar links (News/Transfers/Advertisements/Access Control) and homepage Lineup Builder links. All 5 `system_settings` rows were still `'true'` on staging (`DEFAULT_SETTINGS` only seeds missing rows) — flipped to `false` via the real audited `PATCH /api/admin/settings`, read back from DB.
+- Dev scripts (gitignored, worktree `dev/`): `d1d2-setup`, `d1-session-persistence-test`, `d2-double-submit-stress-test(-multi)`, `d2-final-confirm-setup` (synthetic fixtures), `d3-check-feature-flag-state`, `d3-close-feature-flags`.
+
+**Bugs encountered / mistakes (root cause):**
+- My D1/D2 test match used `SELECT ... FROM teams LIMIT 2` = real teams TBK/Titans; a real staging user followed both with a push subscription, so ~52 fake goals fired real `webpush` notifications. Peer marked the match FINISHED. Fix: synthetic teams/players only for anything that hits the events route.
+- Re-used the synthetic match across 3 runs without regenerating fixtures: score drifted to 60-0 and showed on the public `/live` page (found during a Browser-pane check). Marked FINISHED.
+- False "5/5 fail" on the final re-verify: `brixsports-staging.vercel.app` is bound to `dev`, not `feature/ui-redesign` (`BACKLOG-402`); peer identified it, per-commit URL from `gh api .../deployments/<id>/statuses` `environment_url` fixed it.
+- Checked D3 nav-hiding against the pre-D3 deployment first (it obviously still showed the links) — before my branch was even pushed.
+- CLAUDE.md "Double event submission" line stayed stale after `BACKLOG-435` closed; caught via a peer prompt, fixed on the local docs branch.
+
+**Rejected / scope decisions:** left `/admin/match-lineups` (Flow A tooling) and public `/news` reading pages untouched — flagged for Richard. Did NOT start the 3 items a peer relayed as "Richard wants" (`/transfers` date bug, `BACKLOG-416`, `BACKLOG-415`) — needs Richard's direct confirmation. Offered then retracted a "one-time CI check-in" wakeup (violates the never-poll-CI rule).
+
+**Deferred / open:**
+- `docs/close-d2-checklist-line` (commits `af1a932` checklist flip, `f4a3e05` anomaly note) is LOCAL ONLY, unpushed, awaiting Richard's OK. This journal entry + known-issues edits in that worktree are uncommitted on top of it.
+- D3 live click-through never done: Vercel builds from `3db5cc1` onward fail (match-page session's next/drizzle/next-auth bump) so `a87a144` has no preview yet.
+- Stable-connection 10-way repeat at the current tip; leftover staging rows (matches `d1d2-test-79XyLGXfBI`, `d2test-match-3z-QcB`, teams/player `d2test-*`, assignments `d1d2-assign-*`/`d2test-assign-*`, all FINISHED) need a cleanup decision.
+- Shared `node_modules` junction was broken mid-session by another session's killed `npm install` (repaired by them).
+
+**Next session:** (1) get Richard's answer on pushing `docs/close-d2-checklist-line` and on the 3 relayed tasks; (2) once builds are fixed, click through the deployed preview to confirm the 5 features' nav links are gone (`/lineup-builder` shows the disabled message); (3) decide test-fixture row cleanup.
+
+---
+
 ### Session 83 — 2026-09-29
 
 **Focus:** close out session 82's handoff — get PR #32 (BACKLOG-415/416/441/453/454, renamed from 440/442 mid-session, see below) merged, then run the one remaining step, BACKLOG-415's `npm install`, once peers confirmed a clear window.

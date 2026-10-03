@@ -11670,16 +11670,27 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-417 — `BACKLOG-394`'s Cross-Page Survey Found the Same False-"Not-Found" Bug Live on `/teams/[id]` and `/competitions/[id]`
 
-**Status:** PARTIALLY RESOLVED — 2026-09-24. `/live`'s stale-data-on-failed-poll path is live-verified with an evidence block below. The initial-load failure path on all three pages (the actual headline bug) is shipped but **not** live-verified — see Evidence for why, and what's still open. Spec: `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`.
+**Status:** RESOLVED — 2026-09-29. The initial-load-failure gap this entry's 2026-09-24 evidence block left open is now closed — see the second evidence block below. Spec: `.agents/dev/OFFLINE_FIRST_ARCHITECTURE_SPEC_2026-09-18.md`.
 
-**Evidence:**
+**Evidence (2026-09-24, original):**
 - Commit: `5eee6f0` (branch `fix/backlog-404-read-path-resilience`, rebased onto `feature/ui-redesign` twice during this session as that branch moved underneath it; pushed to `origin`)
 - Verified by: live test on the branch's actual per-deployment Vercel preview (`brixsports-staging-f8m14k55g-brixsports-projects.vercel.app`, via the automation bypass token, not the stable alias — see `BACKLOG-402`), using `window.fetch` monkey-patching through the Browser pane's `javascript_tool`.
 - Observed result:
   - **`/live`, later-poll failure (CONFIRMED):** with 1 real live match on screen, patched `fetch` to reject `/api/matches?status=LIVE`, waited past the 15s poll. Page showed "Showing saved data — reconnecting automatically" with the match (TEAM B 11 – TEAM A 9) still on screen, console logged the injected error. Restored `fetch`, waited past the next poll: banner cleared, same data. Confirms the P0 stale-banner path works end to end on a real deployment, not just in source.
   - **`/teams/[id]` and `/competitions/[id]`, genuine 404 (CONFIRMED, regression check):** navigated to a real team page and a real competition page (both rendered correctly with live data — `xOakumUyGIWZqkZMretK7` / `m-4qhMBvnUP2a-GcU-Rsv`), then to fabricated IDs on both routes. Both correctly rendered "Team not found" / "Competition not found" — the fix did not regress the real-404 case.
-  - **`/live`, `/teams/[id]`, `/competitions/[id]` — initial-load failure (NOT CONFIRMED):** attempted twice, once per page, using `browser_batch` to fire the `fetch` override in the same round-trip as the navigation, to beat the page's own mount-time fetch. Both times the real data had already loaded by the time the override installed (confirmed via page content immediately after) — the same timing limitation `BACKLOG-394`'s own click-through attempt hit this session (browser automation has no reliable way to inject a script before a page's own scripts run; there is no `addInitScript`-equivalent in this toolset). This is the actual headline behavior of this fix and remains source-reviewed only, not live-exercised.
-- Pending items: a real network-severed test (kill the connection before any script runs) would close the initial-load-failure gap but needs either a different tool (Playwright-style init scripts) or a manual browser test by Richard (DevTools → Network → Offline, then hard-reload each of the three pages). Also still open from earlier in this entry: the competitions page's second-stage fetches fail silently, a failed team season-selector refetch is silent, and no automated test exists for any of this.
+  - **`/live`, `/teams/[id]`, `/competitions/[id]` — initial-load failure (NOT CONFIRMED at the time):** attempted twice, once per page, using `browser_batch` to fire the `fetch` override in the same round-trip as the navigation, to beat the page's own mount-time fetch. Both times the real data had already loaded by the time the override installed (confirmed via page content immediately after) — the same timing limitation `BACKLOG-394`'s own click-through attempt hit this session (browser automation has no reliable way to inject a script before a page's own scripts run; there is no `addInitScript`-equivalent in this toolset). This was the actual headline behavior of this fix and remained source-reviewed only, not live-exercised, as of this evidence block.
+- Pending items (closed by the entry below): the real-network-severed / initial-load-failure gap, and general re-verification after `BACKLOG-439`'s Next 15.5 bump and other intervening changes to `feature/ui-redesign`. Still genuinely open, out of scope for this entry: the competitions page's second-stage fetches fail silently, a failed team season-selector refetch is silent, and no automated test exists for any of this.
+
+**Evidence (2026-09-29, initial-load-failure gap closed):**
+- Commit: no code change — re-verification only, against `feature/ui-redesign`'s tip after `BACKLOG-439` (Next 15.5 build fix) and other intervening merges. Task relayed by the "Full-Platform Pre-Promotion Audit" peer session; scope (which 3 pages to check) confirmed directly with Richard first, since the relayed text named "/, the /live-adjacent pages, and /matches/[id]" which doesn't match what this entry actually shipped to.
+- Verified by: `mcp__Claude_Browser__*` (Browser pane) against `brixsports-staging-bxer2gkl9-brixsports-projects.vercel.app`, the real per-commit preview for `ad0a821`/`c7e9e0d` (confirmed code-identical to `origin/feature/ui-redesign`'s tip at the time, `312edc0`, via `git diff --stat` — the 2 commits in between are doc-only), `x-vercel-protection-bypass` bypass token as a query param, fresh synthetic team/competition fixtures (`synthetic-417-team-74e3705b`/`synthetic-417-comp-74e3705b`, `dev/create-synthetic-417-fixtures.mjs`) for `/teams/[id]`/`/competitions/[id]` per `BACKLOG-437`'s no-real-teams rule, and the same real disposable staging match (`FPwxd_sliJR0kS__GWa66`, TEAM B 11–9 TEAM A, still LIVE) for `/live`.
+- Observed result:
+  - **Regression re-check, all 4 (CONFIRMED, unchanged):** synthetic team real-load renders correctly; fabricated team id renders "Team not found" (took several seconds to resolve — not instant, but correct); synthetic competition real-load renders correctly with empty standings; fabricated competition id renders "Competition not found". No false-not-found regression from any intervening change.
+  - **Initial-load failure, all 3 pages (NOW CONFIRMED):** this time `browser_batch`'s navigate+`window.fetch`-override-in-one-round-trip won the race against the page's own mount-time fetch on the first or second attempt per page (unlike 2026-09-24, where it lost both attempts on all 3 pages — apparently timing-sensitive, not reliably reproducible, but reproducible enough to get real evidence). `/teams/[id]` rendered "Couldn't load this team / Check your connection and try again. / Try again" (not "Team not found"). `/competitions/[id]` rendered "Couldn't load this competition / ... / Try again". `/live` rendered "Couldn't check right now" / "Couldn't load live matches / ... / Try again" — **not** the previously-documented false "0 matches live now"/"No Live Matches" claim, confirming the actual headline bug is fixed. Each case cross-checked against the browser console showing the real injected error (`Error fetching team: Error: BACKLOG-417 injected initial-load failure`, etc.) being hit, not a coincidental empty render.
+  - **Retry-recovery (bonus, not previously tested):** on `/live`, restored `window.fetch` and clicked "Try again" — real live match data (`TEAM B 11 – TEAM A 9`) loaded correctly. (A first attempt at this used bare `delete window.fetch` instead of saving/restoring the original reference, which broke fetch entirely — `ReferenceError: fetch is not defined` in console. That was a mistake in the test script, not an app bug; redone correctly with `window.__origFetch` saved before the override, and it passed.)
+  - **`/matches/[id]` (extra, added at Richard's request after the 3-page scope was confirmed):** this page predates and is the *source* of this entry's fix, not something this entry shipped to, but was never live-checked before. Real match load (`FPwxd_sliJR0kS__GWa66`) renders correctly (`get_page_text` doesn't capture this page's markup, confirmed via screenshot instead). Fabricated id renders "Match not found" (took ~9s to resolve, same non-instant-but-correct pattern as the other pages). Injected initial-load failure renders "Couldn't load this match / Check your connection and try again. / Retry", not a false "Match not found" — confirmed via console (`Error fetching match: Error: BACKLOG-417 injected initial-load failure`). All 3 checks pass; this page's pre-existing `loadError` pattern holds up live, same as the pages copied from it.
+  - **Homepage (`/`) (extra, same request — NEW FINDING, NOT part of this fix):** real load renders correctly (full fixture list). Injected initial-load failure renders "No matches found / Try adjusting your filters" — a **false empty state**, indistinguishable from a real day with no matches, confirmed via console (`Error fetching matches: Error: BACKLOG-417 injected initial-load failure`). This is the same bug class as `/live`'s original bug this entry fixed, just never applied to the homepage — `src/app/page.tsx`'s `fetchAllMatches` `catch` only logs and returns `null`, same shape as `/live`'s pre-fix `catch`. Filed separately as `BACKLOG-455`, not folded into this entry's RESOLVED status, since it's new scope this entry never covered.
+- Pending items: none for this entry. Still genuinely open, out of scope: the competitions page's second-stage fetches fail silently, a failed team season-selector refetch is silent, no automated test exists for any of this, and the new homepage finding (`BACKLOG-455`). Synthetic fixtures deleted after the pass (`dev/cleanup-synthetic-417-fixtures.mjs`), re-queried by id, 0 remaining for both. Full detail in `.agents/dev/RUNLOG.md`, 2026-09-29 entries.
 
 **Shipped, `/teams/[id]` and `/competitions/[id]`:** both now distinguish a failed load from "not found". `TeamDetailClient.tsx`: only a real 404 renders "Team not found"; a network error or non-OK response (including the 500 error-body case, which previously did `setData(errorBody)`) renders `LoadFailedState` with a retry, and a failed season-selector refetch keeps the team already on screen. `competitions/[id]/page.tsx`: the `/api/competitions` list load now checks `response.ok` and the body shape, sets a `loadFailed` state instead of `notFound` on error, and offers a retry; "Competition not found" now means the list loaded and the id isn't in it. These two use the shared `LoadFailedState` inline rather than `useResilientFetch` — the team page's season-selector refetch and the competitions page's two-stage load don't fit the single-URL hook without bending it, so the shared parts are the UI components and the rules, not the hook. `tsc --noEmit` unchanged (18, identical set, none in touched files).
 **Auto-retry on reconnect (follow-up commit):** a first load that failed on `/teams/[id]` or `/competitions/[id]` now also retries by itself on the browser `online` event, so a viewer isn't required to tap Try again or reload. Caveat: the `online` event only fires when the browser itself detects the change; WiFi with no upstream internet never fires it, so the Try again button remains the fallback there.
@@ -12603,7 +12614,8 @@ Checked the specific always-mounted candidates named above, plus the actual mech
 - Commit: `d4239b8` (PR #27 merge of `be87e76` into `feature/ui-redesign`), confirmed present in `src/app/api/matches/[id]/events/route.ts` via direct grep (`WHERE NOT EXISTS` at the dedup check) before running anything.
 - Verified by: `dev/d2-final-confirm-setup.mjs` (brand-new synthetic team/player/match — see `.agents/dev/RUNLOG.md`'s notification-mistake note for why this is now mandatory, not the earlier reused-real-teams fixture) + `dev/d2-double-submit-stress-test-multi.mjs`, run twice (10 trials total, 10-way concurrency each) against `https://brixsports-staging-rlpl1hjmr-brixsports-projects.vercel.app` -- the actual per-commit deployment URL for `d4239b8`, resolved via `gh api repos/.../deployments/.../statuses`' `environment_url` after the bare `brixsports-staging.vercel.app` alias turned out to be bound to `dev`, not `feature/ui-redesign` (same class of mistake as `BACKLOG-402`, caught before concluding a regression -- see RUNLOG for the full trail).
 - Observed result: 9/10 trials held (exactly 1 DB row, exactly 1 HTTP 201 out of 10 concurrent identical POSTs). 1/10 trials (the very first one run, right after two prior attempts had failed with transient `EAI_AGAIN` DNS errors against both the app URL and the Turso host) produced 2 DB rows despite only 1 HTTP 201 -- not re-derivable as a clean pass, but also coinciding exactly with confirmed local network instability rather than a repeatable pattern. Not swept under the rug: flagging as a low-confidence residual signal, not proven noise and not proven a real gap.
-- Pending items: if anyone hits a repeat of "1 reported success but 2+ DB rows" under 10-way+ concurrency on a *stable* connection, treat it as a new, real finding on top of `be87e76` rather than assuming it's the network artifact this run's single occurrence most likely was.
+- Anomaly follow-up (2026-09-28): queried the two minute-10 rows directly -- `created_at` 1790543818 and 1790543845, a **27s gap**, well outside the guard's 10s dedup window (`events/route.ts`). So the second insert was a delayed straggler from the flaky network, not two simultaneous requests slipping past the atomic `INSERT ... WHERE NOT EXISTS`; the guard behaved as designed. Consequence worth knowing: any duplicate arriving >10s after the original (e.g. a slow client retry) is inserted by design -- the window is a double-tap guard, not idempotency. A stable-connection repeat at the current tip is still worth doing once a working preview exists (builds from 3db5cc1 onward are failing).
+- Pending items: if anyone hits a repeat of "1 reported success but 2+ DB rows" with `created_at` values *within 10s* on a *stable* connection, treat it as a new, real finding on top of `be87e76`.
 **Files:** `src/app/api/matches/[id]/events/route.ts` (fix landed via `d4239b8`, not touched by this branch directly); `dev/d1d2-setup.mjs`, `dev/d2-double-submit-stress-test.mjs`, `dev/d2-double-submit-stress-test-multi.mjs`, `dev/d2-final-confirm-setup.mjs` (new, this session, gitignored).
 
 ---
@@ -12796,6 +12808,81 @@ if (rl.limited) {
 
 ---
 
+### BACKLOG-448 — OPEN: Remaining Dependabot Bumps (`socket.io`/`sharp`/`nodemailer`) and a Transitive `npm audit fix` Pass
+
+**Status:** OPEN — found 2026-09-27 during the Dependabot triage (match-page session), not fixed. Filed here 2026-09-29 (was reported in chat only).
+**Priority:** Medium — real but lower urgency than the 3 CVEs already fixed in `BACKLOG-438`.
+
+**Problem:** of the 114 Dependabot alerts, `next`/`drizzle-orm`/`next-auth` (the 2 CRITICALs + highest-leverage HIGHs) are already bumped (`BACKLOG-438`) and `xlsx` has no fix (`BACKLOG-447`). The rest split into two groups: `socket.io`/`sharp`/`nodemailer` need real but lower-urgency version bumps; the remainder (`brace-expansion`, `js-yaml`, `minimatch`, `nanoid`, `browserslist`, `lodash`, etc.) are transitive, build-tooling-only dependencies — confirmed `lodash`'s vulnerable function isn't even called anywhere in `src/`.
+
+**Fix (not applied):** bump `socket.io`/`sharp`/`nodemailer` individually (exact-pinned, per this project's convention, with the same breaking-change check `BACKLOG-438` did first); run a plain `npm audit fix` for the transitive group rather than manual one-by-one bumps.
+
+**Found:** Dependabot triage, match-page session, 2026-09-27.
+
+---
+
+### BACKLOG-449 — OPEN: No Permanent Regression Guard for `BACKLOG-397` (Mass-Assignment)
+
+**Status:** OPEN — found 2026-09-29 during the `/engineering-team-review`'s testing-strategy pass, not fixed.
+**Priority:** Medium — `BACKLOG-397` was manually confirmed exploitable and manually confirmed fixed in source, but nothing prevents it silently reopening on a future refactor the way it already did once (fixed in source, never merged to `dev` until this promotion).
+
+**Problem:** the existing test suite (`tests/integration/**`, `tests/smoke/**`) has no test asserting that `POST /api/matches` rejects `approvalStatus`/`managerNotes`/`approvedBy`/`loggerId` in the request body for a non-privileged field set. The only verification on record is the one-time manual exploit confirmation from `BACKLOG-397`'s own entry.
+
+**Fix (not applied):** add an integration test to `tests/integration/**` that POSTs a body containing all banned fields and asserts they're absent/ignored in the response and the DB row, mirroring the manual test that originally found the bug.
+
+**Found:** pre-promotion `/engineering-team-review`, testing-strategy pass, 2026-09-29.
+
+---
+
+### BACKLOG-450 — OPEN: `OfflineIndicator` and `OfflineBadge` Render Simultaneously, Redundant UI
+
+**Status:** OPEN — found 2026-09-29 during the `/engineering-team-review`'s click-path-audit pass, not fixed.
+**Priority:** Low — UI polish, not a functional defect. Checked directly: no shared state between the two components (each owns its own local `useState`), so this is not the same class of bug as `BACKLOG-430`'s install-prompt stacking.
+
+**Problem:** `src/components/pwa/OfflineIndicator.tsx` defines both `OfflineIndicator()` (a top banner, auto-hides 3s after reconnecting) and `OfflineBadge()` (a persistent bottom-right pill while offline) — both are imported and rendered from `PWAProvider.tsx`, so a user sees both saying "offline" at once with no coordination between them.
+
+**Fix (not applied):** either suppress the badge while the banner is showing (mirror `BACKLOG-430`'s escalation logic — banner first, badge only after it's been dismissed), or consolidate into one indicator. Not scoped further.
+
+**Found:** pre-promotion `/engineering-team-review`, click-path-audit pass, 2026-09-29.
+
+---
+
+### BACKLOG-451 — OPEN: User Emails Logged on Auth Events
+
+**Status:** OPEN — found 2026-09-29 during `/audit-toolkit`'s log-sanitization pass, not fixed.
+**Priority:** Low — PII in server logs, not a leaked secret/token. Server-side only, not returned to clients.
+
+**Problem:** `src/app/api/auth/login/route.ts:59,73` logs the user's email on a failed/OAuth-no-password login attempt; `src/app/api/auth/forgot-password/route.ts:78` logs the email + `messageId` on a successful reset-email send.
+
+**Fix (not applied):** replace the raw email in these log lines with a hashed/truncated identifier, or the user id, if this project's log aggregation policy requires PII minimization. Not scoped — depends on where these logs actually land (Vercel's own log retention policy) and whether that's already covered by an existing data-handling decision.
+
+**Found:** pre-promotion `/audit-toolkit`, 2026-09-29.
+
+---
+
+### BACKLOG-452 — RESOLVED: `assign-logger`'s Dedup Guard Has the Same Turso Transaction-Isolation Race as `BACKLOG-436`
+
+**Status:** RESOLVED — 2026-09-29, found during the pre-promotion `/engineering-team-review` pass (system-design step, independently confirmed by the security agent's own scan). **Renumbered from 441** — that number collided with a same-day, independently-filed finding from a peer branch (homepage `TeamLogo` fix); this entry moved to 452 rather than force the peer's already-complete branch to renumber.
+**Priority:** Medium — data-integrity, not privilege escalation or score corruption. Admin-only endpoint, so exploitation needs two near-simultaneous admin requests, not two independently-racing accounts during live play (the realistic trigger for `BACKLOG-436`). Real consequence: a duplicate active `match_logger_assignments` row can desync remove-logger logic — deleting one duplicate leaves the other "active," so a logger appears removed in the admin UI but keeps live event-logging access.
+
+**Root cause:** identical shape to `BACKLOG-436` — `src/app/api/matches/[id]/assign-logger/route.ts`'s SELECT-then-INSERT, even wrapped in `db.transaction()`, assumed Turso's remote transaction gives the same read-blocks-on-uncommitted-write isolation a local SQLite file connection would. It doesn't. Two concurrent `POST /api/matches/[id]/assign-logger` calls for the same `(matchId, loggerId)` could both pass the `existing` check before either committed, both insert.
+
+**Fix:** mirrors `events/route.ts`'s `BACKLOG-436` fix exactly — collapsed the check+insert into one atomic `INSERT ... SELECT ... WHERE NOT EXISTS` statement via `db.run(sql\`...\`)`, `rowsAffected` replaces the old "did the SELECT find a row" check. `assignedAt` stored as unix seconds by hand (raw SQL literal has no access to Drizzle's `$defaultFn`), matching the same pattern `BACKLOG-436` established.
+
+**Evidence:**
+- Commit: `182d7a6`, branch `fix/assign-logger-atomic-dedup` off `feature/ui-redesign`, PR #31
+- Verified by: `tsc --noEmit` — zero new errors (11 pre-existing baseline, same as `BACKLOG-440`'s check, none in this file)
+- Observed result: not yet live-concurrency-tested (no deployable preview for this branch yet) — code-verified only, same caveat `BACKLOG-436`'s original fix had before its own live re-verification
+- Pending items: a real concurrent-request stress test against a deployed preview, same shape as `BACKLOG-436`'s own verification, before this can be called fully closed rather than code-complete.
+
+**Also flagged, not fixed here:** `BACKLOG-442` — `POST /api/matches/[id]/events` has no rate limiting, unlike its sibling routes.
+
+**Files:** `src/app/api/matches/[id]/assign-logger/route.ts`.
+
+---
+
+---
+
 ### BACKLOG-439 — RESOLVED: `next.config.ts` Header Route Patterns Broke Every Build Under Next 15.5
 
 **Status:** RESOLVED — 2026-09-29, pushed and live-verified (`ad0a821`).
@@ -12869,5 +12956,67 @@ if (rl.limited) {
 - Verified by: direct DB read-back, before and after
 - Observed result: both rows updated (`rowsAffected=1` each); post-write read-back confirms `colnas-basketball` and `coleng-basketball` now carry the same Cloudinary URLs as their football counterparts.
 **Files:** `dev/team-logo-audit.mjs`, `dev/wire-colnas-coleng-basketball-logos.mjs` (both new, gitignored).
+
+---
+
+### ~~BACKLOG-455~~ — RESOLVED: Homepage (`/`) Shows a False "No Matches Found" on a Fetch Failure — Same Bug Class as `BACKLOG-417`'s `/live` Bug, Never Fixed Here
+
+**Status:** RESOLVED — 2026-10-03 (fix commit `fa3afe7`, merged via PR #34 as `f98674e`). Found 2026-09-29, live-confirmed. Richard asked for homepage and `/matches/[id]` to be added to `BACKLOG-417`'s live-verification scope after it was already confirmed RESOLVED for its original 3 pages; `/matches/[id]` held up (already had the pattern), homepage did not.
+**Priority:** Medium — same class and same public-facing severity as the original `/live` bug `BACKLOG-417` fixed (Flow C: a network blip on the homepage, the app's actual landing page, renders as "no matches exist today" instead of a retry state), just never ported here. Homepage is at least as high-traffic as `/live`.
+
+**Problem, live-confirmed on `brixsports-staging-bxer2gkl9-brixsports-projects.vercel.app` (the same preview `BACKLOG-417`'s 2026-09-29 re-verification used):** `src/app/page.tsx`'s `fetchAllMatches` wraps `Promise.all([fetch('/api/basketball/matches'), fetch('/api/football/matches'), fetch('/api/other/matches')])` in a `try/catch` whose `catch` only does `console.error('Error fetching matches:', error); return null;` — `matches` state is never set to anything on failure, so whatever it already was (empty array on first load) stays. There is no `response.ok` check either. Injected a `window.fetch` rejection via `browser_batch` navigate+override-in-one-round-trip (same technique as `BACKLOG-417`): the real homepage fixture list (dozens of real historical matches, visually confirmed correct on an unpatched load first) was replaced by "No matches found / Try adjusting your filters" — indistinguishable from a real quiet day. Console confirmed the real injected error was hit: `Error fetching matches: Error: BACKLOG-417 injected initial-load failure`.
+
+**Not the same code path as `/live`:** homepage's `fetchAllMatches` is its own function, separate from `/live/page.tsx`'s and from `useResilientFetch` (which `/live` itself doesn't even use directly per this entry's own file list — `/live` was fixed with a purpose-built hook). Fixing this needs either reusing `useResilientFetch`/`LoadFailedState` here too, or at minimum a `response.ok` check + a distinct empty-vs-failed state, mirroring `BACKLOG-417`'s fix shape.
+
+**Not investigated:** whether the homepage's other failure paths (the standings/competitions widgets, if any fetch independently) have the same gap. Not investigated: initial-load-failure behavior on any other page outside this project's current `BACKLOG-417` scope.
+
+**Fix (2026-10-02, `src/app/page.tsx` only):** (1) `fetchAllMatches` now requires `response.ok` on all three fetches and `body.success === true` with a `matches` array on each body, else throws — previously a non-OK response (a 500 from one sport) was silently skipped as "no matches for that sport". All-or-nothing by design: one failing source is a failed load, not a partial list. (2) New `loadFailed` / `isStale` state plus a `hasLoaded` ref: a failure before anything has ever loaded sets `loadFailed` and renders `LoadFailedState` ("Couldn't load matches" + Try again) instead of falling through to "No matches found"; a failure after a successful load keeps the existing list and shows `StaleDataBanner`. The 15s poll clears both on the next success. (3) The page's `loading` state was set but **never read in render**, so a cold load also flashed the false "No matches found" until the fetch resolved — added a spinner for `loading && matches.length === 0`, which Retry also needs so it does not flash the empty state. Cache-fresh remount path marks `hasLoaded`. `tsc --noEmit`: see RUNLOG. Original fix shape: follow `BACKLOG-417`'s shape: distinguish "loaded, zero matches" from "failed to load" in `page.tsx`'s state, show a retry state (reusing `LoadFailedState`) instead of falling through to the existing "No matches found" empty-state copy on a genuine fetch failure.
+
+**Evidence:**
+- Commit: `fa3afe7` (merged into `feature/ui-redesign` as `f98674e`, PR #34)
+- Verified by: live test on the per-commit Vercel preview of `fa3afe7` (`brixsports-staging-ic1fq8nsa-brixsports-projects.vercel.app`, matched to the commit through the GitHub deployments API for that SHA, not the dev-bound stable alias), driving the real page with a `window.fetch` override that rejects only `/api/(basketball|football|other)/matches` (original fetch saved as `window.__origFetch` first). Run AFTER the PR was merged, at Richard's request, against the pre-merge commit's preview — not against a post-merge deployment.
+- Observed result: (1) normal load: real fixture list rendered, no "No matches found". (2) failure injected after a good load, waited past a 15s poll tick (6 injected rejections): list still on screen, `StaleDataBanner` ("Showing saved data") shown, no empty state, no `LoadFailedState`. (3) failure injected, app navigated to `/live` and back in-app after the 15s cache expired (cold remount; 12 injected rejections total): `LoadFailedState` "Couldn't load matches" + "Try again" rendered, **no** "No matches found", no stale banner, no spinner stuck (screenshot taken). (4) injection lifted, "Try again" clicked: real list returned, no failed/stale/empty state. Read-path only, no DB writes, so no DB read-back applies. Client-rendered DOM state is the evidence here, same standard as `BACKLOG-417`.
+- Pending items: not covered, unchanged from the ticket — homepage competitions fetch still fails silently; no automated test for these paths; a failure in any one of the three match endpoints is treated as a failed load (all-or-nothing, by design). **Now filed:** the competitions fetch + missing automated test as `BACKLOG-458` (NEXT, post-promotion, bundled with `BACKLOG-417`'s test gap), the all-or-nothing decision as `BACKLOG-459` (LATER, needs product-brainstorming first).
+
+**Found:** 2026-09-29, live-verification session for `BACKLOG-417`, at Richard's explicit request to also check homepage and `/matches/[id]` after the original 3-page scope was already confirmed. Full detail in `.agents/dev/BACKLOG.md`'s `BACKLOG-417` entry and `.agents/dev/RUNLOG.md`, 2026-09-29.
+
+---
+
+### BACKLOG-456 — OPEN: Admin Loggers Page's "Match Coverage" Tab Always Shows 0% / Every Match Unassigned, Regardless of Real Assignment State
+
+**Status:** OPEN — found 2026-09-29 during the critical-flows manual click-through (Flow A: Match Creation → Logger Assignment → Public Appearance), commit `01525de`. **Numbering note:** filed as 455, collided with a same-day peer entry (homepage false "no matches" on fetch failure, directly above) — renumbered to 456 per this project's established collision convention (move the later-filed entry, keep both).
+**Priority:** Medium — misleading admin UI, not a data-integrity or auth issue. The underlying assignment mechanism works correctly; only this dashboard's read is wrong. Real-world risk: an admin trusting this tab could re-assign an already-covered match, or believe a match has no logger when it does.
+**Root cause, confirmed by code read:** `src/app/admin/loggers/page.tsx` computes `unassigned`/`assigned`/coverage % by filtering `activeMatches` on `m.assignedLoggers` (an array field on its local `Match` interface, line 41). `GET /api/matches` (`src/app/api/matches/route.ts`) — the only endpoint this page fetches matches from — never selects or joins `assignedLoggers` onto the response (confirmed: zero matches for the field anywhere under `src/app/api/`). So `m.assignedLoggers` is `undefined` for every match, and the `!m.assignedLoggers || m.assignedLoggers.length === 0` unassigned check is always true. The route does return a legacy `loggerId` column (`matches.loggerId`, admin-only field, line ~204 of the route), but that's a pre-multi-logger single-FK column that the modern `assign-logger` endpoint (`api/matches/[id]/assign-logger/route.ts`, `BACKLOG-452`) never writes to either — it only inserts into the `match_logger_assignments` join table. Two independent gaps compound: the array field the UI actually reads is never populated by any route, and the one field the route does return isn't kept in sync by the modern assignment path.
+**Reproduction:** created a real test match (`Tu6FYDF_Srp5Y4Cfukjfq`, BUSA LEAGUE FOOTBALL fixture), assigned Test Logger via the Match Coverage tab's own "Assign" flow. The `POST .../assign-logger` call returned `200` with a real assignment row (`{"success":true,"assignment":{"id":"K6VdHrhy3dhk2GL5ns2Ts",...,"status":"active"}}`), and the Management tab's per-logger row for Test Logger correctly went from 1 to 2 active matches. But the Match Coverage tab still listed the same match under "UNASSIGNED MATCHES" with an active "ASSIGN" button, and the top `MATCH COVERAGE` stat stayed at `0% / 0/6 MATCHES` — reproduced identically across two separate deployed commits (`312edc0` and `01525de`, the latter already including `BACKLOG-452`'s fix), a `Refresh Data` click, and multiple full page reloads/navigations. Confirms this is not a client cache issue or a symptom `BACKLOG-452`'s dedup fix happens to also cover — it's a separate, still-open bug.
+**Not fixed here** — found during a manual verification pass focused on the Three Critical Flows, not a code-change session. Flow A itself is unaffected (the match correctly appears on the public page with the assignment intact server-side); this only affects the admin oversight dashboard's own display.
+**Suggested fix (not implemented):** either have `GET /api/matches` join `match_logger_assignments` and populate `assignedLoggers` per match (matching what the loggers page's `Match` interface already expects), or have the loggers page fetch coverage from a dedicated endpoint that already has this join (if one exists) instead of deriving it client-side from a field that was never wired up.
+**Files:** `src/app/admin/loggers/page.tsx`, `src/app/api/matches/route.ts` (read-only investigation, no changes made).
+
+---
+
+### BACKLOG-458 — OPEN (NEXT, post-promotion): Homepage Competitions Fetch Fails Silently, and No Automated Test Covers the Homepage Fetch-Failure Paths — Bundles With `BACKLOG-417`'s Identical Test Gap
+
+**Status:** OPEN — filed 2026-10-03 from the leftover items of `BACKLOG-455` (PR #34 `f98674e`, closed out in PR #35 `8d11775`). Sequenced by the Full-Platform Pre-Promotion Audit orchestrator into the post-promotion "NEXT" bucket; none blocking promotion. Not started.
+**Priority:** Low — two small read-path gaps, neither blocks a public flow.
+
+**Part 1 — silent competitions fetch.** `src/app/page.tsx`'s `fetchCompetitions` effect (`fetch('/api/competitions')`) has a `catch` that only does `console.error('Error fetching competitions:', err)`, and it neither checks `res.ok` nor surfaces anything on failure. `competitions` stays `[]`. The only consumer is the side menu (`competitions.length > 0 && competitions.map(...)` in the `Sheet` menu), so a failure just silently drops the per-competition shortcut links while the static "All Competitions" link remains. Impact is a degraded menu, not a false empty state like `BACKLOG-455`; separate from the competitions *page's* second-stage fetches already listed as open in `BACKLOG-417`. Fix shape: a minimal decision on whether the menu needs any visible signal at all (it may be fine to degrade quietly if "All Competitions" is always present — in which case this part can be closed as WONT FIX with that reason).
+
+**Part 2 — no automated test for the failure paths.** Nothing automated covers the homepage's three fetch-failure behaviours shipped in `BACKLOG-455`: failed initial load (`LoadFailedState` + Try again, no false "No matches found"), stale-after-good-load (`StaleDataBanner`, list kept), and retry recovery. `BACKLOG-417` lists the identical gap for `/live`, `/teams/[id]` and `/competitions/[id]` ("no automated test exists for any of this"). Both were only ever verified by hand with a `window.fetch` override (`BACKLOG-417` 2026-09-29, `BACKLOG-455` 2026-10-03). **Cross-reference:** close together, as one test-coverage unit covering all four pages, not four separate efforts. Needs a decision on harness (the existing `tests/smoke/critical-flows.ts` pattern vs a component-level test) before work starts.
+
+**Not fixed here** — filing only.
+**Files:** `src/app/page.tsx` (competitions effect), `src/hooks/useResilientFetch.ts` and `src/components/resilience/ReadPathStates.tsx` (the shared read-path pieces a test would exercise).
+
+---
+### BACKLOG-459 — OPEN (LATER, needs product decision): Homepage Treats a Failure in Any One of the Three Sport Endpoints as a Failed Load (All-or-Nothing) — Versus Partial Data Plus a "Some Matches Missing" Banner
+
+**Status:** OPEN — filed 2026-10-03 from a design trade-off made in `BACKLOG-455` (PR #34). Sequenced by the orchestrator into the post-promotion "LATER" bucket. **Do not implement before a product decision.** Not started.
+**Priority:** Low — a deliberate, documented trade-off, not a bug. Becomes real only if one sport endpoint is ever broken while the others work.
+
+**Current behaviour (as shipped in `BACKLOG-455`):** `fetchAllMatches` in `src/app/page.tsx` fetches `/api/basketball/matches`, `/api/football/matches` and `/api/other/matches` together and requires all three to return `response.ok` with `success === true` and a `matches` array. If any one fails: before anything has loaded the homepage shows `LoadFailedState`; after a good load it keeps the previous list and shows `StaleDataBanner`. A single permanently broken endpoint would therefore block the whole homepage (or freeze it on stale data) even though the other two sports are available — before `BACKLOG-455` that case silently rendered the working sports and dropped the broken one without telling the viewer, which is the false-completeness the fix was meant to remove.
+
+**The decision:** keep all-or-nothing, or render whichever sports loaded plus a visible "some matches may be missing" banner. All-or-nothing is honest but can reduce availability; partial data keeps the page useful but a viewer could miss that a sport is absent, and needs new copy, a per-sport stale/failed model, and a decision on what the live/Fixtures counts mean when a source is missing. This is a product/design call, not an engineering one. **Required first step: run `product-management:product-brainstorming`** (then a spec via `product-management:write-spec` if the answer is to change it) before any code. Do not implement ahead of that.
+
+**Not fixed here** — filing only.
+**Files:** `src/app/page.tsx` (`fetchAllMatches`, `loadFailed` / `isStale` / `hasLoaded` state), `src/components/resilience/ReadPathStates.tsx`.
 
 ---
