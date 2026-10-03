@@ -28,8 +28,12 @@ export function LoadFailedState({
     );
 }
 
+// BACKLOG-460: banner hidden for now at Richard's request; flip to true to restore.
+const SHOW_STALE_DATA_BANNER = false;
+
 // Shown while previously loaded data stays on screen after a failed refresh.
 export function StaleDataBanner() {
+    if (!SHOW_STALE_DATA_BANNER) return null;
     return (
         <div
             role="status"

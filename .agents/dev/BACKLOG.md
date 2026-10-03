@@ -13020,3 +13020,29 @@ if (rl.limited) {
 **Files:** `src/app/page.tsx` (`fetchAllMatches`, `loadFailed` / `isStale` / `hasLoaded` state), `src/components/resilience/ReadPathStates.tsx`.
 
 ---
+
+### BACKLOG-460 — SHIPPED (code only, not live-verified): "Showing saved data — reconnecting automatically" Banner Hidden on `/` and `/live` at Richard's Request
+
+**Status:** SHIPPED — 2026-10-03, on branch `fix/backlog-460-hide-stale-banner` (off `feature/ui-redesign`), pushed for a preview, no PR yet. **Not live-verified yet** (see Evidence). **Numbering note:** 457 is reserved for the Flow C latency entry above and 458/459 were handed to the testing-strategy session, so this takes 460.
+**Priority:** Low — cosmetic hide, reversible in one line. The trade-off below is the real content.
+**Reported by:** Richard, with a screenshot of the banner, asking to hide it for now.
+
+**What it is:** `StaleDataBanner` in `src/components/resilience/ReadPathStates.tsx`, rendered by `src/app/page.tsx:613` and `src/app/live/page.tsx:82` as `isStale && !loadFailed`. `isStale` is set when a **background REST refetch fails after a successful first load** (`page.tsx:210`, `useResilientFetch.ts:56`) and cleared by the next successful refetch. So one transient failed poll (a network blip, a slow or failing API call) puts the banner up until the next poll succeeds. It is **not** driven by the WebSocket connection: `useWebSocket.tsx`'s own `isStale` is a different, unrelated flag used only for the match timer (`LiveMatchStatus.tsx`, `MatchDetailClient.tsx`).
+
+**What changed:** added `const SHOW_STALE_DATA_BANNER = false;` in `ReadPathStates.tsx` and an early `return null` in `StaleDataBanner`. Both callers are untouched, so the hide covers both pages and restoring it is flipping that one constant. `LoadFailedState` (the full-screen "Couldn't load this right now" retry state for a page that never loaded) is unchanged.
+
+**Trade-off, stated plainly:** CLAUDE.md's Real-time rule says "Viewer must see stale data clearly on failure, not a crash." This banner is the only stale-data signal on `/` and `/live`. With it hidden, a viewer whose refresh is failing sees old scores with **no indication** they are old. Hidden at Richard's request as a temporary product call, not a decision that the signal is unnecessary. The match detail page's timer-stale styling (`LiveMatchStatus`) is separate and still works.
+
+**Open questions (not investigated):**
+1. Why was it showing for Richard? One failed poll is enough; the trigger is unknown. Plausibly a flaky connection or a slow/failing API refresh. Possibly related to the slow public-page updates in `BACKLOG-457`, but nothing here shows that.
+2. Whether a quieter version (a small dot, or only after N consecutive failed refreshes) should replace the hide before this ships to real viewers. That would keep the "see stale data clearly" rule without the alarm-sized banner.
+
+**Evidence:**
+- Commit: tip of `fix/backlog-460-hide-stale-banner`
+- Verified by: `tsc --noEmit`, one run to a scratchpad file: 11 source errors, all in `src/db/` scripts, identical to the known baseline; zero in `ReadPathStates.tsx`, `page.tsx` or `live/page.tsx`. (The same run printed 79 more from stale generated `.next/types/*` left by an earlier local `next build` in this worktree; those are not source errors.)
+- Observed result: **not verified in a browser.** The banner only renders after a failed refresh, and this project's convention is no local dev, so confirming it needs a deployed preview of this change plus a forced failed refresh.
+- Pending items: push a branch for a preview; force a failed refetch (block the API call) and confirm the banner stays hidden on `/` and `/live` while `LoadFailedState` still appears on a never-loaded failure; decide on question 2.
+
+**Files:** `src/components/resilience/ReadPathStates.tsx`.
+
+---
