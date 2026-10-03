@@ -12969,7 +12969,7 @@ if (rl.limited) {
 - Commit: `fa3afe7` (merged into `feature/ui-redesign` as `f98674e`, PR #34)
 - Verified by: live test on the per-commit Vercel preview of `fa3afe7` (`brixsports-staging-ic1fq8nsa-brixsports-projects.vercel.app`, matched to the commit through the GitHub deployments API for that SHA, not the dev-bound stable alias), driving the real page with a `window.fetch` override that rejects only `/api/(basketball|football|other)/matches` (original fetch saved as `window.__origFetch` first). Run AFTER the PR was merged, at Richard's request, against the pre-merge commit's preview — not against a post-merge deployment.
 - Observed result: (1) normal load: real fixture list rendered, no "No matches found". (2) failure injected after a good load, waited past a 15s poll tick (6 injected rejections): list still on screen, `StaleDataBanner` ("Showing saved data") shown, no empty state, no `LoadFailedState`. (3) failure injected, app navigated to `/live` and back in-app after the 15s cache expired (cold remount; 12 injected rejections total): `LoadFailedState` "Couldn't load matches" + "Try again" rendered, **no** "No matches found", no stale banner, no spinner stuck (screenshot taken). (4) injection lifted, "Try again" clicked: real list returned, no failed/stale/empty state. Read-path only, no DB writes, so no DB read-back applies. Client-rendered DOM state is the evidence here, same standard as `BACKLOG-417`.
-- Pending items: not covered, unchanged from the ticket — homepage competitions fetch still fails silently; no automated test for these paths; a failure in any one of the three match endpoints is treated as a failed load (all-or-nothing, by design).
+- Pending items: not covered, unchanged from the ticket — homepage competitions fetch still fails silently; no automated test for these paths; a failure in any one of the three match endpoints is treated as a failed load (all-or-nothing, by design). **Now filed:** the competitions fetch + missing automated test as `BACKLOG-458` (NEXT, post-promotion, bundled with `BACKLOG-417`'s test gap), the all-or-nothing decision as `BACKLOG-459` (LATER, needs product-brainstorming first).
 
 **Found:** 2026-09-29, live-verification session for `BACKLOG-417`, at Richard's explicit request to also check homepage and `/matches/[id]` after the original 3-page scope was already confirmed. Full detail in `.agents/dev/BACKLOG.md`'s `BACKLOG-417` entry and `.agents/dev/RUNLOG.md`, 2026-09-29.
 
@@ -12984,5 +12984,32 @@ if (rl.limited) {
 **Not fixed here** — found during a manual verification pass focused on the Three Critical Flows, not a code-change session. Flow A itself is unaffected (the match correctly appears on the public page with the assignment intact server-side); this only affects the admin oversight dashboard's own display.
 **Suggested fix (not implemented):** either have `GET /api/matches` join `match_logger_assignments` and populate `assignedLoggers` per match (matching what the loggers page's `Match` interface already expects), or have the loggers page fetch coverage from a dedicated endpoint that already has this join (if one exists) instead of deriving it client-side from a field that was never wired up.
 **Files:** `src/app/admin/loggers/page.tsx`, `src/app/api/matches/route.ts` (read-only investigation, no changes made).
+
+---
+
+### BACKLOG-458 — OPEN (NEXT, post-promotion): Homepage Competitions Fetch Fails Silently, and No Automated Test Covers the Homepage Fetch-Failure Paths — Bundles With `BACKLOG-417`'s Identical Test Gap
+
+**Status:** OPEN — filed 2026-10-03 from the leftover items of `BACKLOG-455` (PR #34 `f98674e`, closed out in PR #35 `8d11775`). Sequenced by the Full-Platform Pre-Promotion Audit orchestrator into the post-promotion "NEXT" bucket; none blocking promotion. Not started.
+**Priority:** Low — two small read-path gaps, neither blocks a public flow.
+
+**Part 1 — silent competitions fetch.** `src/app/page.tsx`'s `fetchCompetitions` effect (`fetch('/api/competitions')`) has a `catch` that only does `console.error('Error fetching competitions:', err)`, and it neither checks `res.ok` nor surfaces anything on failure. `competitions` stays `[]`. The only consumer is the side menu (`competitions.length > 0 && competitions.map(...)` in the `Sheet` menu), so a failure just silently drops the per-competition shortcut links while the static "All Competitions" link remains. Impact is a degraded menu, not a false empty state like `BACKLOG-455`; separate from the competitions *page's* second-stage fetches already listed as open in `BACKLOG-417`. Fix shape: a minimal decision on whether the menu needs any visible signal at all (it may be fine to degrade quietly if "All Competitions" is always present — in which case this part can be closed as WONT FIX with that reason).
+
+**Part 2 — no automated test for the failure paths.** Nothing automated covers the homepage's three fetch-failure behaviours shipped in `BACKLOG-455`: failed initial load (`LoadFailedState` + Try again, no false "No matches found"), stale-after-good-load (`StaleDataBanner`, list kept), and retry recovery. `BACKLOG-417` lists the identical gap for `/live`, `/teams/[id]` and `/competitions/[id]` ("no automated test exists for any of this"). Both were only ever verified by hand with a `window.fetch` override (`BACKLOG-417` 2026-09-29, `BACKLOG-455` 2026-10-03). **Cross-reference:** close together, as one test-coverage unit covering all four pages, not four separate efforts. Needs a decision on harness (the existing `tests/smoke/critical-flows.ts` pattern vs a component-level test) before work starts.
+
+**Not fixed here** — filing only.
+**Files:** `src/app/page.tsx` (competitions effect), `src/hooks/useResilientFetch.ts` and `src/components/resilience/ReadPathStates.tsx` (the shared read-path pieces a test would exercise).
+
+---
+### BACKLOG-459 — OPEN (LATER, needs product decision): Homepage Treats a Failure in Any One of the Three Sport Endpoints as a Failed Load (All-or-Nothing) — Versus Partial Data Plus a "Some Matches Missing" Banner
+
+**Status:** OPEN — filed 2026-10-03 from a design trade-off made in `BACKLOG-455` (PR #34). Sequenced by the orchestrator into the post-promotion "LATER" bucket. **Do not implement before a product decision.** Not started.
+**Priority:** Low — a deliberate, documented trade-off, not a bug. Becomes real only if one sport endpoint is ever broken while the others work.
+
+**Current behaviour (as shipped in `BACKLOG-455`):** `fetchAllMatches` in `src/app/page.tsx` fetches `/api/basketball/matches`, `/api/football/matches` and `/api/other/matches` together and requires all three to return `response.ok` with `success === true` and a `matches` array. If any one fails: before anything has loaded the homepage shows `LoadFailedState`; after a good load it keeps the previous list and shows `StaleDataBanner`. A single permanently broken endpoint would therefore block the whole homepage (or freeze it on stale data) even though the other two sports are available — before `BACKLOG-455` that case silently rendered the working sports and dropped the broken one without telling the viewer, which is the false-completeness the fix was meant to remove.
+
+**The decision:** keep all-or-nothing, or render whichever sports loaded plus a visible "some matches may be missing" banner. All-or-nothing is honest but can reduce availability; partial data keeps the page useful but a viewer could miss that a sport is absent, and needs new copy, a per-sport stale/failed model, and a decision on what the live/Fixtures counts mean when a source is missing. This is a product/design call, not an engineering one. **Required first step: run `product-management:product-brainstorming`** (then a spec via `product-management:write-spec` if the answer is to change it) before any code. Do not implement ahead of that.
+
+**Not fixed here** — filing only.
+**Files:** `src/app/page.tsx` (`fetchAllMatches`, `loadFailed` / `isStale` / `hasLoaded` state), `src/components/resilience/ReadPathStates.tsx`.
 
 ---
