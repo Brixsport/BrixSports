@@ -12969,7 +12969,7 @@ if (rl.limited) {
 - Commit: `fa3afe7` (merged into `feature/ui-redesign` as `f98674e`, PR #34)
 - Verified by: live test on the per-commit Vercel preview of `fa3afe7` (`brixsports-staging-ic1fq8nsa-brixsports-projects.vercel.app`, matched to the commit through the GitHub deployments API for that SHA, not the dev-bound stable alias), driving the real page with a `window.fetch` override that rejects only `/api/(basketball|football|other)/matches` (original fetch saved as `window.__origFetch` first). Run AFTER the PR was merged, at Richard's request, against the pre-merge commit's preview — not against a post-merge deployment.
 - Observed result: (1) normal load: real fixture list rendered, no "No matches found". (2) failure injected after a good load, waited past a 15s poll tick (6 injected rejections): list still on screen, `StaleDataBanner` ("Showing saved data") shown, no empty state, no `LoadFailedState`. (3) failure injected, app navigated to `/live` and back in-app after the 15s cache expired (cold remount; 12 injected rejections total): `LoadFailedState` "Couldn't load matches" + "Try again" rendered, **no** "No matches found", no stale banner, no spinner stuck (screenshot taken). (4) injection lifted, "Try again" clicked: real list returned, no failed/stale/empty state. Read-path only, no DB writes, so no DB read-back applies. Client-rendered DOM state is the evidence here, same standard as `BACKLOG-417`.
-- Pending items: not covered, unchanged from the ticket — homepage competitions fetch still fails silently; no automated test for these paths; a failure in any one of the three match endpoints is treated as a failed load (all-or-nothing, by design). **Now filed:** the competitions fetch + missing automated test as `BACKLOG-457` (NEXT, post-promotion, bundled with `BACKLOG-417`'s test gap), the all-or-nothing decision as `BACKLOG-458` (LATER, needs product-brainstorming first).
+- Pending items: not covered, unchanged from the ticket — homepage competitions fetch still fails silently; no automated test for these paths; a failure in any one of the three match endpoints is treated as a failed load (all-or-nothing, by design). **Now filed:** the competitions fetch + missing automated test as `BACKLOG-458` (NEXT, post-promotion, bundled with `BACKLOG-417`'s test gap), the all-or-nothing decision as `BACKLOG-459` (LATER, needs product-brainstorming first).
 
 **Found:** 2026-09-29, live-verification session for `BACKLOG-417`, at Richard's explicit request to also check homepage and `/matches/[id]` after the original 3-page scope was already confirmed. Full detail in `.agents/dev/BACKLOG.md`'s `BACKLOG-417` entry and `.agents/dev/RUNLOG.md`, 2026-09-29.
 
@@ -12987,7 +12987,7 @@ if (rl.limited) {
 
 ---
 
-### BACKLOG-457 — OPEN (NEXT, post-promotion): Homepage Competitions Fetch Fails Silently, and No Automated Test Covers the Homepage Fetch-Failure Paths — Bundles With `BACKLOG-417`'s Identical Test Gap
+### BACKLOG-458 — OPEN (NEXT, post-promotion): Homepage Competitions Fetch Fails Silently, and No Automated Test Covers the Homepage Fetch-Failure Paths — Bundles With `BACKLOG-417`'s Identical Test Gap
 
 **Status:** OPEN — filed 2026-10-03 from the leftover items of `BACKLOG-455` (PR #34 `f98674e`, closed out in PR #35 `8d11775`). Sequenced by the Full-Platform Pre-Promotion Audit orchestrator into the post-promotion "NEXT" bucket; none blocking promotion. Not started.
 **Priority:** Low — two small read-path gaps, neither blocks a public flow.
@@ -13000,7 +13000,7 @@ if (rl.limited) {
 **Files:** `src/app/page.tsx` (competitions effect), `src/hooks/useResilientFetch.ts` and `src/components/resilience/ReadPathStates.tsx` (the shared read-path pieces a test would exercise).
 
 ---
-### BACKLOG-458 — OPEN (LATER, needs product decision): Homepage Treats a Failure in Any One of the Three Sport Endpoints as a Failed Load (All-or-Nothing) — Versus Partial Data Plus a "Some Matches Missing" Banner
+### BACKLOG-459 — OPEN (LATER, needs product decision): Homepage Treats a Failure in Any One of the Three Sport Endpoints as a Failed Load (All-or-Nothing) — Versus Partial Data Plus a "Some Matches Missing" Banner
 
 **Status:** OPEN — filed 2026-10-03 from a design trade-off made in `BACKLOG-455` (PR #34). Sequenced by the orchestrator into the post-promotion "LATER" bucket. **Do not implement before a product decision.** Not started.
 **Priority:** Low — a deliberate, documented trade-off, not a bug. Becomes real only if one sport endpoint is ever broken while the others work.
