@@ -6006,3 +6006,17 @@ Also caught and corrected mid-session: a peer session flagged `BACKLOG-423`'s nu
 3. Only after that's confirmed clean: re-run `npx eslint src/app/api/matches/route.ts` to confirm `eslint-config-next@15.5.24` actually resolved the circular-JSON crash, and flip `BACKLOG-415` to `RESOLVED`.
 4. Separately, `BACKLOG-416` and `BACKLOG-441` (both merged into `feature/ui-redesign` via PR #32) still need a real deployed-preview live-verification pass — unrelated to the disk-space incident, just still outstanding.
 5. Tell all three peer sessions the all-clear once 1-2 are done, mirroring the heads-up they were already given.
+
+---
+
+### Session 84 — 2026-10-01 to 2026-10-03
+
+**Focus:** pick up session 83's handoff -- apply BACKLOG-415's `eslint-config-next` pin now that disk space recovered, then live-verify BACKLOG-416 and BACKLOG-441 (both merged via PR #32) against a deployed preview.
+
+**BACKLOG-415 -> RESOLVED:** re-checked `Get-PSDrive C` (~24.9 GB free), confirmed no corruption signal from the two active peer sessions (narrow evidence only), took a `tsc --noEmit` baseline (20 errors), then ran the full `npm install` in `fix/pre-promo-followups`. Completed cleanly (147 packages changed, 13 min). The tool call was cut off by the harness before returning, so the outcome was verified from installed versions rather than assumed before deciding not to re-run it. `eslint-config-next`/`next` both 15.5.24; `npx eslint src/app/api/matches/route.ts` exits 0; `tsc` 11 errors, zero new. Peers told all-clear. Commit `b8f9bef` (lockfile + BACKLOG closure). Lockfile also moved transitive deps (`@typescript-eslint/*` 8.46.2 -> 8.71.0 etc.) -- expected fallout of the pin, not individually reviewed. Lint is confirmed working on one file only; full `npm run lint` and `next build` not run, and the original `react-hooks/exhaustive-deps` follow-up (TeamDetailClient / competitions/[id] `online` listeners) is still open.
+
+**BACKLOG-416 and 441 -> RESOLVED (live-verified):** the right target was NOT the stable alias (`brixsports-staging.vercel.app` serves `dev`, which lacks PR #32) but the `feature/ui-redesign` head's per-commit preview, found via `gh api repos/Brixsport/BrixSports/deployments?sha=...`. That preview sits behind Vercel deployment protection (API paths return the Vercel login page as HTTP 200 HTML -- a 200 is not proof of a working API; check content-type). Richard supplied the bypass string in chat. Gotchas worth keeping: a second Vercel project in the deployment list (`brixs2`, different team) is unrelated -- use the `brixsports-staging` one; PowerShell 5.1's `ConvertFrom-Json` collapses top-level JSON arrays and produced a false "target not in results" before Node parsing showed it was; the Browser pane reported a 0x0 viewport and the homepage date picker (local state, no URL param) needed a click loop that waits for each re-render. Control runs on the pre-fix alias confirmed both before-states. Full evidence blocks in `BACKLOG.md`.
+
+**Not done / still open:** logger dashboard UI consuming the `loggerId` filter not driven; 441 not checked on mobile/dark mode; ~144 no-logo teams still need real logos (content task); BACKLOG-415's exhaustive-deps lint follow-up; these commits live on `fix/pre-promo-followups` and still need a PR into `feature/ui-redesign` to reach it.
+
+**Next session -- first task:** open a PR for `fix/pre-promo-followups` -> `feature/ui-redesign` (use `-R Brixsport/BrixSports`), or pick up the exhaustive-deps lint pass.

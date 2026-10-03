@@ -11742,10 +11742,14 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 ### BACKLOG-416 — Smoke Test Warns That the Just-Assigned Match Isn't Returned by `GET /api/matches?loggerId=`
 
-**Status:** SHIPPED — 2026-09-28, root-caused and fixed in code, not yet live-verified against a deployed build (see Pending items).
+**Status:** RESOLVED — 2026-10-03, root-caused and fixed in code (2026-09-28, PR #32, squash `504bc22` on `feature/ui-redesign`), live-verified over HTTP against the deployed preview (see Evidence).
 **Root cause, confirmed by reading source (not the earlier "possibly related to BACKLOG-398, unchecked" guess):** `matches.loggerId` (`src/db/schema.ts`) is the pre-multi-logger legacy column -- `src/db/migrations/add-multi-logger-support.ts`'s own comment says it's "kept for backward compatibility" only. The real, current assignment flow, `POST /api/matches/[id]/assign-logger`, only ever writes to `matchLoggerAssignments` (the many-to-many table multi-logger support added) -- it never touches `matches.loggerId`. Meanwhile `GET /api/matches?loggerId=` (`src/app/api/matches/route.ts`) filtered exclusively on `eq(matches.loggerId, loggerId)`, the legacy column. So any match assigned through the current, real flow was structurally invisible to this filter -- not a flaky test assumption, a real gap between the filter and the actual data model.
 **Fix:** `src/app/api/matches/route.ts`'s `loggerId` filter now matches `matches.loggerId` (legacy, kept for any row that still has it set) OR `matches.id IN (SELECT matchId FROM matchLoggerAssignments WHERE loggerId = ? AND status = 'active')` (the current model). Additive only -- no existing behavior removed, `tsc --noEmit` shows zero new errors from this change (see `.agents/dev/RUNLOG.md` 2026-09-28).
-**Pending items:** not live-verified -- per this project's own convention (no local dev; verify against a real Vercel preview), this needs a deployed build of this fix before it can be exercised over HTTP. Re-run `tests/smoke/critical-flows.ts`'s Flow A check (or an equivalent direct `assign-logger` + `GET ?loggerId=` DB-and-HTTP check) against this branch's per-commit preview once pushed/deployed, and confirm the WARN no longer fires, before flipping to RESOLVED.
+**Evidence (DB-confirmed + API-confirmed, 2026-10-03):**
+- Target: `feature/ui-redesign` head `60d4572` (includes PR #32), per-commit preview `brixsports-staging-6f1q4wn5y-brixsports-projects.vercel.app` (staging DB). Control: stable alias `brixsports-staging.vercel.app`, which serves `dev` and does not have this fix.
+- DB read-back (`dev/q416.mjs`, read-only): logger `logger_1784832869756` has exactly 7 active `match_logger_assignments` rows, every one with `matches.logger_id IS NULL` (so the pre-fix filter structurally cannot see any of them).
+- `GET /api/matches?loggerId=logger_1784832869756&limit=100` on the preview: 200, 7 matches, the exact 7 DB match ids, including the previously-invisible `oJ9NOaQ1JX2aaLT2lW3uR`. Same request on the pre-fix control: 200, 0 matches.
+- **Not done:** did not re-run `tests/smoke/critical-flows.ts`'s Flow A check itself -- used the equivalent direct DB-vs-HTTP comparison above against an existing real logger instead (no new assignment created). Only one logger tested; the legacy-`loggerId`-still-set branch of the OR is not exercised live (staging has only 1 such row). The logger dashboard UI that consumes this filter was not driven.
 
 ---
 
@@ -12821,9 +12825,9 @@ if (rl.limited) {
 
 ---
 
-### BACKLOG-441 — SHIPPED: Homepage Fixtures List Rendered the Raw Team `shortName` As Text Instead of an Avatar When a Team Had No Logo ("Bowen M", "Venite M")
+### BACKLOG-441 — RESOLVED: Homepage Fixtures List Rendered the Raw Team `shortName` As Text Instead of an Avatar When a Team Had No Logo ("Bowen M", "Venite M")
 
-**Status:** SHIPPED — 2026-09-28, fixed in code (`tsc --noEmit` clean, zero new errors), not yet live-verified against a deployed build.
+**Status:** RESOLVED — 2026-10-03. Fixed in code 2026-09-28 (`tsc --noEmit` clean, zero new errors; PR #32, squash `504bc22` on `feature/ui-redesign`), live-verified in a browser against the deployed preview 2026-10-03 (see Evidence).
 **Reported by:** Richard, screenshot of the public fixtures list (NPUGA football, Thu Feb 26) -- teams with a logo (Afe Babalola, Redeemers, Adeleke) rendered fine; teams without one showed raw text ("Bowen M", "Venite M") in the logo slot instead of any kind of avatar/placeholder.
 **Root cause, confirmed by reading source:** two separate things compound into what looked like one bug:
 1. `src/db/seed-npuga-special-edition.ts`'s NPUGA seed deliberately creates a team per university **per gender** for football (`name: "${university} Football (${genderLabel})"`, `shortName: "${shortUni} ${genderLabel}"`, `logo: ''` -- comment says "To be uploaded later"). So `shortName` values like "Bowen M" are real, intentional data, not a bug -- the logos for these were never uploaded yet.
@@ -12831,9 +12835,10 @@ if (rl.limited) {
 **Fix:** replaced both the home- and away-team fallback blocks in `src/app/page.tsx` with the shared `<TeamLogo logo={...} name={...} size="xs" />` (added an `xs: 24px` size to `team-logo.tsx`'s existing `sm`/`md`/`lg` presets to match this list's existing 24px row height exactly, rather than changing the visual density). Removed the now-fully-unused local `isValidImagePath` helper and the now-unused `next/image` import from `page.tsx` as a direct consequence (dead code after the swap, not separate scope).
 **Decision on the broader "how to handle no-logo teams" question:** use the existing shared initials-avatar pattern everywhere, consistently, rather than inventing a second design -- it already exists, is already used correctly in at least one other surface, and looks intentional (colored badge + initials) instead of a raw-text overflow. Did not attempt to source/upload real logos for the ~144 teams still missing one (mostly the NPUGA football roster, per `dev/team-logo-audit.mjs`'s read-only count) -- that's a content/asset-sourcing task, not a code fix, and out of scope for this pass.
 **Evidence:**
-- Commit: pending (this session)
+- Commit: PR #32, squash `504bc22` on `feature/ui-redesign`.
 - Verified by: `tsc --noEmit` -- identical 35-error baseline before and after, all pre-existing `src/db/`/`src/app/api/squads` errors, zero new.
-- Pending items: not live-verified in a browser -- needs a deployed preview to visually confirm the "Bowen M"-style teams now render a colored initials badge instead of raw text, per this project's own "no local dev, verify on Vercel preview" convention.
+- **UI-confirmed (DOM-level), 2026-10-03:** preview `brixsports-staging-6f1q4wn5y-brixsports-projects.vercel.app` (`feature/ui-redesign` head `60d4572`), homepage stepped to Thu Feb 26, 2026 (NPUGA football QFs `npuga-fb-qf1`/`qf2`; blank-logo teams confirmed in the DB beforehand via `dev/q441.mjs`). "Bowen University Football (M)" and "Venite University Football (M)" rows render 24px initials avatars "BU"/"VU" with no `<img>`; "Afe Babalola" (has a logo) still renders its `<img>`. The strings "Bowen M"/"Venite M" appear nowhere on the page. Control, stable alias `brixsports-staging.vercel.app` (`dev`, pre-fix): same date shows raw "Bowen M" and "Venite M" text and no "BU".
+- **Not done:** DOM/text-level check only -- the Browser pane reported a 0x0 viewport, so no screenshot or pixel/layout measurement; mobile layout, dark mode, and `competitions/[id]` (already used `TeamLogo` before this fix) not re-checked. Real logos for the ~144 no-logo teams remain a separate content task, unchanged.
 **Files:** `src/app/page.tsx`, `src/lib/utils/team-logo.tsx`, `dev/team-logo-audit.mjs` (new, read-only, gitignored).
 
 ---
