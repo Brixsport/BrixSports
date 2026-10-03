@@ -120,6 +120,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Initial auth check
     useEffect(() => {
+        // BACKLOG-371: pick up the one-time token handoff from the Google OAuth
+        // callback (src/app/api/auth/callback/google/route.ts) -- a server
+        // redirect can set the httpOnly cookie but can't touch localStorage,
+        // and several client paths (FavoritesContext, push-service) read
+        // localStorage directly and never even attempt a request without it.
+        // Stripped from the URL immediately so it doesn't linger in history.
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const oauthToken = params.get('oauth_token');
+            if (oauthToken) {
+                localStorage.setItem('authToken', oauthToken);
+                params.delete('oauth_token');
+                const newSearch = params.toString();
+                window.history.replaceState(
+                    {},
+                    '',
+                    window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash
+                );
+            }
+        }
         checkAuth();
     }, [checkAuth]);
 

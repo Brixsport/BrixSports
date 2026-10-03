@@ -97,6 +97,26 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
   **What this does NOT prove**: true cross-environment isolation — that a staging broadcast can no longer reach a prod viewer, or vice versa. That would need a real prod-origin viewer connected at the same time as a staging test event, which wasn't attempted (no live prod match running, not worth the risk of testing against real prod traffic for a same-session verification). The room-prefix logic is symmetric and was code-reviewed carefully (prod defaults were preserved throughout), but isolation itself remains logically-verified, not live-verified.
   **Status:** BUG-074 stays OPEN — this closes the specific live-broadcast leakage risk demonstrated by BUG-108's testing this session, not the bug's full original scope. **Correction, same session — `JWT_SECRET` sharing was NOT part of the remaining risk**: JWT secrets were already rotated and separated per environment back on 2026-07-01 (see line 290 above, and `SYSTEM_CRITICALITY_MAP.md`'s own "JWT secret rotation" row) — an error introduced into this entry's session-44 text by not cross-checking against that already-recorded correction. What genuinely remains open: the originally-recommended real fix (a second, independent Railway service for staging) hasn't been built, and cross-environment isolation itself is unverified live — flag for whenever a real dual-environment test is safe to run (e.g. a scheduled prod match with a simultaneous staging smoke test).
 
+  **Stale-claim flag, 2026-09-25:** a peer session's offline-first-architecture handoff referred to "WS isolation" (its item 20) as "not started." That's inaccurate against this entry's own history — session 44 already shipped and deployed the room-prefixing workaround (`ea9454f`), which this entry's own text originally called "not recommended" but later built anyway once it became clear the full second-Railway-service fix wasn't happening soon. What's actually still true and unstarted: the second, independent Railway service (the originally-recommended real fix), and live cross-environment isolation verification. Not re-litigating the peer's framing — just recording the discrepancy so the next session doesn't treat "not started" as license to skip reading this entry's real history.
+
+- **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** SHIPPED — session 38D. Two root causes fixed: (1) `isLiveStatus` check in polling effect (line 163) and toast effect (line 181) used `=== 'LIVE' || === 'HALF_TIME'` — now uses module-level `LIVE_STATES.has()` covering all 7 live-ish period values; (2) `sharedSocket?.disconnect()` called at `connect_error` attempt 5, permanently killing Socket.IO reconnect loop — removed; added `reconnect_failed` listener with 30 s manual retry loop (`socket.connect()`). `LIVE_STATES` moved to module scope so effects and render share the same constant. Pending: Railway-down staging verify (amber toast, polling active, reconnect recovery). **NOTIF-12 (accepted risk):** offline notification queuing — notifications fired during a WS/server outage are lost; no retry queue exists. Accepted at MVP with a handful of viewers. Production-level concern to revisit at scale.
+
+**Assessed, not live-tested, session 47C:** attempted to verify this as part of a pass through the stale-SHIPPED pile. No safe way found to force a real WS disconnect from the Browser tool without either (a) actually taking down the shared Railway instance (affects staging *and* prod simultaneously, per `BUG-074` — a real cost for a test, not a free one), or (b) the app exposing its socket instance globally for scripted manipulation, which it correctly does not (module-scoped, not attached to `window` — confirmed via direct JS inspection). Left as `SHIPPED`, not force-tested tonight; the actual "Railway down" scenario remains the only real way to verify this end-to-end.
+
+- ~~**BUG-081**~~ _(CRITICAL — Security)_: `GET /api/users/follows` had no auth. **Status:** RESOLVED — `1c7a6f3`, 2026-06-29.
+**Evidence:**
+- Commit: `1c7a6f3`
+- Verified by: live staging test — unauthenticated → 403; admin → 200 (bypass correct); logger session → 401 (logger not a users-table identity, correct rejection)
+- Observed result: auth gate enforced correctly across all three caller types
+- Pending items: none
+
+- ~~**BUG-082**~~ _(CRITICAL — Security)_: `POST`, `PATCH`, `DELETE /api/users/follows` had no auth. **Status:** RESOLVED — `1c7a6f3`, 2026-06-29.
+**Evidence:**
+- Commit: `1c7a6f3`
+- Verified by: same live staging test as BUG-081 — gate pattern confirmed on all four handlers
+- Observed result: write handlers protected by same guard
+- Pending items: none
+
 - ~~**BUG-083**~~ _(HIGH — Logger UX / Display)_: `LiveMatchTimeline` switch cases used underscore format (`YELLOW_CARD`) but event type arrives as `'Yellow Card'` (title case with space) — `toUpperCase()` alone never matched. Fix: `.replace(/\s+/g, '_')` added to all three switch normalization calls; `PENALTY_SAVED`/`PENALTY_MISSED` case labels updated to match. `1c7a6f3` (38C) patched `LiveMatchTimeline.tsx` only — `MatchTimeline.tsx` was missed. `efb0081` (38D) completed the fix in `MatchTimeline.tsx` (lines 31, 65, 95) and added `RED_CARD_(SECOND_YELLOW)` case to both switches and the cards filter. **Status:** SHIPPED — `efb0081`, 2026-06-30. **Still pending: visual verify on staging.** **Attempted, session 53 continuation, 2026-08-20:** the Aug 7 `STAKEHOLDER_STATUS_REPORT_2026-08-07.md` claims "directly re-confirmed today on the real public match page" — that claim was never reflected back into this entry, so the two docs disagreed. Checked directly on `brixsports-staging.vercel.app` this session: every match currently carrying a real Yellow/Red Card event on staging is a goals-only BUSA League backfill row with `minute: -1` on every event (confirmed via `busa-match-22`, `busa-sf-joga-hammers`, `busa-match-final-2026`) — `LiveMatchTimeline.tsx`'s own unrelated "unknown-minute" gate (line 375) correctly hides the whole timeline for these, by design, so the icon/color fix can't actually be observed on any match presently in the DB. Every other match is still `UPCOMING` with zero events. **Cannot be visually confirmed against real staging data right now — would require standing up a throwaway admin-authenticated test match with a real minute-stamped card event, not a 5-minute check.** The Aug 7 report's claim is unverifiable after the fact and should not be treated as confirmation. Parity gap remaining: `LiveMatchTimeline.tsx` has no `RED_CARD_(SECOND_YELLOW)` case (lines 63, 98, 248) — needs own scoped directive.
 
 - **BUG-085** _(HIGH — Notifications)_: `EventDrivenNotifier` dedup key is broken. Key is constructed as `` `${matchId}_${event.id}_${Date.now()}` `` — the `Date.now()` suffix makes every key unique, so `sentNotifications.has(notificationKey)` never matches. Every notification fires unconditionally with no dedup protection, even on retries. Fix: remove `_${Date.now()}` from key construction. Key should be `${matchId}_${event.id}` (or include `eventType` for period events). Filed: 2026-06-29. **Status:** OPEN
@@ -1748,6 +1768,8 @@ Two auth systems coexist: custom JWT (active) and `next-auth@4.24.13` (vestigial
 #### Required Changes
 
 Audit all imports of `next-auth` across the codebase. If confirmed unused, remove the package and any associated config files (`[...nextauth]` route if it exists).
+
+**Priority re-flag, 2026-09-25:** a peer session's offline-first-architecture handoff (see `BACKLOG-427`) re-raised this as "auth-critical" alongside an RBAC refactor, filed as an OPEN decision record needing a real session — a higher bar than this entry's original `Priority: Low` (filed 2026-06-05, framed as dead-weight package removal). Not independently re-assessed this session; flagging the discrepancy rather than changing the priority unilaterally. Also see `SYSTEM_AUDIT.md` §15 item 7, which independently confirmed this dual-auth-system gap predates the 2026-06-08 handoff.
 
 ---
 
@@ -13081,5 +13103,159 @@ Save leg (logger click → POST start ≈ 0.5s; POST start → 201 ≈ 1.0–1.3
 - Pending items: re-check the homepage and the never-loaded retry screen after promotion; decide on question 2 (a quieter indicator, or restore after N consecutive failed refreshes).
 
 **Files:** `src/components/resilience/ReadPathStates.tsx`.
+
+---
+
+### BACKLOG-461 — Onboarding Avatar + Google OAuth: Two P0 Fixes, Cherry-Picked Directly to `dev`
+
+> **Renumbered 2026-10-03 (dev -> feature/ui-redesign sync):** filed as `BACKLOG-322` on `dev`, but `BACKLOG-322` on `feature/ui-redesign` is the unrelated Match Lineups Figma redesign (established first, referenced by its own code and entries). Any `BACKLOG-322` reference in dev-origin material (journal, RUNLOG, known-issues, commit messages) that concerns onboarding avatar upload or Google OAuth means THIS entry.
+
+**Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, pending live deploy verification against `brixsports-staging.vercel.app` (the domain actually registered with Google).
+**Priority:** High — both closed real, reachable gaps in the fan sign-up path.
+
+**Origin:** built and iterated on `feature/ui-redesign` (worktree `competitions-consolidation`, commits `86a7f9c`/`5ba2bc4`/`f6f92f6`) as part of the Fan Account Blueprint spec's two P0 items, then cherry-picked directly onto `dev` per Richard's explicit instruction — Google's registered OAuth redirect URIs only cover `dev`'s actual deployed domains (`brixsports.com`, `brixs2.vercel.app`, `brixsports-staging.vercel.app`, `localhost:3000`), not the `feature/ui-redesign` branch-preview URL, and that preview's Vercel Preview environment doesn't carry `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` at all (confirmed live: the route correctly redirected to `?error=google_config_missing`, its own designed failure path, not a bug) -- so this pair could never be verified end-to-end without reaching `dev`.
+
+**Fix 1 — Onboarding avatar upload (`OnboardingModal.tsx`):** was `PATCH`ing a raw base64 `FileReader` data URL straight into `users.avatar` -- no upload ever happened. Now uploads the real file to Cloudinary via the same unsigned-preset pattern `mobile-image-upload.tsx` already uses, and saves the resulting `secure_url`. 5MB client-side size guard added. A failed upload keeps the fan on the photo step with a clear error rather than silently advancing.
+
+**Fix 2 — Google OAuth (`/api/auth/google`, new `/api/auth/callback/google`):** the callback route did not exist anywhere in the codebase -- "Continue with Google" (a real, prominent button on both `/login` and `/signup`) sent a fan through Google's real consent screen and then 404'd on the way back. Built the callback: exchanges the code, fetches the profile, finds-or-creates a `users` row by lowercased email (same matching rule `register/route.ts` already uses, no new `googleId` column needed since `users.password` is already nullable), issues a real session via the existing `generateToken()`, sets the same `authToken` cookie `register`/`login` already use. Two further real bugs surfaced and fixed during live verification against the real Google Cloud OAuth client (Brixsport V2 project, console.cloud.google.com), not assumed:
+1. The callback was first built at `/api/auth/google/callback` -- Google's actual registered redirect URIs all use `/api/auth/callback/google` instead. Google requires an exact match; the original path would have failed every real attempt with `redirect_uri_mismatch`. Moved the route.
+2. A live click-through still errored after that fix. Decoded Google's own `redirect_uri_mismatch` payload precisely (`atob()` on the `authError` param in-browser) rather than guessing from the screen: the actual `redirect_uri` sent was `.../vercel.app//api/auth/google/callback` -- a genuine double slash from `env.appUrl` (`NEXT_PUBLIC_APP_URL`) carrying a trailing slash on this environment. Extracted both routes' URI construction into one shared `src/lib/google-oauth.ts` (`getGoogleRedirectUri()`) that strips the trailing slash, so there's one place building this string instead of two that can silently drift apart.
+
+Also moved `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` off raw `process.env` into `env.ts` (`CLAUDE.md`'s process.env rule), and wired the two new failure states (`google_auth_denied`, `google_auth_failed`) into `/login`'s existing toast handler alongside the pre-existing `google_config_missing` case, so none of the three fail silently.
+
+**Deliberately not done:** wiring a first-time Google signup into the onboarding modal -- that modal only mounts from `/signup`'s own client-side state, and a server-redirect OAuth flow can't trigger it the same way. Real product decision (does Google signup get onboarding too?) for its own follow-up.
+
+**Evidence:**
+- `tsc --noEmit`: clean on `dev` after the cherry-pick (checked against this repo's own baseline, not `feature/ui-redesign`'s).
+- Redirect-URI path confirmed directly against the real Google Cloud Console client configuration (screenshot).
+- Trailing-slash bug confirmed via a real click-through against the `feature/ui-redesign` branch preview and a precise in-browser decode of Google's own error payload.
+- Missing-credentials behavior on the branch-preview environment confirmed via a direct `curl` against the route with the Vercel deployment-protection bypass token, not guessed from the UI.
+- Pending: once this reaches the real `brixsports-staging.vercel.app` deploy, confirm a full click-through (consent → callback → session) for both a brand-new Google email and an existing password-based account signing in via Google for the first time.
+
+**Found:** session `competitions-consolidation`, 2026-09-09, as `Fan Account Blueprint` spec requirements P0-1/P0-2.
+
+---
+
+### BACKLOG-371 — Google OAuth Sign-In Left the Session Half-Working: Cookie Auth Fine, localStorage Never Populated
+
+**Status:** RESOLVED — 2026-09-15, `tsc --noEmit` clean, live-verified end to end including the real Google
+consent screen (Richard: "the google auth worked, i have logged it").
+**Priority:** HIGH — this is `BACKLOG-365` item 5 (the human OAuth click-through), and it found a real bug: Richard signed in via Google to an account that already existed (password-based), and the session didn't fully take even though the redirect completed with no visible error.
+
+**Investigated, ruled out first:** a direct DB read on both staging and prod found no new Google-sourced row (no `password: NULL` account) — but that's expected, not a bug, once Richard clarified this was a sign-in to an **existing** email, not a new signup (the `existing[0]` branch in the callback correctly reuses the row, no insert needed). Also ruled out: the two-Vercel-project setup (`brixsports-staging` and a second `brixs2` project) as a red herring — confirmed Richard tested on `brixsports-staging.vercel.app` specifically.
+
+**Root cause, two real bugs, same underlying issue:**
+1. `src/app/api/auth/callback/google/route.ts` is a pure server-side redirect (`NextResponse.redirect`) — it can set the httpOnly `authToken` cookie fine, but a server redirect has **no way to write to `localStorage`**, a browser-only API. The regular `/api/auth/login` and `/api/auth/register` routes don't have this problem because they return JSON to a client-side `fetch()` call, which explicitly does `localStorage.setItem('authToken', data.token)` (`AuthContext.tsx`). Several client paths read `localStorage.getItem('authToken')` **directly**, not through `AuthContext`, and treat its absence as "definitely logged out" — most notably `FavoritesContext.tsx`'s `fetchFavorites()`, which returns early into guest/local-only behavior on `!token`, never even attempting a cookie-based request. Applies identically whether the email matched an existing account or created a new one — both paths converge on the same `generateToken()` → redirect step.
+2. **Found live-testing fix #1:** `src/app/api/auth/me/route.ts` — the exact endpoint `AuthContext.checkAuth()`'s documented cookie-fails-try-localStorage fallback retries with an `Authorization: Bearer` header — only ever read the `authToken` **cookie**, reimplementing its own auth check independently of `verifyAuth()` (the shared helper every other route uses, which already checks both correctly). This made the client's own fallback path silently dead for any case where the cookie doesn't independently succeed, not just OAuth.
+
+**Fix:**
+1. The callback route now appends the token as a one-time `?oauth_token=` query param on its redirect destination. `AuthContext.tsx`'s initial mount effect checks for it, writes it to `localStorage`, and immediately strips it from the URL via `history.replaceState` (before `checkAuth()` runs) so it doesn't linger in browser history. Fixes the gap at its root for every current and future `localStorage.getItem('authToken')` consumer at once, rather than patching each call site individually.
+2. `/api/auth/me` now checks the `Authorization` header first, cookie as fallback, matching `verifyAuth()`'s order.
+
+**Deliberately not done:** auditing/rewriting every individual `localStorage.getItem('authToken')` call site to also accept cookie-only auth (e.g., `FavoritesContext` attempting a `credentials: 'include'` fetch even with no local token) — the one-time handoff fixes the actual reported symptom for the OAuth path specifically, with less surface area changed; a broader "don't require localStorage at all, cookie is enough" refactor is a separate, larger architectural question not asked for here.
+
+**Evidence:**
+- Commits: `e37d5ef` (handoff), `af072d8` (`/api/auth/me` header fix), cherry-picked directly onto `dev` from `feature/ui-redesign` per Google's registered OAuth redirect URIs requiring `brixsports-staging.vercel.app` specifically, which tracks `dev`
+- Verified by: `tsc --noEmit` clean against all 3 touched files; DB read-back on both staging and prod confirmed no new Google row was needed (existing-account case) before concluding the real gap was elsewhere, not guessed; scripted end-to-end test on the deployed preview using a real signed JWT delivered exclusively via `?oauth_token=` (no cookie) confirmed the full round trip (401→removed pre-fix, 200→`Auth SUCCESS` post-fix); **then a real human click-through by Richard against `brixsports-staging.vercel.app` with a real Google account, confirming the actual consent-screen leg this environment cannot script**
+- Observed result: Richard confirmed the sign-in worked and the session/account was properly logged in — the originally reported symptom is resolved
+- Pending items: none
+**Files:** `src/app/api/auth/callback/google/route.ts`, `src/contexts/AuthContext.tsx`, `src/app/api/auth/me/route.ts`.
+
+---
+
+### BACKLOG-423 — Initial-Load-Failure Handling Unverified on 4 Public Detail Pages
+
+**Status:** OPEN — filed from peer handoff, not yet independently verified
+**Priority:** HIGH — flagged as blocking dev promotion in the peer session's own NOW classification; touches Flow C (public livescore) and its adjacent detail pages
+
+**Problem:** `/matches/[id]`, `/live`, `/teams/[id]`, and `/competitions/[id]` need their initial-load failure path verified under a real network-offline condition, not just a code read — confirming the viewer sees a clear stale/error state rather than a silent blank or frozen page, per `CLAUDE.md`'s Real-time rule ("Viewer must see stale data clearly on failure, not a crash"). Originally relayed as provisional `BACKLOG-417` in a peer "Brixpsorts match page" session's handoff, 2026-09-25; renumbered here since 417 was never a real filed entry — this checkout's highest entry at handoff time was `BACKLOG-371`.
+
+**Needed:** real network-offline emulation (not a code-only review) against each of the 4 pages.
+
+**Status update, 2026-09-25 (same day, later):** IN PROGRESS — owned by the "Brixpsorts match page" peer session, actively testing this live via real DevTools-offline hard-reloads (not code-only). Do not route this entry's remaining scope elsewhere or file competing findings under this number — that session has the most context and will log its own writeup here once it has a root cause or hits a hard wall. Interim signal from that session, not yet a full writeup: `/live` confirmed passing; `/matches/[id]` confirmed genuinely broken (crashes to the generic app error boundary on a cold offline reload instead of its own resilient state, root cause not yet found — two obvious candidate fixes, `BACKLOG-403`/`BACKLOG-394`, were checked and are NOT the cause, both already present in the tested commit); `/teams/[id]` and `/competitions/[id]` not yet tested.
+
+**Numbering note:** this entry was briefly relayed to the owning peer session as "BACKLOG-372" before this renumbering to 423 — if you're that session, use 423, not 372. 372 is already a real, unrelated entry on `feature/ui-redesign`'s own `BACKLOG.md` ("Team Page 'View All' Link 404s").
+
+**Found:** peer session ("Brixpsorts match page"), handoff received 2026-09-25.
+
+---
+
+### BACKLOG-424 — sw-user.js Dead Background Sync Handlers: Delete vs. Build Real Queue
+
+**Status:** OPEN — decision needed before work starts
+**Priority:** LOW — well-defined, not blocking
+
+**Problem:** `sw-user.js` has Background Sync event handlers with zero callers anywhere in the codebase. Decision needed: delete the dead code, or build a real offline-queue behind it. Originally relayed as provisional `BACKLOG-414`; renumbered here (see `BACKLOG-423`'s note on why 414-417 were never real entries).
+
+**Branch already exists:** `fix/backlog-414-dead-sync-handlers`, off `feature/ui-redesign` tip `fdb5071`, no commits yet. The branch name references the peer session's provisional number (414), not this entry's real number (373) — cosmetic mismatch only, no commits at risk. Rename the branch if it bothers a future reader, or just note the mapping when work starts.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-425 — ESLint Config Crashes
+
+**Status:** OPEN — logged only, cause not yet investigated
+**Priority:** LOW per peer handoff, unconfirmed — no repro steps, error text, or affected command were passed along
+
+**Problem:** Peer handoff reports "eslint config crashes" with no further detail. Originally relayed as provisional `BACKLOG-415`; renumbered here (see `BACKLOG-423`).
+
+**Needed:** first session to touch this must reproduce and document the actual crash before scoping a fix — this entry currently has no evidence beyond a one-line mention.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-426 — Smoke Test's loggerId Filter Warning
+
+**Status:** OPEN — logged only, cause not yet investigated
+**Priority:** LOW per peer handoff, unconfirmed
+
+**Problem:** Peer handoff reports the Phase 0 smoke test (`TESTING_STRATEGY_2026-09-18.md`) emits a `loggerId` filter warning, with no further detail passed along. Originally relayed as provisional `BACKLOG-416`; renumbered here (see `BACKLOG-423`).
+
+**Needed:** locate the actual warning text and the smoke test file, reproduce, then scope.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-427 — RBAC Refactor Beyond the Current 5-Role Hierarchy
+
+**Status:** OPEN — auth-critical decision record, no design session run yet
+**Priority:** HIGH — auth-critical per peer handoff; `CLAUDE.md`'s Explicit Out of Scope caps roles at Super Admin → Competition Admin → Team Manager → Logger → Viewer, so any refactor here is a scope decision first, not just an implementation task
+
+**Problem:** Peer handoff item 16 flags an RBAC refactor as needed, filed as an OPEN decision record requiring a real session. No further detail on what's driving the need (a specific gap? a new role tier?) was passed along.
+
+**Related:** `BACKLOG-009` (next-auth dual-system removal) is the adjacent auth-critical item from the same handoff (peer's item 17) — see the priority-re-flag note added to that entry.
+
+**Source note:** the peer handoff refers to "items 16/17/18/20/25/26" from a numbered list this session could not locate in `.agents/` (checked `SYSTEM_AUDIT.md`, `BACKSCOPE.md`, `BACKLOG_INDEX_2026-07-30.md`, `SYSTEM_ARCHITECTURE.md` — none contain a matching 1-26 list). It likely lives in a doc on the peer's own branch/worktree not yet merged to `dev`. Treat the item numbers as relayed, not independently verified against a primary source.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-428 — Silent-Failure Gaps: Competitions Page Second-Stage Fetches + Team Page Season-Selector Refetch
+
+**Status:** OPEN
+**Priority:** MEDIUM — known gap, not yet reported by a real user
+
+**Problem:** Peer handoff identifies two known silent-failure call sites: the competitions page's second-stage fetches (standings/matches/brackets/leaders) and the team page's season-selector refetch both fail silently on error — no distinguishable error state reaches the viewer, the same failure class `CLAUDE.md`'s Error Handling rules require surfacing ("All errors must surface in both UI and server logs — no silent failures").
+
+**Fix (not built):** surface a visible error/stale state rather than a silent blank result at both call sites.
+
+**Found:** peer session, handoff received 2026-09-25.
+
+---
+
+### BACKLOG-429 — Housekeeping: tsc-to-Zero Initiative + Nav Type-Scale Inconsistency
+
+**Status:** OPEN — not started, low urgency
+**Priority:** LOW — peer handoff explicitly places both under NEXT/LATER, not blocking
+
+**Problem:** Two small, unrelated housekeeping items from the peer handoff, bundled here since neither is large enough to justify its own entry: (1) item 18, a "tsc-to-zero" initiative — no dedicated baseline-reduction effort is currently tracked in `BACKLOG.md` beyond the routine zero-new-errors check every commit already does; the baseline itself has floated between the high-teens and high-40s across sessions depending on which `.next/types` cache artifacts are present at check time (see recent entries' own `tsc --noEmit` evidence lines). (2) items 25/26, "mostly resolved/N/A," with one small nav type-scale inconsistency still open — no detail on which nav or what the inconsistency is was passed along.
+
+**Needed:** before starting either, re-locate the peer's own source numbering doc (see `BACKLOG-427`'s source note) for the actual detail behind items 18/25/26 — this entry currently only has the one-line summary relayed in the handoff.
+
+**Found:** peer session, handoff received 2026-09-25.
 
 ---
