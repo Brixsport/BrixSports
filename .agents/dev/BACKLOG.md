@@ -12854,6 +12854,8 @@ if (rl.limited) {
 
 **Found:** pre-promotion `/engineering-team-review`, testing-strategy pass, 2026-09-29.
 
+> **Correction 2026-10-04 (see BACKLOG-468 item 5):** the premise above ('no test asserts this') is stale — a BACKLOG-397 regression test exists at `tests/integration/matches-route.test.ts:31` (POSTs all banned fields, asserts none persist). The real gap is that integration tests are not run in CI; this entry closes when 468 item 3 lands. Original text above left intact.
+
 ---
 
 ### BACKLOG-450 — OPEN: `OfflineIndicator` and `OfflineBadge` Render Simultaneously, Redundant UI
@@ -13259,3 +13261,252 @@ consent screen (Richard: "the google auth worked, i have logged it").
 **Found:** peer session, handoff received 2026-09-25.
 
 ---
+
+
+---
+
+> **Pre-promotion fresh-lens review, 2026-10-04 (BACKLOG-462 through BACKLOG-474).** Nine read-only reviewers ran against `feature/ui-redesign` @ `47ab2a7` (merged with `dev`): security/PII sweep, scale/cost, logger+real-time resilience, ops/env/CI readiness, system-design+architecture, tech-debt+testing-strategy, click-path (shared state), static UX/a11y, product strategy/IA/copy. Every claim below is **code-read** unless it says DB-confirmed; none was rendered or executed. Two things were additionally verified directly: (a) the six worst public routes are byte-identical on `origin/main` and `origin/feature/ui-redesign`, so they are **live on prod today** and not introduced by the promotion; (b) the committed VAPID private key equals prod's real key. Gate verdict: the `feature/ui-redesign` -> `dev` PR is clear (staging is login-gated); `dev` -> `main` is NOT clear until 462/463/464/465/468/469 are fixed or explicitly accepted, and 466 before the first real match on prod.
+
+### BACKLOG-462 — OPEN: Public Routes With Unauthenticated Writes and Personal-Data Leaks (Live On Prod Today)
+
+**Status:** OPEN — found 2026-10-04, security/PII sweep. Not fixed.
+**Priority:** CRITICAL — blocks `dev` -> `main`; items 1-6 exist on prod's current code (`origin/main` file hashes identical), so a hotfix off `main` (`hotfix/*`, 2 reviews, merge commit) is warranted independent of the promotion.
+
+**Problem (every finding, own line):**
+1. `POST /api/competitions/[id]/stats` (`route.ts:113-199`) has no `getAuthUser`; `goals`/`assists`/`redCards` are added to existing values and negative numbers are accepted — anyone can inflate or erase the public scorer table.
+2. `POST /api/notifications/match-event` (`route.ts:19-70`) has no auth; anyone can POST an arbitrary `homeTeamId`/`playerName`/`homeScore`/`eventType:'GOAL'` and push to every follower of those teams. Its own callers (`admin/match-lineups/[id]/route.ts:231`, `matches/[id]/lineup/publish/route.ts:117`) send no credential. Fix: call `sendMatchEventNotification` directly from those callers and delete the HTTP route, else require the `x-api-key`.
+3. `competitions/[id]/eligible-players/route.ts:71-94` and `matches/[id]/eligible-players/route.ts:87,123-141` return the raw `players` row (`email`, `profileId`) plus `memberships`/`organizationAffiliations` to anonymous callers; the competitions variant runs an unbounded `select().from(players)` when no `teamId` is given. Fix: `toPublicPlayer(p, false)` or an explicit DTO, plus `.limit()`.
+4. `players/compare/route.ts:245-255` spreads `...player1`/`...player2` (email, profileId); `competitions/[id]/stats/route.ts:96` returns the raw `player` row. Fix: `toPublicPlayer`.
+5. Routes that trust a client-supplied `userId` with no session check (same class as the known `/api/users/[id]` leak): `users/activity` (all four verbs, read/write/wipe any user's history), `reminders` (GET also returns the whole `matches` row; DELETE by `reminderId` has no owner check), `user/bookmarks` + `user/bookmarks/[newsId]`, `news/[id]/like`, `news/[id]/comments` (POST takes `userName` from the body — anyone can post as "Admin"), `news/[id]/comments/[commentId]`, `news/[id]/comments/[commentId]/like`. Ownership checks compare against the client-supplied `userId`, so they are decorative. Fix: `getAuthUser` first, `resolveEffectiveUserId(user)`, ignore client `userId`; or add the dead social routes to `backscopedFeatures.ts`.
+6. `matches/[id]/events/route.ts:59-62`: logger strip is `authUser ? events : strip`, and registration is open, so any self-registered Fan sees `loggerId`/`loggerName`. Also public `/api/matches/[id]` (`route.ts:129-139`) events still return `loggerName` (an admin user id for admin-posted events). Fix: gate on `role === 'admin' || 'logger'`; strip `loggerName` publicly.
+7. `user/xi/route.ts:41-47` public gallery returns raw rows incl. `userId`/`anonymousId` (valid ids for item 5); POST (`:65`) has no rate limit or size cap on `players`/`name`.
+8. Email lookup oracle: `search/route.ts:123` and `playerMatchesQuery` in `search/route.ts` + `players/route.ts:33,40` match the email in the query though it is stripped from output — searching `jdoe@gmail.com` confirms that player exists. Fix: include email/memberships/affiliations match terms only when `isAdmin`.
+9. `cloudinary/sign/route.ts:18-46`: any session (incl. a Fan) can sign arbitrary `paramsToSign` — uploads to any folder/preset on the org Cloudinary account. Fix: staff roles only; pin `folder` and `upload_preset` server-side.
+10. `notifications/subscribe` POST (`:25-117`): anonymous callers can create unlimited rows (no rate limit/size check); the endpoint upsert reassigns the row's `userId` (`:94-105`); anonymous DELETE needs only a `deviceId` (`:189`).
+11. Unbounded list queries: `users/favorites` (`:35-49`), `users/follows` (`:40-55`), `reminders` GET, `bookmarks` GET, `news/.../replies` (`:15`) — same class as BACKLOG-444.
+12. `next.config.ts`: `images.remotePatterns` allows `**` over http and https (`/_next/image` is an open image proxy); CSP has `'unsafe-inline' 'unsafe-eval'` and `connect-src https: wss:`.
+13. LOW: `internal/logger-assignment-check/route.ts:21` compares the API key with `!==`; password-reset tokens stored in plaintext (`forgot-password/route.ts:61`) and reset emails logged (451 class); `polls/*` + `predictions/*` rely only on the `middleware.ts` 404 guard (single layer; `polls/vote`/`polls/comments` take `userId` from the client); `competitions/register` `players.length` unbounded.
+14. LOW (pre-existing, already known): public `/api/users/[id]` GET unauthenticated returns the full user row (email, role) — enumerable by id.
+
+**Not read by the reviewer** (next pass should cover): `fixtures`, `brackets`, `news` list/detail, `ads`, `livestreams`, `staff-comms`, `basketball/*`, `teams` list/detail, `other/matches`, `events/sync`, `fpl/*`, `auth/login`, `auth/refresh`, `auth/google` beyond the known OAuth findings.
+**Checked and clean:** `users/[id]/tours`, `users/[id]/preferences`, `users/favorites` (auth), `users/follows` (auth), `notifications` GET/PATCH/history/diagnose/send, `chat/send`, `standings` POST, `teams/[id]/form` writes, `match-settings` POST, `squads` writes, `matches/[id]/loggers`, `matches/[id]/assigned-loggers`, `loggers/*`, `players/search`, `football/players`, `players/[id]/stats` GET, `players/[id]/performance`, `players/stats/leaders`, `transfers` GET, `auth/register`, `auth/forgot-password`, `competitions/register` GET, middleware matcher vs handler auth.
+**Fix shape:** one `hotfix/public-route-auth` branch off `main` for items 1-6 + 9 (+ profile logout, BACKLOG-464 item 1); items 7, 8, 10-14 follow on `feature/ui-redesign`. Each fix needs a DB- or response-level read-back, not a status code.
+
+---
+
+### BACKLOG-463 — OPEN: Production VAPID Private Key Committed To The Repository
+
+**Status:** OPEN — found 2026-10-04 (ops review), confirmed same day. Not fixed.
+**Priority:** CRITICAL — live on prod; do before anything else.
+
+**Problem:** `DEPLOYMENT_CHECKLIST.md:38-39` holds literal `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` values, present on `origin/main`, `origin/dev` and `origin/feature/ui-redesign`. A local equality check (booleans only, nothing printed) confirmed the committed private key **equals the key in `.env.production`** and the public key matches too; staging uses a different pair. Anyone with repo read access can send web push as brixsports.com. The key is also permanently in git history.
+**Fix (needs the owner — env vars/secrets are not set by the agent):** (1) generate a new pair with `npx web-push generate-vapid-keys`; (2) set `NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` in the prod Vercel project and redeploy; (3) accept that existing prod `push_subscriptions` (4 rows at 2026-10-04) are invalidated and resubscribe; (4) replace the literals in `DEPLOYMENT_CHECKLIST.md` with placeholders and commit; (5) treat the old key as burned regardless of history rewriting. Cheapest right now: prod has only 4 subscriptions.
+
+---
+
+### BACKLOG-464 — OPEN: Auth and Session Hygiene (Logout, Stale Token, Favourites, OAuth Handoff)
+
+**Status:** OPEN — found 2026-10-04 (click-path audit, security sweep, architecture review). Not fixed.
+**Priority:** HIGH — items 1-2 are live on prod (`profile/page.tsx` token logic identical on `main`/`dev`); blocks `dev` -> `main` as hygiene.
+
+**Problem (every finding, own line):**
+1. **Profile "Log Out" does not log out** (`profile/page.tsx:342-347`): it only removes `localStorage` `authToken`/`user` and navigates to `/login`; it never calls `/api/auth/logout` or `useAuth().logout()`. `AuthContext.checkAuth` then succeeds via the cookie, so on a shared device the next person has a live 7-day session (`/login` has no already-authenticated redirect). Verified in source; identical on `main`/`dev`. Fix: call `useAuth().logout()`.
+2. **Stale localStorage token vs rotated cookie** (`AuthContext.tsx:158-166`, `lib/auth.ts:47-53`): `refreshSession` discards `body.token` and rotates only the cookie, while `verifyAuth` prefers the Bearer header with no cookie fallback. Callers sending the stale token as Bearer: `FavoritesContext`, `profile/page.tsx`, `Coachmark.tsx:56`, socket auth (`useWebSocket.tsx:102`), logger offline queue (`FootballLogger.tsx:836`). A tab open >15 min then returning after day 7 shows "logged in" but every Bearer call 401s. Fix: on refresh `localStorage.setItem('authToken', data.token)`; `checkAuth` re-syncs localStorage when the cookie works.
+3. `FavoritesContext` treats "has a localStorage token" as "logged in" (`:69,133,162,187,216`); `toggleTeam`/`togglePlayer`/`toggleCompetition` never check `res.ok` and never roll back (`setTeamNotifications` does — inconsistent); `MatchDetailClient.tsx:136-140` says "Team Followed - You'll get alerts" before the write is confirmed (false for anonymous viewers). Violates the "UI shows success before server confirms" anti-pattern.
+4. Favourite toggle while the list fetch is in flight: an older `fetchFavorites` GET landing after an optimistic add overwrites it (star reverts though the POST succeeded).
+5. Logout leaves the previous user's state: `FavoritesContext` is not cleared in the no-token branch, `brixsport_fav_*` keys persist for the next anonymous user, `GlobalNotificationListener` keeps firing, push subscription stays bound to the old `userId`, socket keeps connect-time token.
+6. `?oauth_token=<JWT>` redirect (`callback/google/route.ts:144`): a 7-day session JWT lands in browser history, referrers, Vercel logs and Sentry breadcrumbs/replays until `AuthContext.tsx:131` strips it. Fix: cookie-only with a `/me` hydrate, or a ~60s single-use code via POST; minimum: `Referrer-Policy: no-referrer` and scrub in Sentry `beforeSend`/`beforeBreadcrumb` (see 469).
+7. Google OAuth callback validates no `state` parameter (login CSRF) and does not check `verified_email` before matching an existing account (`route.ts:90-109`; could sign in as an existing admin email).
+8. `/api/auth/me` (`:24,27,41,60`) `console.log`s the user email/id on every call (451 class) and turns DB failures into 401 (hides outages from `AuthContext`'s BUG-217 logic).
+9. Profile edits diverge from `AuthContext` (avatar/cover/bio PATCH update only the page's local user; header stays stale); failed avatar upload keeps the optimistic image; bio Save ignores `res.ok` and always toasts success (`:383-392`); a transient `/me` failure bounces to `/login` and removes the wrong key `"token"` (`:226`); avatars stored as base64 in the DB ship in every `/me` response.
+10. `lib/auth.ts` resolves a token by guessing across `loggers` then `users` then `loggers` (BUG-239); `resolveEffectiveUserId` papers over the split by email; two token shapes (`{id}` loggers vs `{userId}` admins); three token storage places; role checks repeated per handler; middleware has three carve-outs. Fix direction: one claim shape, cookie only, one `requireRole()` helper.
+11. `OnboardingModal.tsx:198-237` uploads avatars to Cloudinary from the browser with an unsigned preset (controls live only in the Cloudinary console — verify allowed formats/size/folder); `handleSaveProfile` ignores `res.ok` (`:230-237`) and advances to step 4 even if the save failed.
+12. Smaller: homepage `MATCH_STATUS_CHANGE` handler toasts "Match Started!" for any status change incl. FINISHED/HALF_TIME (`page.tsx:244-253`); `login/page.tsx:93` can store `"undefined"` as the token (AuthContext guards it); `push-service.ts:257` logs the full subscription request incl. `p256dh`/`auth`; `checkAuth` has no staleness guard (a slow `/me` begun before login can `setUser(null)` and delete the new token, `AuthContext.tsx:96-101`).
+
+**Found sound** (traced, no finding): OAuth `?oauth_token` strip on mount incl. StrictMode double-run; `checkAuth`/`refreshSession` leave state unchanged on 5xx/network (BUG-217); push subscribe checks body `userId` against the session (`subscribe/route.ts:56-61`).
+**Overlaps:** 451 (auth log PII), 462 (public routes), 469 (Sentry scrub).
+
+---
+
+### BACKLOG-465 — OPEN: Public Read Load — No Cache, No Rate Limit, No Indexes On The Hottest Routes
+
+**Status:** OPEN — found 2026-10-04 (scale review + architecture review); index absence DB-confirmed same day. Not fixed.
+**Priority:** HIGH — blocks `dev` -> `main` for any real match day (verdict: RISKY at ~500 concurrent viewers); does not block `dev`.
+
+**Problem (every finding, own line):**
+1. No `Cache-Control`/`s-maxage` on `GET /api/{football,basketball,other}/matches` and `/api/matches` (only `users/[id]`, `health`, `llms` set cache headers). Estimated 100 req/s at 1,500 viewers; ~6,000 req/min and ~10-12k Turso queries/min for 500 homepage viewers; ~36/min with `s-maxage=5, stale-while-revalidate=10` (safe for the <5s rule because WS push, not the poll, carries latency).
+2. The three sport routes (`football/matches/route.ts:29`, `basketball/matches/route.ts:29`, `other/matches/route.ts:30`) never call `checkRateLimit`; `/api/matches` (120/min) and `/api/matches/[id]` (600/min) do — the hottest path is the only unprotected one; cost is uncapped.
+3. **No secondary indexes on `matches` or `match_events`** — DB-confirmed 2026-10-04 on both DBs (only unique constraints elsewhere; prod 106 matches / 5,113 events, staging 117 / 5,406). Every `/matches/[id]` poll scans `match_events` by `match_id` (`matches/[id]/route.ts:111`, `events/route.ts:53`), the dedup `NOT EXISTS` (`events/route.ts:326`) scans it per logger POST, sport routes full-scan `matches` by `sport`/`status`, `api/matches/route.ts:142-144` does a separate `count(*)` plus `ORDER BY created_at DESC` filesort. Turso bills rows read, so cost grows with table size. Proposed additive indexes: `matches(sport,status)`, `matches(created_at)`, `match_events(match_id,minute,second)`, `match_events(match_id,player_id,type,created_at)`. Staging first, read-only diff, then prod (RUNLOG).
+4. Rate limiter (`lib/rate-limit.ts`) is per-instance in-memory (under-counts across warm instances); key is method+path+XFF[0]+max+window (`:113`); absent XFF collapses everyone into the `unknown` bucket (`:36`). At a 5s `/live` poll ~10 viewers behind one campus NAT would 429 — raise the limit or cache before dropping the poll interval. `rate-limit.ts` also loads Upstash packages at module scope even when in-memory.
+5. `football/matches` has `.limit(100)` and no `orderBy`; football matches 65 staging / 55 prod — headroom ~35-45; past 100 a new/live match can be missing from the homepage. Fix: `desc(startTime)` ordering or `status=LIVE` from the homepage.
+6. Sport routes select the `stats` JSON column for up to 100 rows per poll and `matches/[id]` selects the full `matches` row (lineups blob) — wasted egress; serve stats on the detail route only.
+7. Logger POST awaits `updatePlayerStats` before the 201 (`events/route.ts:495,500`; `getCurrentSeason`, competitions select, upsert = 3+ sequential round trips, ~0.3-0.6s on the logger's critical path); also whole-row `select()` of `matches` at `:136,144`. Fix: move stats into `after()`.
+8. Heavy static imports on the logger POST (Sentry, notifications service, rosterService) hurt cold start.
+9. Turso HTTP transaction (`events/route.ts:290`) costs ~4 round trips holding the single write lock; two loggers on one match serialize; `db/index.ts:11` silently falls back to `file:./local.db` when `TURSO_CONNECTION_URL` is unset instead of failing fast.
+10. Failure domain: Turso is the single point of failure for everything incl. auth; nothing sits in front of it (WS down degrades gracefully; Cloudinary only affects images).
+11. Push fan-out: `sendMatchEventNotification` runs inside the serverless function; send-loop bound and `maxDuration` unverified (no `maxDuration` under `src/app/api`).
+**Ordering (ADR-1, see 467):** edge cache first (one line per route), then indexes, then rate limits; do NOT lower `/live` polling to 5s before the cache lands.
+
+---
+
+### BACKLOG-466 — OPEN: Logger Offline Queue Integrity (Duplicates, False "Synced", No Drain On Reopen)
+
+**Status:** OPEN — found 2026-10-04 (resilience review + product review + click-path). Code-read only. Not fixed.
+**Priority:** HIGH — fix before the first real match on prod; no new regression for `dev`. BACKLOG-107 (online drain fallback) stays OPEN: it is only partly implemented.
+
+**Problem (every finding, own line):**
+1. A replayed event can double-count: the POST succeeds server-side but the response is lost, the client queues it as failed (`FootballLogger.tsx:834`), the SW replays it minutes later (`sw-admin.js:316`); the 10s dedup window is measured from server `created_at` (`events/route.ts:320`) so it is not caught. The client sends no id (server `nanoid()` at `route.ts:190`); player-less events (corner, offside) have no dedup at all (`:351`). Fix: client temp event id as idempotency key, server `INSERT OR IGNORE` on `(matchId, clientId)`.
+2. SW drain hides failures: `sw-admin.js:322-325` handles only `ok`; a 401/403/409 (match FINISHED, `route.ts:154`)/500 leaves the row queued forever, yet the SW still posts `SYNC_COMPLETE` (`:331`) and the logger zeroes its count (`FootballLogger.tsx:185-186`, `BasketballLogger.tsx:217`) — UI says synced while the event is unsaved. Fix: `SYNC_FAILED` + remaining count; clear the badge only when the queue is empty; 4xx rows to a visible "failed" list.
+3. No drain on mount after a tab kill / iOS eviction: `triggerDrain` is wired only to `online`/`visibilitychange` (`FootballLogger.tsx:216-217`); `queuedOfflineCount` starts 0 (`:174`) and is never read from IndexedDB (`pendingMatchEvents`), so no pending badge; the reloaded list comes from the DB (`:507`) so queued events are missing and may be re-logged by hand, then duplicated by the later drain.
+4. A non-OK live POST is neither queued nor rolled back (`FootballLogger.tsx:821-833`: `alert()` only; the event stays in local state and the local score keeps the goal, relayed to viewers via `match:status:changed` (`:658-667`, `ws-server/index.js:394`) until the next poll). Transient 502/503/504 or a 401 without refresh-and-retry loses the event. Fix: queue on 5xx/408/429; on 401 call `/api/auth/refresh` and retry once; mark failed in the state manager. Basketball uses a banner (`BasketballLogger.tsx:966`).
+5. Dedup key (type, minute, player — `route.ts:325-327`) ignores `made`/`value`/`detail`: two free throws, or a miss then a make, by one player in the same minute within 10s -> second returns 200 "Duplicate ignored", client marks it saved (`BasketballLogger.tsx:968-980`), score undercounts.
+6. Concurrent drains (`online`, `visibilitychange`, Android Background Sync, the page's own POST) can each start `syncMatchEvents` (`sw-admin.js:295`) with no lock and read the same rows; player-less events insert twice. Fix: module-level in-flight promise guard.
+7. Queue failure is silent: `queueOfflineEvent` throwing only `console.error`s (`FootballLogger.tsx:861-863`); native `alert()` for 401/403/5xx/token-expiring (`:826-848`); no per-event saving/saved/failed state; 8px "Queued"/"Offline" chips (`:1618-1636`) are illegible in sunlight. Violates "every logger action needs clear saved/saving/failed feedback".
+8. Queueing requires >=30 minutes of JWT life (`:846`); the JWT is frozen into the queued row, so a 401 on replay sticks.
+9. Clock: runs on the device clock (`match-state-manager.ts:264-296`), server stores the client-sent minute; restore after a tab kill resets to the integer-minute checkpoint throttled to 15s (`FootballLogger.tsx:468,635`) so seconds restart at 0 (up to 59s behind); the checkpoint PATCH is not queued (`:637-641`).
+10. `CLAUDE.md` Live Event Readiness line "Double event submission is prevented or deduplicated — RESOLVED" is overstated: the stress test covered concurrent identical POSTs within seconds, not the lost-response replay path (item 1). Reopen as partial.
+11. Two loggers on one match: atomic dedup holds (`route.ts:321-329`); the ws-server single-writer rule covers the clock only (`ws-server/index.js:222`).
+**Found sound:** FootballLogger periodic sync only adds external events and dedups; the persist catch refuses to queue near token expiry and surfaces it; token-expiry 401 on a logger POST alerts rather than silently dropping; `event:log` over the socket is ack-only server-side (viewers see events only after the DB write).
+**Related:** 107, 151, 433/436, 442, 468 (no tests for `queue-manager.ts`/`sync-manager.ts`).
+
+---
+
+### BACKLOG-467 — OPEN: Real-Time Architecture and Flow C (Polling, Single WS Instance, Silent Broadcast Failure)
+
+**Status:** OPEN — found 2026-10-04 (architecture, ops, scale, resilience, click-path reviews) building on BACKLOG-457. Not fixed.
+**Priority:** HIGH — blocks `dev` -> `main` for a real match day; does not block `dev`.
+
+**Problem (every finding, own line):**
+1. Flow C measured 6 of 9 samples over 5s (BACKLOG-457). Code-derived cause: `/` and `/live` poll every 15s with no WebSocket (`page.tsx:236`, `live/page.tsx:31`); only `/matches/[id]` has Socket.IO (+ 10s poll when down, 25s reconcile when up). Hidden-tab throttling inflates poll pages.
+2. **ADR-1 (Proposed): one real-time design.** Options: A drop the poll to 5s (rejected — triples DB load); B edge cache `s-maxage=3, stale-while-revalidate=10` (borderline vs <5s); C WebSocket-primary on every public page via a global `live` room, snapshot fetch on connect/reconnect, poll only as fallback; D SSE or managed pub/sub (Ably/Pusher; more cost). Decision: B now (see 465), then C reusing `src/lib/socket.ts` (`broadcastScoreUpdate`/`broadcastMatchEvent`, needs no change), `useWebSocket.tsx`, and the existing env-scoped global emit (`io.to(env)`, `ws-server/index.js` `/broadcast`); add a thin `useLiveScores()` hook; fallback poll 15-30s; resubscribe + refetch on reconnect. Consequence: viewers hold sockets, making finding 3 real — plan a Redis adapter or sticky replica past a few thousand sockets.
+3. Single Railway WS instance with in-memory state (`matchTimes`, `clockAuthority`, `assignmentCache` Maps), no adapter; serves staging and prod from one process separated only by room prefix; `pingTimeout` 20s; a restart drops every viewer and the clock authority, invisibly (broadcast is fire-and-forget).
+4. `lib/socket.ts:47-50` returns silently when `WS_SERVER_URL`/`WS_API_KEY` is unset; `:67-74` has no `AbortSignal` timeout and never checks `res.ok` (a Railway 401/502 is treated as success, no log, no Sentry); a hung host holds the Vercel invocation open via `after()` until `maxDuration` (3 broadcasts per goal in parallel). A misconfigured/rotated key leaves live scores stale and nothing alerts. Fix: `AbortSignal.timeout(3000)`, check `res.ok`, `console.error` + `Sentry.captureMessage`.
+5. The WS server has no monitoring: `ws-server/index.js:47` serves `/health` but nothing polls it; `/api/admin/infrastructure` checks the DB and API endpoints, not WS; `/api/health` is liveness-only (no `select 1`, no WS probe). The WS server or Turso can be down on match day with every check green.
+6. WS server hardening: `/broadcast` and `/infrastructure/endpoint` API-key checks use plain `!==`; CORS `*` on the HTTP surface; sockets accept unauthenticated `chat:message`, `poll:vote`, `prediction:submit`; `APP_URLS` hardcoded in `ws-server`. `ws-server/package.json` uses `^` ranges and its own lockfile (needs its own dependabot bump for `engine.io`/`ws`/`socket.io-parser`).
+7. Stale poll overwrites newer socket state (`MatchDetailClient.tsx:491-496`): a poll starting at 1-0 whose response lands after a socket `match:score:updated`/`event:new` (2-0) replaces the whole match and builds events only from `data.events` — score visibly regresses and the socket-added event is dropped until the next poll (10-25s; the 25s reconcile runs even while WS is connected). Fix: request-sequence counter / discard polls older than the last socket message / union-merge events.
+8. Low confidence (needs a runtime check): `MatchDetailClient.tsx:256` sets `status: matchTime.period || prev.status` on every timer tick and never clears `time`; if ticks continue after `match:updated` FINISHED/HALF_TIME the status could flip back.
+9. "Live updates paused" is a one-time toast (`MatchDetailClient.tsx:356`); silent poll failures change nothing (`:513-522`); no persistent stale indicator. `/` and `/live` show no stale banner by design (BACKLOG-460, owner's decision) — consequence recorded, not argued.
+10. Failure-domain table: Railway WS down = graceful (writes succeed, `/matches/[id]` loses live updates, loggers lose the clock relay); Cloudinary down = images only; Turso down = hard-fail everything incl. auth; Vercel down = total outage with only the logger offline queue as mitigation.
+**Related:** 457 (evidence + measurements), 465, 434 (WS smoke test still deferred).
+
+---
+
+### BACKLOG-468 — OPEN: CI and Test Gates Do Not Protect `main`
+
+**Status:** OPEN — found 2026-10-04 (tech-debt/testing review + ops review). Not fixed.
+**Priority:** HIGH — blocks `dev` -> `main`; the `dev` PR gate is decorative until item 1 is fixed.
+
+**Problem (every finding, own line):**
+1. `.github/workflows/smoke-test.yml` runs `tests/smoke/critical-flows.ts` against `vars.STAGING_BASE_URL`, which is the `dev`-bound alias (BACKLOG-402), not the PR's own deployment: a PR into `dev` gates on code already in `dev`, and a PR into `main` is not exercised either. Fix: run against the per-commit deployment URL.
+2. CI runs no `tsc`, lint, build, or unit/integration tests (workflows: `pr-guard.yml` branch naming only, `smoke-test.yml`, the reminder cron); `next.config.ts:18-23` sets `ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true`, so Vercel ships type errors (baseline 11 pre-existing `src/db/*` errors; recent journal baselines were 18-47). tsconfig is `strict: true` but `include: **/*.ts` also type-checks root clutter (`check_comps.ts` etc.). 563 `any`/`@ts-*` hits across 149 `src` files (critical-flow files: `MatchOverlay.tsx` 45, `FootballLogger.tsx` 29, `api/matches/[id]/route.ts` 24, `events/route.ts` 15, `MatchDetailClient.tsx` 12, `page.tsx` 9) — tsc is silent about untyped `any`.
+3. `tests/integration/*` and the smoke tests run only by hand (`npm run test:integration`); `tests/smoke/dual-logger-race.test.ts` and `realtime-broadcast.test.ts` are named `.test.ts` but vitest only includes `tests/unit` and `tests/integration` (run via tsx only) — the 433/436 and 441/452 race guards can regress silently. The 7 unit-test files are DB-free but cover pure logic only (MatchStateManager, multi-logger-merge, competition-draw, team-logo); nothing touches the events route, dedup or auth.
+4. No tests for `src/lib/offline/queue-manager.ts` / `sync-manager.ts` — Flow B on mobile has zero automated coverage (see 466).
+5. **Correction to BACKLOG-449:** the BACKLOG-397 mass-assignment regression test already exists (`tests/integration/matches-route.test.ts:31`; also a BACKLOG-153 FINISHED-match 409 test in `events-route.test.ts`). The real gap is that it is not enforced in CI (item 3). 449 is updated accordingly (see its correction note) and is closed by fixing 3.
+6. Flow C is checked only at API level (deliberate per 402); homepage failure states (455/417) have no test. A rendered-page check would need Playwright.
+7. Test safety on shared staging is mostly good (all three smoke tests and `tests/integration/helpers.ts` create synthetic teams/players and delete them — closes 437 for the event path). Residual: `cleanup()` in `critical-flows.ts` returns early when `matchId` is null and a cancelled run (SIGTERM) skips cleanup, leaving a `LIVE` match on the public staging livescore (confirmed example: staging match `FPwxd_sliJR0kS__GWa66`, TEAM A vs TEAM B, competition 'Gba', LIVE 11-9, owner unknown); no assertion that the DB host is staging before the first write (a mispointed `.env.local` would write throwaway rows to prod); tests use real admin/logger accounts (`users WHERE role='admin' LIMIT 1`, `loggers LIMIT 1`); the PATCH route (`matches/[id]/route.ts:902`) and events route (`:445`) call `sendMatchEventNotification`, so only synthetic teams are safe.
+8. `reminder-checker.yml:15` calls `/api/notifications/match-reminders`, which does not exist (404 every 5 minutes; `curl -s` without `--fail` hides it); `vercel.json` has no `crons`; `reminders/check/route.ts:53` falls back to `'dev-cron-secret'` when `CRON_SECRET` is unset (anyone can trigger the endpoint; impact bounded by `notificationSent`). Also confirm whether `secrets.APP_URL` hits staging or prod.
+9. No post-deploy prod read-only smoke exists, so prod schema drift or env gaps can never fail CI.
+**Fixture-isolation rule (adopt):** writes only against ids starting `synthetic-`/`smoke-`/`test-`; assert the DB host is on a staging allowlist before the first write; never pick real teams/players; create in the test and delete in `finally`/`afterAll`; a scheduled reaper deletes those prefixes older than 1h; CI uses a dedicated test admin+logger pair.
+**Minimum pre-prod regression suite (10):** (1) unit MatchStateManager transitions incl. FINISHED->FIRST_HALF rejected (exists); (2) unit offline-queue enqueue/retry/drain with mocked fetch (new); (3) unit event dedup key (new); (4) API POST /api/matches mass-assignment ignored (exists); (5) API two simultaneous assign-logger calls -> 1 row (new, 441/452); (6) API 10-way concurrent identical event POST -> 1 row, score 1 (new, 433/436); (7) API unauth/wrong-logger/FINISHED event POSTs -> 401/403/409 (partly exists); (8) API public GET match + list expose no CLAUDE.md banned fields (partly exists); (9) E2E create->assign->log goal->public score within 5s (exists); (10) E2E Playwright homepage with `/api/matches` 500 and with an empty list shows a failure state (new, 455/417). Tests 5-8 against a throwaway Turso branch, not shared staging.
+**CI gate recommendation:** PRs to `dev`: `tsc --noEmit` (0 new errors) + unit + `next lint` + `next build` + the branch guard. PRs to `main`: additionally integration 4-8 on an ephemeral DB, smoke against the per-commit URL, post-deploy dual-logger + realtime smoke; flip `ignoreBuildErrors` to false after the 11 errors are cleared.
+
+---
+
+### BACKLOG-469 — OPEN: Ops, Env, Deploy and Migration Readiness For Production
+
+**Status:** OPEN — found 2026-10-04 (ops review + architecture review + direct DB comparison). Not fixed.
+**Priority:** HIGH — items 1-6 block `dev` -> `main`.
+
+**Problem (every finding, own line):**
+1. No replayable prod migration: schema changes were applied by scripts in gitignored `dev/` (named in `schema.ts`/`schema-ratings.ts` comments) and logged only in `RUNLOG.md`; `git diff origin/main..HEAD -- drizzle src/db/migrations` shows none. `drizzle.config.ts` points at `schema.ts` only, but `user_xi`, ratings, fpl, predictions, lineups live in re-exported `schema-*.ts` files; `db:push` is blocked by BACKLOG-040 and `drizzle-kit generate` stalls on an interactive prompt — so there is no real schema diff. Fix: add every `schema-*.ts` to `drizzle.config.ts`, resolve BACKLOG-040 (create the index, option 1), commit one idempotent `IF NOT EXISTS` migration outside `dev/`. **Parity applied 2026-10-04 by hand** (RUNLOG): prod got `competitions.structure`, `push_subscriptions.device_id`, the `anonymous-push-subscriber` user and the `user_xi` rebuild; a read-only prod-vs-staging diff now shows only the staging-only snapshot table `football_player_stats_snapshot_pre_md1_20260709` and the prod-only, unused `competition_sport_settings.match_duration`. The ops review also listed `standings.yellow_cards/red_cards`, `bracket_nodes.loser_next_match_id`, `user_favorites.notifications_enabled`, `competition_draws`, `fan_tour_dismissals` and the ratings unique indexes as possibly missing on prod — **disproved by the DB diff** (it was an unchecked inference; both DBs show identical columns/indexes).
+2. `validateEnv()` is never called: `src/instrumentation.ts` only imports the Sentry configs, so the fail-fast promised in `env.ts:53-58` and CLAUDE.md does not exist. A missing `NEXT_PUBLIC_APP_URL` silently falls back to the request origin in the OAuth redirect (`google-oauth.ts:12`, `callback/google/route.ts:23,143`). Fix: call it in the nodejs branch of `register()`; require `NEXT_PUBLIC_WS_URL`, `WS_API_KEY`, `VAPID_PRIVATE_KEY`, `CRON_SECRET`, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` when `NEXT_PUBLIC_ENV=production`.
+3. Env vars read directly (bypassing `env.ts`) and missing from `.env.example`: `NEXTAUTH_SECRET` (`[...nextauth]/route.ts:86`), `COOKIE_DOMAIN` (login/register/Google callback), `CLOUDINARY_API_KEY`/`API_SECRET`/`CLOUD_NAME` (`cloudinary/sign/route.ts` — the new team-logo upload depends on these), `EMAIL_USER`/`EMAIL_PASS`, `AWS_*`, `AWS_SES_*` (`email.ts`); `.env.example` documents `EMAIL_SERVICE_API_KEY` and `EMAIL_FROM`, which no code reads. `callback/google/route.ts:150,160-161` reads `process.env` directly for `isSecure`.
+4. Sentry (`instrumentation-client.ts:5`, `sentry.server.config.ts:5`, `sentry.edge.config.ts:5`) defaults `environment` to `'production'` (staging errors tagged production unless both env vars are set); no `beforeSend`/`beforeBreadcrumb`; replays 100% on error; the `?oauth_token=` JWT URL and any email in breadcrumbs/traces reach Sentry and Vercel logs. Fix: scrub `oauth_token`, default `environment` to `development`, check release tagging/source-map upload.
+5. A stale `bun.lock` (2026-05-04; pins `next@15.3.8`, `drizzle-orm@0.44.7`) is tracked next to the current `package-lock.json` on `main`, `dev` and the branch; `vercel.json` has no `installCommand`. If Vercel picks Bun it resolves `^` deps differently from `npm ci`. Fix: `git rm bun.lock` or pin the Install Command to `npm ci`; check the last prod build's install log.
+6. No rollback runbook (`.agents/dev` has none; `git-workflow.md` has no rollback section); `DEPLOYMENT_CHECKLIST.md` is a stale first-deploy doc (and holds the VAPID key — see 463).
+7. `vercel.json` sets `Access-Control-Allow-Origin: *` on every `/api/*` route.
+8. Pinning: roughly 100 production dependencies still use `^` against the exact-version rule (only recent bumps are pinned).
+9. Dependabot (GitHub: 119 open on the default branch, 5 critical / 57 high): fixed by this promotion — `next` (4 critical), `next-auth`, `drizzle-orm`. Still open and runtime-reachable on Vercel: `xlsx` (no fix, 447), `nodemailer` (patched 9.x, repo `^7`), `nanoid`, `lodash`, `fast-xml-builder`, `@tiptap/core`, `linkify-it`; `sharp` pinned 0.35.3 (alerts want 0.35.4); WS-server deps (see 467 item 6). Build/dev-only: `minimatch`, `js-yaml`, `flatted`, some `brace-expansion`. Overlaps 447/448.
+10. `src/db/index.ts:11` silent `file:./local.db` fallback (see 465 item 9).
+11. `.github`/ops: reminder cron half-broken and `CRON_SECRET` fail-open (see 468 item 8).
+**Standard promotion procedure (adopt, from the architecture review):** (1) one idempotent SQL migration per change with dry-run default and `--env=staging|prod --apply`; (2) precheck via `PRAGMA table_info`/`sqlite_master`; (3) apply to staging, verify with a read-only schema diff of staging vs prod; (4) snapshot/branch prod before applying; (5) apply to prod in a quiet window and re-diff; (6) log in `RUNLOG.md` and close the BACKLOG entry in the same commit; (7) **additive migration first, code deploy second — never ship code that reads a column before it exists on prod.**
+**DEV -> MAIN PLAN (11 steps):** (1) commit a replayable prod migration and rehearse on a copy of staging; (2) read-only prod preflights; (3) Turso backup/branch; (4) apply additive changes in order; (5) set prod Vercel env (`NEXT_PUBLIC_ENV=production`, `NEXT_PUBLIC_APP_URL` no trailing slash, `WS_*`, `JWT_SECRET`, `NEXT_PUBLIC_WS_URL`); (6) VAPID trio, `CRON_SECRET`, `NEXTAUTH_SECRET`, `COOKIE_DOMAIN`, Cloudinary trio, email creds, both Sentry DSNs with environment `production`, `SENTRY_AUTH_TOKEN`; (7) Railway WS server has `JWT_SECRET_PROD`/`JWT_SECRET_STAGING`/`WS_API_KEY` matching Vercel; (8) confirm the Google redirect URI for brixsports.com is registered; fix `bun.lock`/install command; (9) merge `dev` -> `main` with 2 reviews, watch the Sentry source-map upload; (10) verify on prod: `/api/health` + WS `/health`, Flow A throwaway match, Flow B event, Flow C <5s, one Google login, one Cloudinary upload, `/api/competitions`; (11) rollback = Vercel Instant Rollback (SW cache version is stamped per commit); leave additive schema in place; if WS is the problem set `WS_API_KEY` empty so pages fall back to polling.
+
+---
+
+### BACKLOG-470 — OPEN: Viewer UX, Product Strategy and Copy
+
+**Status:** OPEN — found 2026-10-04 (product strategy/IA/critique/copy review, code-read, not rendered). Not fixed.
+**Priority:** HIGH (items 1-3), MEDIUM (rest) — verdict GO WITH FIXES for production.
+
+**Problem (every finding, own line):**
+1. On phones the match-detail header shows no team names: both names are `hidden sm:block` (`MatchDetailClient.tsx` ~L766, ~L827) so a phone sees logo, star, score, logo; the raw `<img src={match.homeTeam.logo}>` has no fallback, so a team with no logo is anonymous. Fix: show `shortName` below `sm`; swap in the existing `TeamLogo`.
+2. The homepage date control lies: `selectedDate` starts `null` (no filter) while the date bar displays today's date; the list is sorted newest-first so future UPCOMING fixtures sit above today's LIVE games on the default ALL tab (`page.tsx:280-322,557-576`); the "LIVE CENTER" banner renders below the date bar and `LiveNowSection`. Job 1 (is my team playing / what is the score) takes one tap only if the viewer knows to look. Fix: default sort LIVE, then today, then the rest; show the date bar only when a date is selected and move the live banner above it.
+3. Push opt-in contradicts itself: the match-page bell is anonymous and device-scoped, but `NotificationPrompt.tsx:45` says "Please sign in to enable notifications" and `OnboardingModal` requires login; both put an emoji in "Welcome to BrixSports!". Per-match bell + team-follow push are the retention hook, and the first-touch prompt is gated and contradictory. Fix: anonymous flow everywhere; drop the sign-in gate.
+4. Navigation is inconsistent: mobile `BottomNav` has 3 items (Fixtures, Competitions, Profile); Teams/Players/News/Search/Notifications live only in the homepage hamburger/top bar; other pages have no global nav. Hops (code-read): score 1; standings 2-3 (default tab); team 2 via a standings row; player 3+. Fixture/standings rows are `div`/`tr` with `onClick` (no open-in-new-tab, no keyboard). Two duplicate live surfaces (LIVE tab and `/live`). Match header "Back" is `router.back()` — a push-notification deep link has no history and can leave the app. Fix: add Search to `BottomNav`; real `Link` to `/` as the Back fallback.
+5. Standings table: 9px cryptic headers (P/W/D/L/GD/Pts), basketball shows "GD" for point difference, rank 4+ is `text-foreground/20` (below contrast minimums), and a standings fetch failure is swallowed (shows "No standings data available" — the 455 class; see 471).
+6. Copy: `OfflineIndicator` "Changes will sync when you reconnect" is false for read-only viewers; `SessionExpiryBanner` "save your work" when there is nothing to save; homepage "Match Started!" fires on any status change (see 464 item 12); "FT"/"HT" never defined; FAVORITES empty with no explanation; unlabeled bell and star icons; the date shown is not a filter. **Proposed rewrites:** (1) error "Can't reach the scores right now. Check your connection, then tap Try again." (2) empty LIVE "No matches live right now. See what's coming up ->" linking to UPCOMING; (3) empty FAVORITES "Follow a team (tap the star on any match) to see their games here."; (4) logger offline "Offline. Events are saved on this phone and will send when you're back online."; (5) logger saved "Goal saved."; (6) logger failed "Goal NOT saved. Check signal and log it again." (no HTTP code); (7) push prompt "Get a push when your team scores. No account needed." buttons "Turn on alerts"/"Not now"; (8) onboarding step 2 "Pick your team.", replace "Continue to Dashboard" with "See matches", delete "Never Miss a Moment" and the exclamation marks.
+7. Strategy notes: the retention hook beyond the score is per-match bell + team-follow push (see 3); features outside the stated scope still advertised or rendered are in 472.
+
+---
+
+### BACKLOG-471 — OPEN: False-Empty On Fetch Failure Still On Five Viewer Pages, Plus Malformed-Date Crashes
+
+**Status:** OPEN — found 2026-10-04 (static UX review + product review, code-read). Not fixed.
+**Priority:** HIGH — same bug class as 417/455 on primary browse routes; the date crash blocks `dev` only if staging data contains malformed `start_time` rows (BUG-213 says some do).
+
+**Problem (every finding, own line):**
+1. False-empty on a failed fetch (anonymous phone viewers on flaky networks), no retry: `competitions/page.tsx:55-63` (no `res.ok` check -> "No competitions found", `:140`); `stats/page.tsx:62-76` (`setTeamStats(data)` stores an error body -> "No team statistics found", `:278`); `competitions/[id]/stats/[category]/page.tsx:46-80` (leaders fetch shows "No data yet" at `:182`, and the catch at `:72-74` calls `setNotFound(true)` — an offline user is told the competition does not exist); `news/page.tsx:57-85` and `search/page.tsx:64-86` ("No news found"/"No results found"; search also does `setResults(data.results)` -> undefined on a 500); standings fetch (`competitions/[id]` standings tab) swallowed -> "No standings data available". Not affected: `/matches/[id]` (distinguishes not-found from load-failed), `/players`, `/teams`, `/lineup-builder`. Fix: reuse `useResilientFetch` + `LoadFailedState` (~15 lines per page); remove notFound-on-catch.
+2. Unguarded `date-fns` `format(new Date(startTime))` throws `RangeError` on a malformed `start_time` (`"1788963960000.0"` parses to Invalid Date), crashing the page to the error boundary: `players/[id]/PlayerDetailClient.tsx:405,651`, `components/MatchCalendar.tsx:33` (used by `competitions/[id]/page.tsx:519-521` — the fixtures tab crashes; `:521` also feeds the value into `selectedDate`).
+3. "Invalid Date" renders literally via unguarded `toLocaleTimeString`/`toLocaleDateString`: `page.tsx:756` (homepage upcoming time), `:645` (basketball round header), `competitions/[id]/page.tsx:584,595`, and `:547,552` where NaN reaches the sort comparator and BUG-213's displacement bug returns; `components/MatchOverlay.tsx:778,964,1039`, `HeadToHead.tsx:227`, `TeamProfileOverlay.tsx:408`, `profile/favorites/page.tsx:264`, `GlobalSearch.tsx:369`, `search/page.tsx:334`. Already guarded correctly: `/live`, `MatchCard`, `/logger:396`, the group headers at `page.tsx:328`.
+4. No WAT timezone is set anywhere (device tz everywhere); time format is inconsistent: 12h `en-US` on the homepage and `MatchOverlay`, 24h `HH:mm` in `MatchCard`, locale default elsewhere — the same match can read "02:00 PM" and "14:00".
+5. Fix: hoist one shared `safeFormat(value, pattern, fallback)` (`TeamDetailClient.tsx:17-22` and `MatchCard.tsx:17` already have copies) and apply at all sites above; add a NaN guard to the sort at `competitions/[id]:552`; standardise time format and timezone.
+**Related:** 417, 455, 458, 126 (malformed date class), BUG-213.
+
+---
+
+### BACKLOG-472 — OPEN: Dead, Mock and Out-Of-Scope Public Surfaces
+
+**Status:** OPEN — found 2026-10-04 (product review + static UX review; routes/links verified against the tree). Not fixed.
+**Priority:** MEDIUM — blocks `dev` -> `main` only as cleanliness (two items break the "never fabricate data" and no-dead-link rules).
+
+**Problem (every finding, own line):**
+1. `app/dashboard/page.tsx` is public, ungated and fabricated: `useState(mockDashboardData)` (`:13,125`), never fetches, always shows mock data; no inbound link but reachable by URL. Fix: `notFound()` like `/fpl` and `/predictions`. Also orphaned public routes: `/analytics/loggers` (also an "advanced analytics" out-of-scope item), `/stats`, `/draft` — hide or `notFound()`.
+2. Dead links (verified): `LiveNowSection.tsx:96` "View All" -> `/livestreams` has no page (only `/livestream/[id]`). `src/app/sitemap.ts` lists `/matches`, `/livestream`, `/football`, `/basketball`, none of which has an index `page.tsx` (only `matches/[id]` and `livestream/[id]` exist; no `football`/`basketball` pages) — four 404s offered to crawlers. A stale comment in `api/football/matches/route.ts` still references `src/app/football/page.tsx`, which does not exist. Fix: drop the entries, point "View All" at `/live`.
+3. Root `layout.tsx` JSON-LD `featureList` claims "Match predictions and leaderboards", "Scout features", "Live match chat" while `/predictions`, `/fpl`, `/scouts` are 404.
+4. `FanWall`, `PollComments`, `MatchPollEnhanced` are social features (violate the "comments, reactions" out-of-scope exclusion) and appear to be dead code (no importers outside each other). Delete, or keep dormant and documented.
+5. News and Transfers links/routes are not flag-gated: `page.tsx:447,905` render News unconditionally; `features.news.enabled` and `features.transfers.enabled` exist in `/api/feature-flags` but are unused; `/news` and `/transfers` have no `FeatureGate`. D3 deliberately left the public news-reading pages live (owner's call) — confirm intent against the CLAUDE.md red-feature checklist and either gate or document.
+6. Context: the backscope guard (`src/lib/backscopedFeatures.ts`) covers only fpl, predictions, polls, scouts and nesa, and `origin/main` has no such guard at all — so the dead social routes in 462 item 5 are not covered by it.
+
+---
+
+### BACKLOG-473 — OPEN: Accessibility (Logger, Live Scores, Modals, Motion)
+
+**Status:** OPEN — found 2026-10-04 (static UX review; alt-text coverage unverified). Not fixed.
+**Priority:** MEDIUM — logger items are a real match-day risk (mis-tap exits mid-match); not a blocker for `dev`.
+
+**Problem (every finding, own line):**
+1. `FootballLogger.tsx` has 0 `aria-label` across 72 buttons and 0 `aria-live`/`role=status`; icon-only Exit (X, `:1590`) and Settings (`:1647`) are `p-1.5` with a 16px icon (~28px, below 44px) and sit side by side — a mis-tap leaves mid-match; 60 uses of `text-[8-10px]` (event list at `:1971-1980` is 8-10px); 22 uses of low-contrast `text-foreground/white/10-30` in that file, more in `competitions/[id]`, `TeamDetailClient`, `MatchLoggerUI`, `SearchOverlay`.
+2. No `aria-live` on score or status changes (only `/players` and settings use it); LIVE status relies on color/pulse alone in several places (not exhaustively verified).
+3. No `prefers-reduced-motion` handling anywhere in `src/app` or `src/components` (0 hits for `reduced-motion`/`motion-reduce`) despite framer-motion, `animate-pulse`, `animate-spin` (WCAG 2.3.3 AAA — polish).
+4. Modal semantics (admin/signup only): `OnboardingModal.tsx:297` and `TeamEditModal` (`admin/teams/page.tsx:46`) are plain `fixed inset-0` divs — no `role="dialog"`, `aria-modal`, Escape handling, focus trap or initial focus; `<label>`s have no `htmlFor` (`admin/teams/page.tsx:56-84`) so inputs are unlabeled for assistive tech; `TeamEditModal` client guard is `!user` only (server enforces admin).
+5. `<img>` alt coverage not verified (reviewer's grep matched single-line cases only).
+**Good:** `LoadFailedState` has `role=alert` and a visible retry; safe-area insets handled in `BottomNav` and the homepage sheet; viewport allows zoom (`maximumScale` 5); tables wrapped in `overflow-x-auto`; no fixed widths above 340px outside tables.
+
+---
+
+### BACKLOG-474 — OPEN: Tech Debt and Data-Model Debt (Later)
+
+**Status:** OPEN — found 2026-10-04 (tech-debt + architecture reviews). Not fixed; none of it blocks `dev` or `main` by itself.
+**Priority:** LOW-MEDIUM — schedule after promotion.
+
+**Problem (every finding, own line):**
+1. Three parallel logger components share no core: `FootballLogger.tsx` 3,080 lines, `BasketballLogger.tsx` 2,350, `TrackLogger.tsx` 1,011 (persists nothing, BACKLOG-400 item 4). Other files near/over 1,500: `admin/teams/[id]/page.tsx` 1,792, `MatchOverlay.tsx` 1,422, `match-state-manager.ts` 1,385.
+2. Legacy `matches.logger_id` has no FK and coexists with `match_logger_assignments`; `api/matches/route.ts:34,96-115,204` and `assign-logger`/`events` routes still touch it; `?loggerId=` ORs both sources (the root of 416-type bugs). Plan: migrate readers, then drop the column.
+3. `matches.start_time` is `text` (`schema.ts:338`) — no ordering/range semantics, some rows hold ms-as-float strings; migrate only as add-column + backfill + dual-read.
+4. `user_xi` "exactly one of `userId`/`anonymousId`" enforced only in application code (`schema-xi.ts`), no CHECK; `user_xi_likes`/`user_xi_comments` still require `users` FKs.
+5. Anonymous push subscriber is a sentinel `users` row (`ANONYMOUS_PUSH_USER_ID`, `push_subscriptions.user_id` NOT NULL) — every user-scoped query/count must exclude it; nullable `user_id` + `device_id` would be cleaner.
+6. ~81 tracked repo-root files incl. stale `*_COMPLETE.md`/`*_SUMMARY.md`, `check_comps.ts`, `debug-teams*.ts`, `test-api.js`, `local.db`, `logger-payload.json`, `tsconfig.tsbuildinfo` — onboarding confusion and a wider tsc include.
+7. Auth model is an accumulation of special cases (see 464 item 10).
+8. Priority scores: `any`/ignoreBuildErrors (468) 32; logger-component consolidation 9 (largest item; wait until after promotion).
+9. `src/lib/auth.ts` costs 1-3 DB hits per token resolution (loggers/users guessing); `lib/socket.ts` hardcodes `APP_URLS` in `ws-server`.
