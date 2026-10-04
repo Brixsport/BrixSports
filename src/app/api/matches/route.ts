@@ -63,12 +63,22 @@ export async function GET(request: NextRequest) {
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
-                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds), 'Cache-Control': 'no-store' } }
             );
         }
 
         const authUser = await getAuthUser(request).catch(() => null);
         const isAdmin = authUser?.role === 'admin';
+
+        // BACKLOG-465: edge-cache ONLY the anonymous response. getAuthUser ->
+        // verifyAuth (src/lib/auth.ts) reads identity from exactly two places:
+        // the Authorization header and the `authToken` cookie. With neither
+        // present, authUser is always null, so isAdmin is false and the body
+        // is the identity-independent public shape (loggerId stripped, no
+        // ratings fields). Any request carrying either credential -- valid or
+        // not -- is treated as identity-dependent and never shared-cached.
+        const hasCredentials =
+            request.headers.has('authorization') || request.cookies.has('authToken');
 
         const { searchParams } = new URL(request.url);
         const includeRatingsStatus = searchParams.get('includeRatingsStatus') === '1';
@@ -225,11 +235,18 @@ export async function GET(request: NextRequest) {
                 'X-Total-Count': String(totalCount),
                 'X-Limit': String(limit),
                 'X-Offset': String(offset),
+                'Cache-Control': hasCredentials
+                    ? 'private, no-store'
+                    : 'public, s-maxage=5, stale-while-revalidate=10',
+                'Vary': 'Authorization, Cookie',
             },
         });
     } catch (error) {
         console.error('Error fetching matches:', error);
-        return NextResponse.json({ error: 'Failed to fetch matches' }, { status: 500 });
+        return NextResponse.json(
+            { error: 'Failed to fetch matches' },
+            { status: 500, headers: { 'Cache-Control': 'no-store' } }
+        );
     }
 }
 

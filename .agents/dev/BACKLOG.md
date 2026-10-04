@@ -13347,6 +13347,8 @@ consent screen (Richard: "the google auth worked, i have logged it").
 11. Push fan-out: `sendMatchEventNotification` runs inside the serverless function; send-loop bound and `maxDuration` unverified (no `maxDuration` under `src/app/api`).
 **Ordering (ADR-1, see 467):** edge cache first (one line per route), then indexes, then rate limits; do NOT lower `/live` polling to 5s before the cache lands.
 
+**Update 2026-10-04 (branch `fix/public-read-load-ws`) — SHIPPED (code committed, live test NOT run):** items 1, 2 and 5 implemented. Item 1: `Cache-Control: public, s-maxage=5, stale-while-revalidate=10` on successful responses of `GET /api/{football,basketball,other}/matches` (errors/429 send `no-store`); `GET /api/matches` sets the public header ONLY when the request carries no `Authorization` header and no `authToken` cookie (the only two identity inputs `verifyAuth` reads), otherwise `private, no-store`, plus `Vary: Authorization, Cookie`. Item 2: the three sport routes now call `checkRateLimit(request, { max: 600 })` (per-IP/min, generous for campus NAT) and return the same 429 shape as `/api/matches`. Item 5: `orderBy(desc(matches.createdAt))` added before `.limit(100)` on all three sport routes (same pattern in each). Remaining on this entry: items 3 (see separate update), 4, 6-11. Do not lower `/live` polling until the cache is confirmed live on staging.
+
 ---
 
 ### BACKLOG-466 — OPEN: Logger Offline Queue Integrity (Duplicates, False "Synced", No Drain On Reopen)
