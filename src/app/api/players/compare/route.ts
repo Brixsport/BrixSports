@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players, footballPlayerStats, basketballPlayerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
 
 /**
  * GET player comparison
@@ -207,12 +207,12 @@ export async function GET(request: NextRequest) {
         // Construct response
         const comparison = {
             player1: {
-                ...player1,
+                ...toPublicPlayer(player1, false),
                 team: team1,
                 stats: stats1,
             },
             player2: {
-                ...player2,
+                ...toPublicPlayer(player2, false),
                 team: team2,
                 stats: stats2,
             },
