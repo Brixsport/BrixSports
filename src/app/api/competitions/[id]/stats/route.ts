@@ -9,6 +9,8 @@ import { playerStats, players, teams } from '@/db/schema';
 import { eq, desc, and, or } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+import { toPublicPlayer } from '@/lib/player-data';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET player statistics
@@ -93,7 +95,7 @@ export async function GET(
             type,
             stats: results.map((r) => ({
                 ...r.stat,
-                player: r.player,
+                player: r.player ? toPublicPlayer(r.player, false) : r.player,
                 team: r.player ? getPrimaryTeam(playerMap.get(r.player.id) ?? { teamId: r.player.teamId }) : r.team,
             })),
         });
@@ -115,6 +117,14 @@ export async function POST(
     { params }: { params: { id: string } }
 ) {
     try {
+        const user = await getAuthUser(request);
+        if (!user) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+        if (user.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const compIdOrName = params.id;
         const body = await request.json();
         const { playerId, goals, assists, yellowCards, redCards, appearances, minutesPlayed, competition } = body;
@@ -124,6 +134,17 @@ export async function POST(
                 { error: 'Player ID is required' },
                 { status: 400 }
             );
+        }
+
+        // Counters are additive deltas: reject negatives / non-integers.
+        const counters: Record<string, unknown> = { goals, assists, yellowCards, redCards, appearances, minutesPlayed };
+        for (const [field, value] of Object.entries(counters)) {
+            if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 0)) {
+                return NextResponse.json(
+                    { error: `${field} must be a non-negative integer` },
+                    { status: 422 }
+                );
+            }
         }
 
         // Check if stats exist for this player in this competition
