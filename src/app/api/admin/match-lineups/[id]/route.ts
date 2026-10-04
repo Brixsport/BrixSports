@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
+import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
@@ -180,17 +181,12 @@ export async function POST(
 
         // Send push notification for lineup availability
         try {
-            const baseUrl = request.nextUrl.origin;
-            await fetch(`${baseUrl}/api/notifications/match-event`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId,
-                    homeTeamId: match[0].homeTeamId,
-                    awayTeamId: match[0].awayTeamId,
-                    eventType: 'LINEUP_AVAILABLE',
-                    teamName: team === 'home' ? 'Home team' : 'Away team',
-                }),
+            await sendMatchEventNotification({
+                matchId,
+                homeTeamId: match[0].homeTeamId,
+                awayTeamId: match[0].awayTeamId,
+                eventType: 'LINEUP_AVAILABLE',
+                teamName: team === 'home' ? 'Home team' : 'Away team',
             });
             console.log('✅ Lineup available notification sent');
         } catch (notifError) {
