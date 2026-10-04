@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { newsComments } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 // DELETE /api/news/[id]/comments/[commentId] - Delete a comment
 export async function DELETE(
@@ -9,16 +10,17 @@ export async function DELETE(
     { params }: { params: { id: string; commentId: string } }
 ) {
     try {
-        const { id, commentId } = params;
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        // Session identity only -- any userId query param is ignored.
+        const userId = await resolveEffectiveUserId(authUser);
+
+        const { id, commentId } = params;
 
         // Check if comment exists and belongs to user
         const comment = await db
@@ -39,7 +41,7 @@ export async function DELETE(
             );
         }
 
-        // Check if user owns the comment (or is admin)
+        // Check if the session user owns the comment
         if (comment[0].userId !== userId) {
             return NextResponse.json(
                 { error: 'You can only delete your own comments' },
@@ -71,13 +73,23 @@ export async function PATCH(
     { params }: { params: { id: string; commentId: string } }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        // Session identity only -- any userId in the body is ignored.
+        const userId = await resolveEffectiveUserId(authUser);
+
         const { id, commentId } = params;
         const body = await request.json();
-        const { userId, content } = body;
+        const { content } = body;
 
-        if (!userId || !content) {
+        if (!content) {
             return NextResponse.json(
-                { error: 'User ID and content are required' },
+                { error: 'Content is required' },
                 { status: 400 }
             );
         }
@@ -115,7 +127,7 @@ export async function PATCH(
             );
         }
 
-        // Check if user owns the comment
+        // Check if the session user owns the comment
         if (comment[0].userId !== userId) {
             return NextResponse.json(
                 { error: 'You can only edit your own comments' },

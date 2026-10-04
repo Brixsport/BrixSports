@@ -164,6 +164,8 @@ export default function NewsDetailClient() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId }),
             });
+            // Auth is now enforced server-side; don't flip local state on a 401/403/5xx.
+            if (!response.ok) return;
             const data = await response.json();
             setIsLiked(data.liked);
             setLikeCount((prev) => (data.liked ? prev + 1 : prev - 1));
@@ -175,17 +177,17 @@ export default function NewsDetailClient() {
     const handleBookmark = async () => {
         try {
             if (isBookmarked) {
-                await fetch(`/api/user/bookmarks/${slug}?userId=${userId}`, {
+                const res = await fetch(`/api/user/bookmarks/${slug}?userId=${userId}`, {
                     method: 'DELETE',
                 });
-                setIsBookmarked(false);
+                if (res.ok) setIsBookmarked(false);
             } else {
-                await fetch('/api/user/bookmarks', {
+                const res = await fetch('/api/user/bookmarks', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId, newsId: slug }),
                 });
-                setIsBookmarked(true);
+                if (res.ok) setIsBookmarked(true);
             }
         } catch (error) {
             console.error('Error toggling bookmark:', error);
@@ -219,6 +221,7 @@ export default function NewsDetailClient() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId }),
             });
+            if (!response.ok) return;
             const data = await response.json();
 
             setCommentLikes(prev => ({

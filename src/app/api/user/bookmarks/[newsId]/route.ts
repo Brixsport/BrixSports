@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userBookmarks } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 // DELETE /api/user/bookmarks/[newsId] - Remove a bookmark
 export async function DELETE(
@@ -9,16 +10,16 @@ export async function DELETE(
     { params }: { params: Promise<{ newsId: string }> }
 ) {
     try {
-        const { newsId } = await params;
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        // Session identity only -- any userId query param is ignored.
+        const userId = await resolveEffectiveUserId(authUser);
+        const { newsId } = await params;
 
         // Delete bookmark
         const deleted = await db
@@ -57,16 +58,15 @@ export async function GET(
     { params }: { params: Promise<{ newsId: string }> }
 ) {
     try {
-        const { newsId } = await params;
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        const userId = await resolveEffectiveUserId(authUser);
+        const { newsId } = await params;
 
         // Check if bookmarked
         const bookmark = await db
