@@ -13391,6 +13391,8 @@ consent screen (Richard: "the google auth worked, i have logged it").
 10. Failure-domain table: Railway WS down = graceful (writes succeed, `/matches/[id]` loses live updates, loggers lose the clock relay); Cloudinary down = images only; Turso down = hard-fail everything incl. auth; Vercel down = total outage with only the logger offline queue as mitigation.
 **Related:** 457 (evidence + measurements), 465, 434 (WS smoke test still deferred).
 
+**Update 2026-10-04 (branch `fix/public-read-load-ws`) — SHIPPED (code committed, live test NOT run):** item 4 implemented in `src/lib/socket.ts` (function signatures unchanged; still non-throwing, called inside `after()`): the WS fetch now has `signal: AbortSignal.timeout(3000)`; a non-2xx response is logged with `console.error` (status, event, room) and reported via `Sentry.captureMessage`; a missing `WS_SERVER_URL`/`WS_API_KEY` now logs one `console.warn` and one Sentry message per process (module-level flag) instead of returning silently. Remaining on this entry: items 1-3, 5-10 (ADR-1 option C, WS monitoring, WS hardening, stale-poll overwrite, etc.). Note: timeout/abort and network errors still fall through to the existing `console.warn` catch (no Sentry), by design, to avoid event spam while the WS host is down.
+
 ---
 
 ### BACKLOG-468 — OPEN: CI and Test Gates Do Not Protect `main`
