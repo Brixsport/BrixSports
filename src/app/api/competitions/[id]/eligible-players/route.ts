@@ -13,7 +13,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { competitions, playerTeamAffiliations, players, teams } from '@/db/schema';
 import { normalizeCompetitionLevel, isPlayerEligible } from '@/lib/competition-player-eligibility';
-import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { enrichPlayersWithAffiliations, toEligiblePlayerDto } from '@/lib/player-data';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 export async function GET(
@@ -63,12 +63,13 @@ export async function GET(
                         eq(playerTeamAffiliations.teamId, teamId),
                         eq(playerTeamAffiliations.isActive, true)
                     )
-                );
+                )
+                .limit(500);
 
             eligiblePlayers = (await enrichPlayersWithAffiliations(teamPlayers.map((row) => row.player)))
                 .filter((player) => isPlayerEligible(player, selectedTeam, compLevel));
         } else {
-            const allPlayers = await db.select().from(players);
+            const allPlayers = await db.select().from(players).limit(500);
             eligiblePlayers = (await enrichPlayersWithAffiliations(allPlayers))
                 .filter((player) => isPlayerEligible(player, player.team, compLevel));
         }
@@ -91,7 +92,7 @@ export async function GET(
                 name: competition.name,
                 level: competition.level,
             },
-            players: eligiblePlayers,
+            players: eligiblePlayers.map(toEligiblePlayerDto),
             count: eligiblePlayers.length,
         });
     } catch (error) {
