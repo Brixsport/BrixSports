@@ -13325,6 +13325,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 
 **Found sound** (traced, no finding): OAuth `?oauth_token` strip on mount incl. StrictMode double-run; `checkAuth`/`refreshSession` leave state unchanged on 5xx/network (BUG-217); push subscribe checks body `userId` against the session (`subscribe/route.ts:56-61`).
 **Overlaps:** 451 (auth log PII), 462 (public routes), 469 (Sentry scrub).
+**Update 2026-10-10 (item 2):** SHIPPED on `fix/auth-session-hygiene` (code committed, NOT live-tested): `AuthContext.refreshSession` now writes `body.token` from `/api/auth/refresh` to `localStorage.authToken` when a localStorage copy already exists (cookie-only sessions stay cookie-only). `lib/auth.ts` untouched. Evidence: code-read + tsc only.
 
 ---
 
