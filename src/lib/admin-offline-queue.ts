@@ -93,6 +93,79 @@ export async function queueOfflineEvent(matchId: string, data: object, token: st
     });
 }
 
+// BACKLOG-466 items 2/3: the SW marks a row `failed: true` (+ failStatus) when the
+// server rejects a replay with a non-retryable 4xx. Pending = still to be retried.
+export interface QueueCounts {
+    pending: number;
+    failed: number;
+}
+
+/** Pure: split pendingMatchEvents rows into still-pending vs permanently failed. */
+export function summarizeQueueRows(rows: Array<{ failed?: boolean }>): QueueCounts {
+    let failed = 0;
+    for (const row of rows) if (row && row.failed) failed++;
+    return { pending: rows.length - failed, failed };
+}
+
+/**
+ * Pure: interpret a message from sw-admin.js for the match-event queue.
+ * Returns the authoritative counts, or null when the message is not about it.
+ * SYNC_COMPLETE means the queue is EMPTY; SYNC_PARTIAL carries what is left.
+ */
+export function parseMatchEventSyncMessage(data: unknown): QueueCounts | null {
+    const msg = data as { type?: string; tag?: string; remaining?: unknown; failed?: unknown } | null | undefined;
+    if (!msg || msg.tag !== 'sync-match-events') return null;
+    if (msg.type === 'SYNC_COMPLETE') return { pending: 0, failed: 0 };
+    if (msg.type === 'SYNC_PARTIAL') {
+        const remaining = typeof msg.remaining === 'number' ? msg.remaining : 0;
+        const failed = typeof msg.failed === 'number' ? msg.failed : 0;
+        return { pending: Math.max(0, remaining), failed: Math.max(0, failed) };
+    }
+    return null;
+}
+
+/** Reads pendingMatchEvents from IndexedDB (all matches) and returns the counts. */
+export async function getQueuedEventCounts(): Promise<QueueCounts> {
+    const db = await openAdminDB();
+    try {
+        const rows = await new Promise<Array<{ failed?: boolean }>>((resolve, reject) => {
+            const req = db.transaction('pendingMatchEvents', 'readonly').objectStore('pendingMatchEvents').getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        return summarizeQueueRows(rows);
+    } finally {
+        db.close();
+    }
+}
+
+/** Removes rows the SW marked failed (the logger acknowledged them). Returns how many. */
+export async function clearFailedQueuedEvents(): Promise<number> {
+    const db = await openAdminDB();
+    try {
+        return await new Promise<number>((resolve, reject) => {
+            const tx = db.transaction('pendingMatchEvents', 'readwrite');
+            const store = tx.objectStore('pendingMatchEvents');
+            let removed = 0;
+            const cursorReq = store.openCursor();
+            cursorReq.onsuccess = () => {
+                const cursor = cursorReq.result;
+                if (!cursor) return;
+                if (cursor.value && cursor.value.failed) {
+                    cursor.delete();
+                    removed++;
+                }
+                cursor.continue();
+            };
+            cursorReq.onerror = () => reject(cursorReq.error);
+            tx.oncomplete = () => resolve(removed);
+            tx.onerror = () => reject(tx.error);
+        });
+    } finally {
+        db.close();
+    }
+}
+
 // BUG-142 (period-transition PATCH / undo DELETE queueing): a generic queue for
 // any authenticated write that isn't an event POST. sw-admin.js's syncAdminChanges()
 // already existed to drain this store but nothing ever wrote to it -- confirmed
