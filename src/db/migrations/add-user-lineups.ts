@@ -7,7 +7,7 @@
  * Run this with: npm run db:migrate
  */
 
-import { db } from './index';
+import { db } from '../index';
 
 async function migrate() {
     console.log('🔄 Starting migration: Add User Lineups Tables...');
