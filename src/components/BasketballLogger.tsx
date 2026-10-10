@@ -255,6 +255,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         };
         window.addEventListener('online', triggerDrain);
         document.addEventListener('visibilitychange', handleVisibility);
+        // BACKLOG-466 item 3: hydrate the queued badge from IndexedDB and drain once
+        // on mount (a killed tab / evicted iOS PWA leaves rows nothing drained).
+        getQueuedEventCounts()
+            .then((counts) => {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
+            })
+            .catch((err) => console.error('[BasketballLogger] Could not read offline queue:', err));
+        triggerDrain();
         return () => {
             window.removeEventListener('online', triggerDrain);
             document.removeEventListener('visibilitychange', handleVisibility);

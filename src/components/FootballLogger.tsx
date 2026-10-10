@@ -224,6 +224,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         };
         window.addEventListener('online', triggerDrain);
         document.addEventListener('visibilitychange', handleVisibility);
+        // BACKLOG-466 item 3: a killed tab / evicted iOS PWA leaves rows in IndexedDB
+        // that nothing drained on reopen (the listeners above only fire on a later
+        // online/visibility event) and queuedOfflineCount started at 0. Hydrate the
+        // badge from the store and drain once on mount.
+        getQueuedEventCounts()
+            .then((counts) => {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
+            })
+            .catch((err) => console.error('[FootballLogger] Could not read offline queue:', err));
+        triggerDrain();
         return () => {
             window.removeEventListener('online', triggerDrain);
             document.removeEventListener('visibilitychange', handleVisibility);
