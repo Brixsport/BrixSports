@@ -7,6 +7,7 @@ import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from '
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import Link from 'next/link';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { safeToLocale } from '@/lib/safe-date';
 import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
 
 interface SearchResults {
@@ -331,7 +332,7 @@ function SearchContent() {
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="text-sm text-foreground/60">{match.competition?.name}</span>
                                                         <span className="text-xs text-foreground/40">
-                                                            {new Date(match.startTime).toLocaleDateString()}
+                                                            {safeToLocale(match.startTime, 'date', undefined, 'TBD')}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center justify-between">

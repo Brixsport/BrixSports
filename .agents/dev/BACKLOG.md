@@ -13463,6 +13463,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 5. Fix: hoist one shared `safeFormat(value, pattern, fallback)` (`TeamDetailClient.tsx:17-22` and `MatchCard.tsx:17` already have copies) and apply at all sites above; add a NaN guard to the sort at `competitions/[id]:552`; standardise time format and timezone.
 **Related:** 417, 455, 458, 126 (malformed date class), BUG-213.
 **Update 2026-10-10 (branch fix/viewer-robustness):** SHIPPED (code committed, NOT live-tested) -- item 5 shared helper: `src/lib/safe-date.ts` (`safeFormat`, `safeToLocale`, `parseSafeDate`; parses `"1788963960000.0"` as epoch ms instead of failing) + `tests/unit/safe-date.test.ts`. The older per-file copies (`TeamDetailClient.tsx`, `ui/MatchCard.tsx`) were left in place -- they show TBD for the float-string value where the shared helper shows the real date.
+**Update 2026-10-10 (branch fix/viewer-robustness):** SHIPPED (code committed, NOT live-tested) -- items 2-3 guarded with the shared helper at `PlayerDetailClient.tsx` (2 sites), `MatchCalendar.tsx` (bad rows skipped), `competitions/[id]/page.tsx` (selectedDate seed, filter, sort comparator NaN guard -- bad rows sort last, time and date cells), `MatchOverlay.tsx` (3), `HeadToHead.tsx`, `TeamProfileOverlay.tsx`, `profile/favorites/page.tsx`, `GlobalSearch.tsx`, `search/page.tsx`. Fallbacks `TBD` / `--:--`; existing format and locale per site kept. NOT done here: homepage `page.tsx:756,645` (owned by another branch) and item 4 (timezone / 12h-24h standardisation).
 
 ---
 

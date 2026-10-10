@@ -7,6 +7,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
+import { parseSafeDate, safeToLocale } from '@/lib/safe-date';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
 import { LoadFailedState } from '@/components/resilience/ReadPathStates';
@@ -518,7 +519,7 @@ function CompetitionHubContent() {
               {matches.length > 0 && (
                 <MatchCalendar
                   fixtures={matches}
-                  selectedDate={selectedDate || new Date(matches[0].startTime)}
+                  selectedDate={selectedDate || parseSafeDate(matches[0].startTime) || new Date()}
                   onDateSelect={(date) => setSelectedDate(date)}
                 />
               )}
@@ -543,13 +544,16 @@ function CompetitionHubContent() {
                   // null for regular non-knockout matches -- those fall into a
                   // single ungrouped "Matches" bucket, so this degrades to
                   // today's flat list exactly when there's no round data.
-                  const filtered = matches.filter((match) =>
-                    selectedDate ? isSameDay(new Date(match.startTime), selectedDate) : true
-                  );
+                  const filtered = matches.filter((match) => {
+                    if (!selectedDate) return true;
+                    const matchDate = parseSafeDate(match.startTime);
+                    return matchDate ? isSameDay(matchDate, selectedDate) : false;
+                  });
                   const roundOrder: string[] = [];
                   const byRound = new Map<string, Match[]>();
                   filtered
-                    .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+                    // Unparseable startTime sorts last (epoch 0) -- NaN here broke the comparator (BUG-213).
+                    .sort((a, b) => (parseSafeDate(b.startTime)?.getTime() ?? 0) - (parseSafeDate(a.startTime)?.getTime() ?? 0))
                     .forEach((match) => {
                       const key = match.round || 'Matches';
                       if (!byRound.has(key)) {
@@ -581,7 +585,7 @@ function CompetitionHubContent() {
                                   <span className="flex-1 text-sm font-bold truncate">{match.homeTeam?.name || 'Home'}</span>
                                   <div className="flex flex-col items-center shrink-0 px-2">
                                     <span className="text-xs font-display italic text-primary">
-                                      {match.status === 'UPCOMING' ? new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `${match.homeScore}-${match.awayScore}`}
+                                      {match.status === 'UPCOMING' ? safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, '--:--', []) : `${match.homeScore}-${match.awayScore}`}
                                     </span>
                                     {match.status === 'LIVE' && (
                                       <span className="text-[8px] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>
@@ -592,7 +596,7 @@ function CompetitionHubContent() {
                                 </div>
                                 <div className="flex items-center justify-between text-[10px] text-foreground/30 mt-2 pl-11">
                                   <span className="truncate">{match.venue}</span>
-                                  <span className="shrink-0 pl-2">{new Date(match.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                  <span className="shrink-0 pl-2">{safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric' }, 'TBD')}</span>
                                 </div>
                               </div>
                             ))}

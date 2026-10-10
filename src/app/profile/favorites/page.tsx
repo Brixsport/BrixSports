@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Users, Calendar, TrendingUp, Star, Trophy, Bell, BellOff } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
+import { safeToLocale } from '@/lib/safe-date';
 import { useAuth } from '@/contexts/AuthContext';
 import { Coachmark } from '@/components/onboarding/Coachmark';
 import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
@@ -261,7 +262,7 @@ export default function FavouritesPage() {
                                                 </div>
                                             </div>
                                             <div className="mt-2 text-xs text-foreground/40 text-center">
-                                                {new Date(match.startTime).toLocaleDateString()} • {match.competition}
+                                                {safeToLocale(match.startTime, 'date', undefined, 'TBD')} • {match.competition}
                                             </div>
                                         </Link>
                                     ))}

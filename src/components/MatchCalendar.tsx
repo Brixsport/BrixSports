@@ -14,6 +14,7 @@ import {
 } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { safeFormat } from '@/lib/safe-date';
 
 interface MatchCalendarProps {
     fixtures: any[];
@@ -30,7 +31,9 @@ export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: 
 
     // Get fixtures count per day
     const fixturesByDay = fixtures.reduce((acc, fixture) => {
-        const dateKey = format(new Date(fixture.startTime), 'yyyy-MM-dd');
+        // BACKLOG-471: a malformed startTime must not throw (crashed the fixtures tab); skip it.
+        const dateKey = safeFormat(fixture.startTime, 'yyyy-MM-dd', '');
+        if (!dateKey) return acc;
         acc[dateKey] = (acc[dateKey] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
