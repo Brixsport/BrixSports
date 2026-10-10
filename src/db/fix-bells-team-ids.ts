@@ -21,7 +21,9 @@ async function fixBellsTeamIds() {
                 id: teams.id,
                 name: teams.name,
                 shortName: teams.shortName,
+                logo: teams.logo,
                 university: teams.university,
+                color: teams.color,
                 sport: teams.sport,
                 gender: teams.gender,
             })

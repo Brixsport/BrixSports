@@ -242,7 +242,6 @@ async function addNESAInterSchoolFestival() {
       format: 'knockout',
       playersPerSide: 11,
       halfDuration: 15,
-      matchDuration: 30,
       customRules: JSON.stringify({
         maxPlayers: 16,
         starters: 11,
@@ -264,7 +263,6 @@ async function addNESAInterSchoolFestival() {
       format: 'knockout',
       playersPerSide: 5,
       halfDuration: 7,
-      matchDuration: 14,
       customRules: JSON.stringify({
         substitutesAllowed: true,
         knockoutFormat: true,
@@ -284,7 +282,6 @@ async function addNESAInterSchoolFestival() {
       format: 'knockout',
       playersPerSide: 5,
       halfDuration: 6,
-      matchDuration: 12,
       customRules: JSON.stringify({
         quarters: 2,
         quarterDuration: 6,
