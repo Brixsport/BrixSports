@@ -90,7 +90,11 @@ function LoginPageContent() {
             }
 
             // Store token and user data
-            localStorage.setItem("authToken", data.token);
+            // BACKLOG-464 item 12: never persist the string "undefined" (or any non-token);
+            // the httpOnly cookie still authenticates if the body carried no token.
+            if (typeof data.token === "string" && data.token.length > 0) {
+                localStorage.setItem("authToken", data.token);
+            }
             setSuccess(true);
             toast.success("Welcome back!", {
                 description: "You have successfully logged in.",
