@@ -12,7 +12,7 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // silently and permanently break the queue) and never got it, since it lived
 // in a separate file. Importing from the shared module closes that gap here
 // too, for free, and removes the duplication.
-import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { getClientErrorMessage } from '@/lib/client-error';
 import { useAuth } from '@/hooks/useAuth';
@@ -172,6 +172,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const { user } = useAuth();
     const [showLineupEditModal, setShowLineupEditModal] = useState(false);
     const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BACKLOG-466 item 2: events the server rejected on replay (non-retryable 4xx) --
+    // kept in IndexedDB by the SW, never retried, surfaced here until dismissed.
+    const [failedQueuedCount, setFailedQueuedCount] = useState(0);
     // BUG-194 part 2: period-transition PATCH / undo DELETE retries, via the
     // separate pendingAdminChanges queue (mirrors BasketballLogger.tsx's own
     // BUG-142 fix exactly, same admin-offline-queue.ts module).
@@ -182,10 +185,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
         const handleMessage = (e: MessageEvent) => {
-            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
-                setQueuedOfflineCount(0);
+            // BACKLOG-466 item 2: SYNC_COMPLETE now means the queue is truly empty;
+            // SYNC_PARTIAL carries what is still pending / permanently failed.
+            const counts = parseMatchEventSyncMessage(e.data);
+            if (counts) {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
             } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
                 setQueuedAdminChangeCount(0);
+            } else if (e.data?.type === 'SYNC_PARTIAL' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(typeof e.data.remaining === 'number' ? e.data.remaining : 0);
             }
         };
         navigator.serviceWorker.addEventListener('message', handleMessage);
@@ -1632,6 +1641,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     {queuedOfflineCount} Queued
                                 </span>
                             </div>
+                        )}
+                        {failedQueuedCount > 0 && (
+                            <button
+                                type="button"
+                                title="These queued events were rejected by the server and were NOT saved. Re-log them manually, then tap to dismiss."
+                                onClick={() => {
+                                    clearFailedQueuedEvents()
+                                        .then(() => setFailedQueuedCount(0))
+                                        .catch((err) => console.error('[FootballLogger] Failed to clear rejected queue rows:', err));
+                                }}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-red-500/10 rounded-lg border border-red-500/40 shrink-0"
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-red-400">
+                                    {failedQueuedCount} Not Saved - Tap
+                                </span>
+                            </button>
                         )}
                         {queuedAdminChangeCount > 0 && (
                             <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">

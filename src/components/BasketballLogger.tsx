@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
 import { generateClientEventId } from '@/lib/event-id';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
@@ -207,6 +207,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // same IndexedDB store sw-admin.js already drains, so no service-worker
     // change is needed, only the write side.
     const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BACKLOG-466 item 2: events the server rejected on replay (non-retryable 4xx).
+    const [failedQueuedCount, setFailedQueuedCount] = useState(0);
     // BUG-142 (remaining scope): period-transition PATCH / undo DELETE retries,
     // via the separate pendingAdminChanges queue (see admin-offline-queue.ts).
     const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
@@ -214,10 +216,16 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
         const handleMessage = (e: MessageEvent) => {
-            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
-                setQueuedOfflineCount(0);
+            // BACKLOG-466 item 2: SYNC_COMPLETE now means the queue is truly empty;
+            // SYNC_PARTIAL carries what is still pending / permanently failed.
+            const counts = parseMatchEventSyncMessage(e.data);
+            if (counts) {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
             } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
                 setQueuedAdminChangeCount(0);
+            } else if (e.data?.type === 'SYNC_PARTIAL' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(typeof e.data.remaining === 'number' ? e.data.remaining : 0);
             }
         };
         navigator.serviceWorker.addEventListener('message', handleMessage);
@@ -1308,6 +1316,39 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     </div>
                 </div>
             </div>
+
+            {/* BACKLOG-466 items 2/3: persistent queue status. Basketball had a banner for
+                the moment of queueing but nothing showing what was still pending, or
+                what the server rejected on replay, after a reload or a partial sync. */}
+            {(queuedOfflineCount > 0 || failedQueuedCount > 0) && (
+                <div className="max-w-7xl mx-auto mb-4 px-4 flex flex-wrap gap-2">
+                    {queuedOfflineCount > 0 && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 rounded-lg border border-orange-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                            <span className="text-xs font-black uppercase tracking-tight text-orange-400">
+                                {queuedOfflineCount} Queued - waiting to sync
+                            </span>
+                        </div>
+                    )}
+                    {failedQueuedCount > 0 && (
+                        <button
+                            type="button"
+                            title="These queued events were rejected by the server and were NOT saved. Re-log them manually, then tap to dismiss."
+                            onClick={() => {
+                                clearFailedQueuedEvents()
+                                    .then(() => setFailedQueuedCount(0))
+                                    .catch((err) => console.error('[BasketballLogger] Failed to clear rejected queue rows:', err));
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 rounded-lg border border-red-500/40"
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <span className="text-xs font-black uppercase tracking-tight text-red-400">
+                                {failedQueuedCount} Not Saved - tap to dismiss
+                            </span>
+                        </button>
+                    )}
+                </div>
+            )}
 
             {eventSaveError && (
                 <div className="max-w-7xl mx-auto mb-4 px-4">
