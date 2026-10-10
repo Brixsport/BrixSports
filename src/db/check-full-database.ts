@@ -37,10 +37,11 @@ async function checkDatabaseStatus() {
         // Group players by team
         const playersByTeam: Record<string, any[]> = {};
         allPlayers.forEach(player => {
-            if (!playersByTeam[player.teamId]) {
-                playersByTeam[player.teamId] = [];
+            const teamKey = player.teamId ?? 'unassigned';
+            if (!playersByTeam[teamKey]) {
+                playersByTeam[teamKey] = [];
             }
-            playersByTeam[player.teamId].push(player);
+            playersByTeam[teamKey].push(player);
         });
 
         console.log('\nPlayers per Team:');
