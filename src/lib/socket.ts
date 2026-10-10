@@ -6,6 +6,7 @@
  */
 
 import { Server as SocketIOServer } from 'socket.io';
+import * as Sentry from '@sentry/nextjs';
 import { env as appEnv } from './env';
 
 // Extend global namespace to include io
@@ -22,6 +23,10 @@ export function getIO(): SocketIOServer | null {
     }
     return global.io;
 }
+
+// BACKLOG-467 item 4: warn/report a missing WS config once per process, not on
+// every broadcast (this runs inside after() for every logged event).
+let wsConfigMissingReported = false;
 
 /**
  * Broadcast an event via the WS server.
@@ -45,7 +50,15 @@ async function broadcast(room: string | null, event: string, data: any): Promise
     const apiKey = process.env.WS_API_KEY;
 
     if (!wsServerUrl || !apiKey) {
-        // Silently skip - WS server not configured
+        // WS server not configured -- skip, but never silently: log + report once
+        // per process so a missing WS_SERVER_URL/WS_API_KEY in a deployment is
+        // visible instead of looking like "live updates just don't work".
+        if (!wsConfigMissingReported) {
+            wsConfigMissingReported = true;
+            const missing = [!wsServerUrl && 'WS_SERVER_URL', !apiKey && 'WS_API_KEY'].filter(Boolean).join(', ');
+            console.warn(`[Socket] WS broadcast disabled: ${missing} not set. Broadcasts will be skipped.`);
+            Sentry.captureMessage(`WS broadcast disabled: ${missing} not set`, 'warning');
+        }
         return;
     }
 
@@ -64,16 +77,27 @@ async function broadcast(room: string | null, event: string, data: any): Promise
         const wsEnv = (appEnv.appUrl.includes('staging.brixsports.com') || appEnv.appUrl.includes('brixsports-staging.vercel.app'))
             ? 'staging'
             : 'prod';
-        await fetch(broadcastUrl, {
+        const res = await fetch(broadcastUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'x-api-key': apiKey,
             },
             body: JSON.stringify({ room, event, data, env: wsEnv }),
+            // BACKLOG-467 item 4: bound the call -- an unresponsive WS server must
+            // not hold the after() task (and the serverless invocation) open.
+            signal: AbortSignal.timeout(3000),
         });
+        if (!res.ok) {
+            console.error(`[Socket] Broadcast rejected by WS server: HTTP ${res.status} (event=${event}, room=${room ?? 'global'})`);
+            Sentry.captureMessage(`WS broadcast rejected: HTTP ${res.status}`, {
+                level: 'error',
+                tags: { area: 'ws-broadcast' },
+                extra: { status: res.status, event, room },
+            });
+        }
     } catch (error) {
-        // Don't crash API routes if WS broadcast fails
+        // Don't crash API routes if WS broadcast fails (includes the 3s timeout abort)
         console.warn('[Socket] Broadcast failed (WS server may be down):', (error as Error).message);
     }
 }

@@ -2,7 +2,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { notInArray, eq, and, inArray } from 'drizzle-orm';
+import { notInArray, eq, and, inArray, desc } from 'drizzle-orm';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // Public DTO -- must never include CLAUDE.md's banned fields (loggerId,
 // approvalStatus, managerNotes, approvedBy, approvedAt) or anything else not
@@ -27,8 +28,25 @@ const PUBLIC_MATCH_FIELDS = {
     stats: matches.stats,
 };
 
+// BACKLOG-465: fully public, identity-independent response -- safe to cache at
+// the edge. 5s fresh + 10s stale-while-revalidate keeps live scores within the
+// <=5s Flow C target's spirit while collapsing a burst of identical polls into
+// ~1 origin hit per 5s per distinct query string. Errors are never cached.
+const PUBLIC_CACHE_HEADERS = { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' };
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+// Generous on purpose: campus users share NAT egress IPs (many viewers, one IP).
+const RATE_LIMIT_MAX_PER_MINUTE = 600;
+
 export async function GET(request: Request) {
     try {
+        const rl = await checkRateLimit(request, { max: RATE_LIMIT_MAX_PER_MINUTE });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds), ...NO_STORE_HEADERS } }
+            );
+        }
+
         const { searchParams } = new URL(request.url);
         const competitionId = searchParams.get('competitionId');
         const competition = searchParams.get('competition');
@@ -48,6 +66,7 @@ export async function GET(request: Request) {
 
         const otherMatches = await db.select(PUBLIC_MATCH_FIELDS).from(matches)
             .where(and(...conditions))
+            .orderBy(desc(matches.createdAt))
             .limit(100)
             .all();
 
@@ -81,9 +100,9 @@ export async function GET(request: Request) {
             success: true,
             matches: transformed,
             count: transformed.length
-        });
+        }, { headers: PUBLIC_CACHE_HEADERS });
     } catch (error) {
         console.error('Error fetching other matches:', error);
-        return NextResponse.json({ success: false, error: 'Failed to fetch matches' }, { status: 500 });
+        return NextResponse.json({ success: false, error: 'Failed to fetch matches' }, { status: 500, headers: NO_STORE_HEADERS });
     }
 }
