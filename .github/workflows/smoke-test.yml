@@ -29,6 +29,12 @@ jobs:
         with:
           node-version: '20'
 
+      # Node 20.20 ships npm 10.8.2, which resolves @sentry/webpack-plugin's required
+      # `webpack` peer and rejects the committed lockfile ("Missing: webpack ... from lock
+      # file"). npm 10.9.9 accepts the same lock (`npm ci --dry-run` exit 0), so pin it.
+      - name: Pin npm
+        run: npm install -g npm@10.9.9
+
       - name: Install dependencies
         run: npm ci
 
