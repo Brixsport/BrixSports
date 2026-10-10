@@ -29,8 +29,12 @@ jobs:
         with:
           node-version: '20'
 
+      # The committed lockfile was generated with `legacy-peer-deps=true` (a developer-level
+      # npm setting), so it has no `webpack` entry for @sentry/webpack-plugin's required
+      # peer. A plain `npm ci` on the runner resolves peers and rejects the lock ("Missing:
+      # webpack ... from lock file"). Install the same way the lock was made.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Run critical-flows smoke test
         env:
