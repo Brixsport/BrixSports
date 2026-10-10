@@ -418,11 +418,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 // Filter eligible players by team — memberships-aware so multi-affiliated players
                 // (e.g. college + BUSA team) resolve against the match team, not just their primary affiliation
                 const hPlayers = eligiblePlayers.filter((player: Player) =>
-                    (player as any).memberships?.some((m: any) => m.team?.id === match.homeTeamId)
+                    (player as any).teamIds?.includes(match.homeTeamId)
+                    || (player as any).memberships?.some((m: any) => m.team?.id === match.homeTeamId)
                     || getPlayerTeam(player)?.id === match.homeTeamId
                 );
                 const aPlayers = eligiblePlayers.filter((player: Player) =>
-                    (player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId)
+                    (player as any).teamIds?.includes(match.awayTeamId)
+                    || (player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId)
                     || getPlayerTeam(player)?.id === match.awayTeamId
                 );
 

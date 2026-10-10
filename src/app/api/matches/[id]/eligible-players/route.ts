@@ -11,7 +11,7 @@ import { db } from '@/db';
 import { matches, competitions, players, teams, playerTeamAffiliations } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { normalizeCompetitionLevel, isPlayerEligible } from '@/lib/competition-player-eligibility';
-import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { enrichPlayersWithAffiliations, toEligiblePlayerDto } from '@/lib/player-data';
 
 export async function GET(
     request: NextRequest,
@@ -81,7 +81,8 @@ export async function GET(
                         eq(playerTeamAffiliations.teamId, teamId),
                         eq(playerTeamAffiliations.isActive, true)
                     )
-                );
+                )
+                .limit(500);
 
             // Filter by institutional eligibility
             eligiblePlayers = (await enrichPlayersWithAffiliations(teamAssociatedPlayers.map((row) => row.player)))
@@ -100,7 +101,8 @@ export async function GET(
                         eq(playerTeamAffiliations.teamId, match.homeTeamId),
                         eq(playerTeamAffiliations.isActive, true)
                     )
-                );
+                )
+                .limit(500);
 
             const awayAffiliations = await db
                 .select({
@@ -114,7 +116,8 @@ export async function GET(
                         eq(playerTeamAffiliations.teamId, match.awayTeamId),
                         eq(playerTeamAffiliations.isActive, true)
                     )
-                );
+                )
+                .limit(500);
 
             const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
             const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
@@ -138,7 +141,7 @@ export async function GET(
                 competitionLevel: match.competitionLevel,
             },
             competitionLevel: compLevel,
-            players: eligiblePlayers,
+            players: eligiblePlayers.map(toEligiblePlayerDto),
             count: eligiblePlayers.length,
         });
     } catch (error) {

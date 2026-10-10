@@ -453,11 +453,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 // against the actual match team first, fall back to primary team only if
                 // that's absent.
                 const homePlayersList = playersArray.filter((player: Player) =>
-                    (player as any).memberships?.some((m: any) => m.team?.id === match.homeTeamId)
+                    (player as any).teamIds?.includes(match.homeTeamId)
+                    || (player as any).memberships?.some((m: any) => m.team?.id === match.homeTeamId)
                     || getPlayerTeam(player)?.id === match.homeTeamId
                 );
                 const awayPlayersList = playersArray.filter((player: Player) =>
-                    (player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId)
+                    (player as any).teamIds?.includes(match.awayTeamId)
+                    || (player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId)
                     || getPlayerTeam(player)?.id === match.awayTeamId
                 );
 

@@ -1,30 +1,36 @@
 /**
  * User Activity API
  * Track and retrieve user activity for the activity feed
+ *
+ * Every verb is scoped to the authenticated session user. Any userId sent in the
+ * query string or body is ignored.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userActivity, users, teams, players, matches } from '@/db/schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
+import { toPublicPlayer } from '@/lib/player-data';
 
 /**
  * GET user's activity history
- * GET /api/users/activity?userId=xxx&limit=20&type=match_watched
+ * GET /api/users/activity?limit=20&type=match_watched
  */
 export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
-        const activityType = searchParams.get('type');
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        const userId = await resolveEffectiveUserId(authUser);
+
+        const { searchParams } = new URL(request.url);
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
+        const activityType = searchParams.get('type');
 
         // Build query
         let query = db
@@ -63,18 +69,36 @@ export async function GET(request: NextRequest) {
                                 .from(teams)
                                 .where(eq(teams.id, activity.entityId));
                             break;
-                        case 'player':
-                            [entityDetails] = await db
+                        case 'player': {
+                            const [playerRow] = await db
                                 .select()
                                 .from(players)
                                 .where(eq(players.id, activity.entityId));
+                            // Never return email/profileId etc. -- entityId is client-supplied.
+                            entityDetails = playerRow ? toPublicPlayer(playerRow, false) : undefined;
                             break;
-                        case 'match':
-                            [entityDetails] = await db
+                        }
+                        case 'match': {
+                            const [matchRow] = await db
                                 .select()
                                 .from(matches)
                                 .where(eq(matches.id, activity.entityId));
+                            // Shaped DTO -- the raw matches row carries lineups and other internals.
+                            entityDetails = matchRow
+                                ? {
+                                    id: matchRow.id,
+                                    homeTeamId: matchRow.homeTeamId,
+                                    awayTeamId: matchRow.awayTeamId,
+                                    status: matchRow.status,
+                                    homeScore: matchRow.homeScore,
+                                    awayScore: matchRow.awayScore,
+                                    startTime: matchRow.startTime,
+                                    competition: matchRow.competition,
+                                    venue: matchRow.venue,
+                                }
+                                : undefined;
                             break;
+                        }
                     }
                 }
 
@@ -105,10 +129,19 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { userId, activityType, entityType, entityId, metadata } = body;
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const userId = await resolveEffectiveUserId(authUser);
 
-        if (!userId || !activityType) {
+        const body = await request.json();
+        const { activityType, entityType, entityId, metadata } = body;
+
+        if (!activityType) {
             return NextResponse.json(
                 { error: 'Missing required fields' },
                 { status: 400 }
@@ -146,19 +179,18 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET activity statistics
- * GET /api/users/activity/stats?userId=xxx
+ * PATCH /api/users/activity
  */
 export async function PATCH(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        const userId = await resolveEffectiveUserId(authUser);
 
         // Get activity counts by type
         const stats = await db
@@ -168,7 +200,8 @@ export async function PATCH(request: NextRequest) {
             })
             .from(userActivity)
             .where(eq(userActivity.userId, userId))
-            .groupBy(userActivity.activityType);
+            .groupBy(userActivity.activityType)
+            .limit(100);
 
         // Get total activity count
         const [totalResult] = await db
@@ -194,20 +227,21 @@ export async function PATCH(request: NextRequest) {
 
 /**
  * DELETE user activity (clear history)
- * DELETE /api/users/activity?userId=xxx&before=timestamp
+ * DELETE /api/users/activity?before=timestamp
  */
 export async function DELETE(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-        const before = searchParams.get('before'); // Optional: delete activities before this timestamp
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        const userId = await resolveEffectiveUserId(authUser);
+
+        const { searchParams } = new URL(request.url);
+        const before = searchParams.get('before'); // Optional: delete activities before this timestamp
 
         if (before) {
             // Delete activities before specific date
