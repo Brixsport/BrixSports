@@ -7,7 +7,9 @@ import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from '
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import Link from 'next/link';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { safeToLocale } from '@/lib/safe-date';
 import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 
 interface SearchResults {
     teams: any[];
@@ -44,6 +46,8 @@ function SearchContent() {
     // bookmark/share of the route). Starts false now; the effect below only
     // flips it true right before an actual search runs.
     const [loading, setLoading] = useState(false);
+    // BACKLOG-471: a failed search is not "No results found" -- it gets its own state and a retry.
+    const [loadFailed, setLoadFailed] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'teams' | 'players' | 'matches' | 'competitions'>('all');
     const [selectedSport, setSelectedSport] = useState<string | null>(null);
     const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
@@ -66,6 +70,7 @@ function SearchContent() {
 
     const performSearch = async () => {
         setLoading(true);
+        setLoadFailed(false);
         try {
             const params = new URLSearchParams();
             params.append('q', query);
@@ -77,10 +82,20 @@ function SearchContent() {
             }
 
             const response = await fetch(`/api/search?${params}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
-            setResults(data.results);
+            const r = data?.results;
+            if (!r || typeof r !== 'object') throw new Error('Unexpected search response shape');
+            setResults({
+                teams: Array.isArray(r.teams) ? r.teams : [],
+                players: Array.isArray(r.players) ? r.players : [],
+                matches: Array.isArray(r.matches) ? r.matches : [],
+                competitions: Array.isArray(r.competitions) ? r.competitions : [],
+            });
         } catch (error) {
             console.error('Search error:', error);
+            setResults(null);
+            setLoadFailed(true);
         } finally {
             setLoading(false);
         }
@@ -127,7 +142,7 @@ function SearchContent() {
                         <div>
                             <h1 className="text-2xl font-bold">Search Results</h1>
                             <p className="text-foreground/60">
-                                {loading ? 'Searching...' : query ? `${getTotalResults()} results for "${query}"` : 'Search teams, players, matches, and competitions'}
+                                {loading ? 'Searching...' : loadFailed ? "Couldn't search right now" : query ? `${getTotalResults()} results for "${query}"` : 'Search teams, players, matches, and competitions'}
                             </p>
                         </div>
                     </div>
@@ -186,6 +201,8 @@ function SearchContent() {
                         <h3 className="text-xl font-semibold text-foreground/60 mb-2">Search BrixSports</h3>
                         <p className="text-foreground/40">Type above to find teams, players, matches, and competitions</p>
                     </div>
+                ) : loadFailed ? (
+                    <LoadFailedState title="Couldn't load search results" onRetry={performSearch} />
                 ) : !results || getTotalResults() === 0 ? (
                     <div className="text-center py-20">
                         <Search className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
@@ -331,7 +348,7 @@ function SearchContent() {
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="text-sm text-foreground/60">{match.competition?.name}</span>
                                                         <span className="text-xs text-foreground/40">
-                                                            {new Date(match.startTime).toLocaleDateString()}
+                                                            {safeToLocale(match.startTime, 'date', undefined, 'TBD')}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center justify-between">
