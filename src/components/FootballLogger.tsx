@@ -13,6 +13,7 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // in a separate file. Importing from the shared module closes that gap here
 // too, for free, and removes the duplication.
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
+import { classifyEventPostStatus, describeEventRejection } from '@/lib/event-post-outcome';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { getClientErrorMessage } from '@/lib/client-error';
 import { useAuth } from '@/hooks/useAuth';
@@ -829,62 +830,98 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 loggerName: currentLogger?.name,
                 period: event.period,
             };
-            try {
-
-                const res = await fetch(`/api/matches/${match.id}/events`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (res.ok) {
-                    const saved = await res.json();
-                    if (saved.event && saved.event.id) {
-                        manager.confirmEvent(event.id, saved.event.id);
-                    }
-                } else {
-                    // Server rejection (4xx/5xx) — real error, not a connectivity issue.
-                    // Do NOT queue: the server received and rejected the event.
-                    const errBody = await res.json().catch(() => ({}));
-                    if (res.status === 401) {
-                        alert('Session expired — please log in again to continue logging.');
-                    } else if (res.status === 403) {
-                        alert('Not authorised to log events for this match. Contact admin.');
-                    } else {
-                        alert(`Event failed to save (${res.status}) — check connection and retry.`);
-                    }
-                    console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
-                }
-            } catch (e) {
-                // Network failure — server never received the event. Queue for background sync.
+            // BACKLOG-466 items 4/7: queue the payload for background replay (the
+            // client event id in `payload.id` makes a replay idempotent server-side).
+            // Every failure path now surfaces in the persistent banner (no blocking
+            // alert(), no console-only error). Returns true when the event is safely
+            // in the queue.
+            const queueForRetry = async (why: string): Promise<boolean> => {
                 const token = localStorage.getItem('authToken');
                 if (!token) {
                     // No token = no recovery path. Surface visibly rather than silently losing the event.
-                    console.error('[FootballLogger] Network error and no token available — event cannot be queued:', e);
-                    alert('Network error: could not save this event and no session found. Please re-login and re-log this event manually.');
-                    return;
+                    console.error('[FootballLogger] Cannot queue event, no token available:', why);
+                    setEventSaveError(`"${event.type}" was NOT saved (${why}) and no session was found to queue it. Please re-login and re-log this event.`);
+                    return false;
                 }
                 // JWT TTL is 7 days. Refuse to queue if < 30 min remaining —
                 // a drained sync with an expired token will 401 with no recovery path.
                 const QUEUE_MIN_TTL_SECONDS = 30 * 60;
                 if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
                     console.warn('[FootballLogger] Token expiring soon — refusing to queue offline event');
-                    alert('Your session is expiring soon. This event was NOT queued for offline sync — please re-login before continuing offline, then re-log this event.');
-                    return;
+                    setEventSaveError(`Session expiring soon - "${event.type}" was NOT saved or queued (${why}). Please re-login, then re-log this event.`);
+                    return false;
                 }
                 try {
                     await queueOfflineEvent(match.id, payload, token);
-                    setQueuedOfflineCount(prev => prev + 1);
+                } catch (queueErr) {
+                    console.error('[FootballLogger] Failed to queue event:', queueErr);
+                    setEventSaveError(`"${event.type}" was NOT saved (${why}) and could not be queued on this device either. Re-log it manually once you are back online.`);
+                    return false;
+                }
+                setQueuedOfflineCount(prev => prev + 1);
+                setEventSaveError(`"${event.type}" not saved yet (${why}) - queued, will sync automatically.`);
+                try {
                     if ('serviceWorker' in navigator) {
                         const reg = await navigator.serviceWorker.ready;
                         if ('sync' in reg) {
                             await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
                         }
                     }
-                    console.log('[FootballLogger] Event queued for background sync');
-                } catch (queueErr) {
-                    console.error('[FootballLogger] Failed to queue event:', queueErr);
+                } catch (syncErr) {
+                    // The row is safely in IndexedDB; the mount/online/visibility drain will pick it up.
+                    console.warn('[FootballLogger] Queued, but sync registration failed:', syncErr);
                 }
+                console.log('[FootballLogger] Event queued for background sync');
+                return true;
+            };
+
+            const postEvent = () => fetch(`/api/matches/${match.id}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            try {
+                let res = await postEvent();
+
+                // 401: one cookie-based refresh, then one retry. The refresh also
+                // re-stores localStorage.authToken, which the offline queue needs.
+                if (classifyEventPostStatus(res.status) === 'refresh-auth') {
+                    try {
+                        const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                        if (refreshRes.ok) {
+                            const refreshed = await refreshRes.json().catch(() => null);
+                            if (refreshed?.token) localStorage.setItem('authToken', refreshed.token);
+                            res = await postEvent();
+                        }
+                    } catch (refreshErr) {
+                        console.warn('[FootballLogger] Token refresh failed:', refreshErr);
+                    }
+                }
+
+                const action = classifyEventPostStatus(res.status);
+                if (action === 'saved') {
+                    const saved = await res.json().catch(() => null);
+                    if (saved?.event && saved.event.id) {
+                        manager.confirmEvent(event.id, saved.event.id);
+                    }
+                } else if (action === 'queue' || action === 'refresh-auth') {
+                    // 5xx/408/429 are transient, and a 401 that survived the refresh may
+                    // still clear after re-login: keep the event instead of dropping it.
+                    console.error('[FootballLogger] Event POST not saved, queueing:', res.status);
+                    await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`);
+                } else {
+                    // Non-retryable rejection (403, 409 finished, 422...). The server
+                    // received and refused it: queueing would only fail again. The local
+                    // score may now be ahead of the saved score until reconciled.
+                    const errBody = await res.json().catch(() => ({}));
+                    console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
+                    setEventSaveError(describeEventRejection(res.status, event.type));
+                }
+            } catch (e) {
+                // Network failure — server never received the event. Queue for background sync.
+                console.error('[FootballLogger] Event POST failed (network):', e);
+                await queueForRetry('network error');
             }
         });
 
@@ -1641,14 +1678,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             "Sync Paused" state instead of implying anything isn't being saved. */}
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0">
                             <span className={`w-1.5 h-1.5 rounded-full ${!isConnected ? 'bg-red-500 animate-pulse' : isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-yellow-500 animate-pulse'}`} />
-                            <span className="text-[8px] font-black uppercase tracking-tighter opacity-60">
+                            <span className="text-[10px] font-black uppercase tracking-tighter opacity-80">
                                 {!isConnected ? 'Offline' : isSocketConnected ? 'Live Sync' : 'Sync Paused'}
                             </span>
                         </div>
                         {queuedOfflineCount > 0 && (
                             <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
                                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-orange-400">
                                     {queuedOfflineCount} Queued
                                 </span>
                             </div>
@@ -1673,7 +1710,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         {queuedAdminChangeCount > 0 && (
                             <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
                                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-orange-400">
                                     {queuedAdminChangeCount} Pending
                                 </span>
                             </div>
@@ -2192,11 +2229,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                         }
                                     }
                                 } else {
-                                    alert(`Shootout kick failed to save (${res.status}) — check connection and retry.`);
+                                    setEventSaveError(`Shootout kick was NOT saved (error ${res.status}) - check connection and retry.`);
                                 }
                             } catch (e) {
                                 console.error('[FootballLogger] Shootout kick POST failed:', e);
-                                alert('Network error: could not save this kick. Please retry.');
+                                setEventSaveError('Network error: this shootout kick was NOT saved. Please retry.');
                             }
                         }}
                         />
