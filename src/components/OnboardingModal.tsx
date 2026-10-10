@@ -227,7 +227,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                 const secureUrl = await uploadAvatarToCloudinary(avatarFile);
                 setIsUploadingAvatar(false);
 
-                await fetch(`/api/users/${userId}`, {
+                const patchRes = await fetch(`/api/users/${userId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
@@ -235,6 +235,11 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                     },
                     body: JSON.stringify({ avatar: secureUrl })
                 });
+                // BACKLOG-464 item 11: don't advance to step 4 if the save failed;
+                // the catch below shows the error and the user stays on this step.
+                if (!patchRes.ok) {
+                    throw new Error("Failed to save profile picture. Please try again.");
+                }
             }
             setStep(4);
         } catch (error) {
