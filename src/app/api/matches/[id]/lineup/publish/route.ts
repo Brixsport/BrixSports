@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getMatchConfig } from '@/lib/matchConfig';
 import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
@@ -114,17 +115,13 @@ export async function POST(
             const teamId = team === 'home' ? match[0].homeTeamId : match[0].awayTeamId;
             const otherTeamId = team === 'home' ? match[0].awayTeamId : match[0].homeTeamId;
 
-            await fetch(`${request.url.split('/api')[0]}/api/notifications/match-event`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId,
-                    homeTeamId: match[0].homeTeamId,
-                    awayTeamId: match[0].awayTeamId,
-                    eventType: 'LINEUP_AVAILABLE',
-                    teamName: team === 'home' ? 'Home team' : 'Away team',
-                    competitionId: match[0].competitionId,
-                }),
+            await sendMatchEventNotification({
+                matchId,
+                homeTeamId: match[0].homeTeamId,
+                awayTeamId: match[0].awayTeamId,
+                eventType: 'LINEUP_AVAILABLE',
+                teamName: team === 'home' ? 'Home team' : 'Away team',
+                competitionId: match[0].competitionId ?? undefined,
             });
             console.log('✅ Lineup available notification sent');
         } catch (error) {

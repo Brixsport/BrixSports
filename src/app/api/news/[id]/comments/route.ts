@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { newsComments, news } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 // GET /api/news/[id]/comments - Get all comments for a news article
 export async function GET(
@@ -66,13 +67,25 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        // Identity and display name come from the session -- any userId/userName
+        // in the body is ignored.
+        const userId = await resolveEffectiveUserId(authUser);
+        const userName = authUser.name || authUser.email;
+
         const { id: slug } = await params;
         const body = await request.json();
-        const { userId, userName, content } = body;
+        const { content } = body;
 
-        if (!userId || !userName || !content) {
+        if (!content || typeof content !== 'string') {
             return NextResponse.json(
-                { error: 'User ID, name, and content are required' },
+                { error: 'Content is required' },
                 { status: 400 }
             );
         }
