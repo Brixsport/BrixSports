@@ -243,8 +243,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             navigator.serviceWorker.ready.then((reg) => {
                 if ('sync' in reg) {
                     const syncReg = reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } };
-                    syncReg.sync.register('sync-match-events').catch(() => {});
-                    syncReg.sync.register('sync-admin-changes').catch(() => {});
+                    // `sync` can exist yet reject register() (Background Sync disabled by the
+                    // browser / privacy mode): fall back to the direct drain message, same as iOS.
+                    syncReg.sync.register('sync-match-events').catch(() => {
+                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    });
+                    syncReg.sync.register('sync-admin-changes').catch(() => {
+                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                    });
                 } else if (navigator.serviceWorker.controller) {
                     navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
                     navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
