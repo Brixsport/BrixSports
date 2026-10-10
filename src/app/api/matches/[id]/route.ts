@@ -45,6 +45,11 @@ export async function GET(
 
         const { id: matchId } = await params;
 
+        // Logger identity (loggerId/loggerName on events) is visible to admin/logger sessions only.
+        // No token -> getAuthUser returns null without a DB lookup, so anonymous polling stays cheap.
+        const viewer = await getAuthUser(request).catch(() => null);
+        const canSeeLoggerIdentity = viewer?.role === 'admin' || viewer?.role === 'logger';
+
         // Fetch match with team details
         const [match] = await db
             .select({
@@ -127,10 +132,12 @@ export async function GET(
 
         // Process events to include related player data
         const events = eventsData.map((row) => {
-            // BUG-018: explicit DTO — loggerId is a banned public field
-            const { loggerId: _l, ...publicEvent } = row.event;
+            // BUG-018: explicit DTO — loggerId is a banned public field; loggerName identifies the
+            // same person, so both are stripped for non-privileged callers.
+            const { loggerId: _l, loggerName: _ln, ...publicEvent } = row.event;
             return {
                 ...publicEvent,
+                ...(canSeeLoggerIdentity ? { loggerName: _ln } : {}),
                 player: row.player?.id ? row.player : null,
                 relatedPlayer: row.event.relatedPlayerId
                     ? (relatedPlayerMap.get(row.event.relatedPlayerId) ?? null)

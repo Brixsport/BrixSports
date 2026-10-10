@@ -2,19 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userBookmarks, news } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
-// GET /api/user/bookmarks - Get all bookmarked news for a user
+// GET /api/user/bookmarks - Get all bookmarked news for the authenticated user
 export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        // Session identity only -- any userId query param is ignored.
+        const userId = await resolveEffectiveUserId(authUser);
 
         // Get bookmarks with news details
         const bookmarks = await db
@@ -27,7 +28,8 @@ export async function GET(request: NextRequest) {
             .from(userBookmarks)
             .leftJoin(news, eq(userBookmarks.newsId, news.id))
             .where(eq(userBookmarks.userId, userId))
-            .orderBy(desc(userBookmarks.createdAt));
+            .orderBy(desc(userBookmarks.createdAt))
+            .limit(200);
 
         return NextResponse.json({
             bookmarks,
@@ -45,12 +47,21 @@ export async function GET(request: NextRequest) {
 // POST /api/user/bookmarks - Add a bookmark
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { userId, newsId } = body;
-
-        if (!userId || !newsId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID and News ID are required' },
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const userId = await resolveEffectiveUserId(authUser);
+
+        const body = await request.json();
+        const { newsId } = body;
+
+        if (!newsId) {
+            return NextResponse.json(
+                { error: 'News ID is required' },
                 { status: 400 }
             );
         }
