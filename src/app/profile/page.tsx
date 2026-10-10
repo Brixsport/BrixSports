@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { useAuth } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -44,6 +45,7 @@ interface UserProfile {
 
 export default function ProfilePage() {
     const router = useRouter();
+    const { logout } = useAuth();
     const [user, setUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
@@ -340,7 +342,10 @@ export default function ProfilePage() {
                                                 Edit Profile
                                             </button>
                                             <button
-                                                onClick={() => {
+                                                onClick={async () => {
+                                                    // POST /api/auth/logout so the httpOnly cookie session is
+                                                    // actually cleared server-side, not just local storage.
+                                                    await logout();
                                                     localStorage.removeItem('authToken');
                                                     localStorage.removeItem('user');
                                                     window.location.href = '/login';
