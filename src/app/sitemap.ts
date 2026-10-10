@@ -65,12 +65,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             priority: 0.9,
         },
         {
-            url: `${baseUrl}/matches`,
-            lastModified: new Date(),
-            changeFrequency: 'hourly',
-            priority: 0.9,
-        },
-        {
             url: `${baseUrl}/teams`,
             lastModified: new Date(),
             changeFrequency: 'weekly',
@@ -87,12 +81,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             lastModified: new Date(),
             changeFrequency: 'always',
             priority: 0.9,
-        },
-        {
-            url: `${baseUrl}/livestream`,
-            lastModified: new Date(),
-            changeFrequency: 'daily',
-            priority: 0.8,
         },
         {
             url: `${baseUrl}/stats`,
@@ -112,18 +100,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         //     changeFrequency: 'weekly',
         //     priority: 0.7,
         // },
-        {
-            url: `${baseUrl}/football`,
-            lastModified: new Date(),
-            changeFrequency: 'daily',
-            priority: 0.8,
-        },
-        {
-            url: `${baseUrl}/basketball`,
-            lastModified: new Date(),
-            changeFrequency: 'daily',
-            priority: 0.8,
-        },
         {
             url: `${baseUrl}/search`,
             lastModified: new Date(),

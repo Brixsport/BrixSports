@@ -227,10 +227,7 @@ export default async function RootLayout({
                     "Player statistics and ratings",
                     "Team management tools",
                     "Interactive lineup builder",
-                    "Match predictions and leaderboards",
-                    "Scout features and talent tracking",
-                    "Push notifications",
-                    "Live match chat"
+                    "Push notifications"
                   ],
                   "url": "https://brixsports.com"
                 }
