@@ -1,38 +1,53 @@
 /**
  * Match Reminders API
  * Handles creating, retrieving, and managing match reminders
+ *
+ * All verbs are scoped to the authenticated session user. Any userId sent in the
+ * query string or body is ignored.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchReminders, matches, pushSubscriptions } from '@/db/schema';
 import { eq, and, lt, gte } from 'drizzle-orm';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 /**
  * GET /api/reminders
- * Get all reminders for a user
+ * Get all reminders for the authenticated user
  */
 export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'userId is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        const userId = await resolveEffectiveUserId(authUser);
 
-        // Get all reminders for the user with match details
+        // Get all reminders for the user with a shaped subset of match details
         const userReminders = await db
             .select({
                 reminder: matchReminders,
-                match: matches,
+                match: {
+                    id: matches.id,
+                    sport: matches.sport,
+                    homeTeamId: matches.homeTeamId,
+                    awayTeamId: matches.awayTeamId,
+                    homeScore: matches.homeScore,
+                    awayScore: matches.awayScore,
+                    status: matches.status,
+                    startTime: matches.startTime,
+                    venue: matches.venue,
+                    competition: matches.competition,
+                },
             })
             .from(matchReminders)
             .leftJoin(matches, eq(matchReminders.matchId, matches.id))
-            .where(eq(matchReminders.userId, userId));
+            .where(eq(matchReminders.userId, userId))
+            .limit(200);
 
         return NextResponse.json({
             reminders: userReminders,
@@ -53,12 +68,21 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { userId, matchId, minutesBefore = 15 } = body;
-
-        if (!userId || !matchId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'userId and matchId are required' },
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const userId = await resolveEffectiveUserId(authUser);
+
+        const body = await request.json();
+        const { matchId, minutesBefore = 15 } = body;
+
+        if (!matchId) {
+            return NextResponse.json(
+                { error: 'matchId is required' },
                 { status: 400 }
             );
         }
@@ -132,22 +156,35 @@ export async function POST(request: NextRequest) {
 
 /**
  * DELETE /api/reminders
- * Delete a reminder
+ * Delete one of the authenticated user's reminders
  */
 export async function DELETE(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const userId = await resolveEffectiveUserId(authUser);
+
         const { searchParams } = new URL(request.url);
         const reminderId = searchParams.get('reminderId');
-        const userId = searchParams.get('userId');
         const matchId = searchParams.get('matchId');
 
         if (reminderId) {
-            // Delete by reminder ID
+            // Delete by reminder ID -- only if it belongs to the session user
             await db
                 .delete(matchReminders)
-                .where(eq(matchReminders.id, reminderId));
-        } else if (userId && matchId) {
-            // Delete by user and match
+                .where(
+                    and(
+                        eq(matchReminders.id, reminderId),
+                        eq(matchReminders.userId, userId)
+                    )
+                );
+        } else if (matchId) {
+            // Delete by (session user, match)
             await db
                 .delete(matchReminders)
                 .where(
@@ -158,7 +195,7 @@ export async function DELETE(request: NextRequest) {
                 );
         } else {
             return NextResponse.json(
-                { error: 'Either reminderId or (userId and matchId) is required' },
+                { error: 'Either reminderId or matchId is required' },
                 { status: 400 }
             );
         }
