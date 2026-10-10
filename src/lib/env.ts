@@ -73,3 +73,38 @@ export function validateEnv(): void {
         );
     }
 }
+
+/**
+ * BACKLOG-469 item 2: names of variables that must be set when
+ * NEXT_PUBLIC_ENV === 'production' but are NOT hard-required by validateEnv()
+ * (a missing one degrades a feature; it must never stop a cold start).
+ *
+ * Pure and side-effect free on purpose (no Sentry import: this module is also
+ * imported by client components). Returns [] outside production. Returns
+ * variable NAMES only, never values. The caller (src/instrumentation.ts) is
+ * responsible for logging and must not throw on a non-empty result.
+ */
+export function validateProductionEnv(): string[] {
+    if (process.env.NEXT_PUBLIC_ENV !== 'production') return [];
+
+    const required = [
+        'NEXT_PUBLIC_APP_URL',
+        'NEXT_PUBLIC_WS_URL',
+        'WS_SERVER_URL',
+        'WS_API_KEY',
+        'VAPID_PRIVATE_KEY',
+        'NEXT_PUBLIC_VAPID_PUBLIC_KEY',
+        'CRON_SECRET',
+        'JWT_SECRET',
+    ];
+
+    const missing = required.filter((key) => !process.env[key]);
+
+    // Either DSN counts: the server/edge configs read SENTRY_DSN, the browser
+    // config reads NEXT_PUBLIC_SENTRY_DSN.
+    if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) {
+        missing.push('SENTRY_DSN or NEXT_PUBLIC_SENTRY_DSN');
+    }
+
+    return missing;
+}

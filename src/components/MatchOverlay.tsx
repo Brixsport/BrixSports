@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share2, Heart, AlertCircle, Table } from 'lucide-react';
 import { Team, Player, Match, MatchEvent } from '@/types';
 import { useFavorites } from '@/hooks/useFavorites';
+import { safeToLocale } from '@/lib/safe-date';
 import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
 import { useNotifications } from './Notifications';
 import LiveMatchStatus from './LiveMatchStatus';
@@ -775,7 +776,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     }
 
     if (match.status === 'UPCOMING') {
-      return new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      return safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, '--:--', 'en-US');
     }
 
     return match.status;
@@ -961,7 +962,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 <div className="w-1 h-1 bg-foreground/20 rounded-full" />
                 <div className="flex items-center gap-1.5">
                   <Calendar size={12} />
-                  <span>{new Date(match.startTime).toLocaleDateString()}</span>
+                  <span>{safeToLocale(match.startTime, 'date', undefined, 'TBD')}</span>
                 </div>
               </div>
             )}
@@ -1036,11 +1037,11 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 <InfoCard
                   icon={Calendar}
                   label="Date"
-                  value={new Date(match.startTime).toLocaleDateString('en-US', {
+                  value={safeToLocale(match.startTime, 'date', {
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric'
-                  })}
+                  }, 'TBD', 'en-US')}
                 />
                 <InfoCard icon={Clock} label="Status" value={match.status} />
               </motion.div>

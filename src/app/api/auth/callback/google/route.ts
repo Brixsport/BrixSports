@@ -96,6 +96,16 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(loginUrl);
         }
 
+        // BACKLOG-464 item 7: /oauth2/v2/userinfo reports `verified_email`. Reject only
+        // when Google EXPLICITLY says the address is unverified -- an unverified address
+        // must not be matched onto an existing account (account takeover). A missing
+        // field still passes, so this can't lock out sign-in if the field is absent.
+        if (profile.verified_email === false) {
+            console.error('[Google OAuth Callback] Google email is not verified; refusing sign-in');
+            loginUrl.searchParams.set('error', 'google_auth_failed');
+            return NextResponse.redirect(loginUrl);
+        }
+
         // Find-or-create by email -- same account-matching rule the rest of
         // auth already uses (register/route.ts's own existing-user check),
         // no separate googleId column needed for this. An existing
@@ -143,6 +153,9 @@ export async function GET(request: NextRequest) {
         const destination = new URL('/', env.appUrl || request.nextUrl.origin);
         destination.searchParams.set('oauth_token', token);
         const response = NextResponse.redirect(destination);
+        // BACKLOG-464 items 6/7: the destination URL carries the session JWT in
+        // ?oauth_token= until AuthContext strips it -- keep it out of Referer headers.
+        response.headers.set('Referrer-Policy', 'no-referrer');
 
         // Same cookie pattern as /api/auth/register and /api/auth/login.
         const isSecure = request.headers.get('x-forwarded-proto') === 'https' ||

@@ -133,10 +133,15 @@ export default function MatchDetailClient() {
     const { addNotification } = useNotifications();
     // BACKLOG-365 item 1: consequence note at the moment of favoriting, same
     // shared message MatchOverlay/SearchOverlay use.
-    const handleFollowTeam = useCallback((team: { id: string; name: string }) => {
+    // BACKLOG-464 item 3: only announce the change once the server confirmed it
+    // (toggleTeam resolves true only on a confirmed write). Anonymous viewers have
+    // no server-side follow, so "you'll get alerts" would be false -- no message.
+    const handleFollowTeam = useCallback(async (team: { id: string; name: string }) => {
         const isNowFollowing = !isFavoriteTeam(team.id);
-        toggleTeam(team.id);
-        addNotification(getFollowTeamNotification(team.name, isNowFollowing));
+        const confirmed = await toggleTeam(team.id);
+        if (confirmed) {
+            addNotification(getFollowTeamNotification(team.name, isNowFollowing));
+        }
     }, [isFavoriteTeam, toggleTeam, addNotification]);
     const { toasts, warning, success, removeToast } = useToast();
     const prevConnected = useRef<boolean | null>(null);

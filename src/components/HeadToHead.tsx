@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Trophy, TrendingUp, Calendar } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { safeToLocale } from '@/lib/safe-date';
 
 export interface HeadToHeadData {
     team1: {
@@ -224,7 +225,7 @@ function RecentMatchCard({
         >
             <div className="flex items-center gap-3">
                 <div className="text-xs text-foreground/40">
-                    {new Date(match.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric' }, 'TBD', 'en-US')}
                 </div>
                 <div className="text-xs text-foreground/60">{match.competition}</div>
             </div>

@@ -36,10 +36,26 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
         }
         const secret = new TextEncoder().encode(env.jwtSecret);
-        const { payload } = await jwtVerify(authToken, secret);
-        
-        console.log(`[Auth/Me] Token verified for userId: ${payload.userId}`);
-        
+        // BACKLOG-464 item 8: only a JWT failure (invalid/expired/malformed) is a
+        // 401. Anything else below (DB errors) must surface as 500 so AuthContext's
+        // BUG-217 logic leaves auth state alone instead of treating an outage as a logout.
+        let payload;
+        try {
+            ({ payload } = await jwtVerify(authToken, secret));
+        } catch (verifyError) {
+            console.warn('[Auth/Me] Token verification failed:', verifyError instanceof Error ? verifyError.name : 'unknown');
+            return NextResponse.json(
+                { error: 'Invalid or expired token' },
+                { status: 401 }
+            );
+        }
+
+        // Token without a user id (e.g. a logger-shaped { id } token) is not a valid
+        // /me credential -- keep it a 401 rather than letting the query throw into the 500 path.
+        if (typeof payload.userId !== 'string' || !payload.userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         // Get user from database directly
         const userResult = await db
             .select()
@@ -57,8 +73,6 @@ export async function GET(request: NextRequest) {
             );
         }
         
-        console.log(`[Auth/Me] User found: ${user.email}`);
-
         let favoriteTeam = null;
         if (user.favoriteTeamId) {
             const favoriteTeamResult = await db.select({
@@ -91,10 +105,11 @@ export async function GET(request: NextRequest) {
             }
         });
     } catch (error) {
-        console.error('[Auth/Me] Auth verification error:', error);
+        // Non-JWT failure (DB/query error): server fault, not an auth rejection.
+        console.error('[Auth/Me] Unexpected error resolving current user:', error);
         return NextResponse.json(
-            { error: 'Authentication failed' },
-            { status: 401 }
+            { error: 'Internal server error' },
+            { status: 500 }
         );
     }
 }

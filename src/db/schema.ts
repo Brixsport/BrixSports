@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, foreignKey, unique } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, foreignKey, unique, index } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
 // Organizations table
@@ -375,7 +375,12 @@ export const matches = sqliteTable('matches', {
     shootoutAwayScore: integer('shootout_away_score').default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
+}, (table) => ({
+    // BACKLOG-465 item 3: hot public-read paths (sport/status filters on the
+    // list routes, newest-first ordering). Applied via dev/migrate-add-hot-indexes.mjs.
+    sportStatusIdx: index('idx_matches_sport_status').on(table.sport, table.status),
+    createdAtIdx: index('idx_matches_created_at').on(table.createdAt),
+}));
 
 // Match-Logger Assignments table
 export const matchLoggerAssignments = sqliteTable('match_logger_assignments', {
@@ -405,7 +410,12 @@ export const matchEvents = sqliteTable('match_events', {
     loggerId: text('logger_id').references(() => loggers.id),
     loggerName: text('logger_name'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
+}, (table) => ({
+    // BACKLOG-465 item 3: per-match event timeline reads and dedup/aggregate
+    // lookups. Applied via dev/migrate-add-hot-indexes.mjs.
+    matchMinuteIdx: index('idx_match_events_match_minute').on(table.matchId, table.minute, table.second),
+    matchPlayerTypeIdx: index('idx_match_events_match_player_type').on(table.matchId, table.playerId, table.type, table.createdAt),
+}));
 
 // Loggers table
 export const loggers = sqliteTable('loggers', {

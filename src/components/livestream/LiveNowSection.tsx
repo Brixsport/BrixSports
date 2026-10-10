@@ -93,7 +93,7 @@ export function LiveNowSection() {
 
                 {streams.length > 3 && (
                     <Link
-                        href="/livestreams"
+                        href="/live"
                         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors group"
                     >
                         <span className="text-sm font-medium">View All</span>

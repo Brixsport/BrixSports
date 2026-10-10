@@ -1,0 +1,35 @@
+name: CI Quality Gate
+
+# BACKLOG-468 item 2: until now CI ran no typecheck and no tests (next.config.ts
+# sets ignoreBuildErrors), so a PR into dev/main could merge with new type
+# errors or broken unit tests. This job is DB-free and secret-free:
+#   1. tsc, failing only on errors NOT in scripts/tsc-baseline.txt
+#   2. vitest unit tests (vitest.config.ts includes tests/unit only)
+# Integration and smoke tests are deliberately NOT run here (they need staging
+# credentials); see smoke-test.yml.
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  quality:
+    name: Typecheck (no new errors) + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (fail on new errors vs scripts/tsc-baseline.txt)
+        run: node scripts/tsc-baseline-check.mjs
+
+      - name: Unit tests
+        run: npm test

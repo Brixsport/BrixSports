@@ -35,8 +35,8 @@ NEXT_PUBLIC_BASE_URL=https://your-project.vercel.app
 NEXT_PUBLIC_WS_URL=https://your-project.vercel.app
 
 # Push Notifications
-NEXT_PUBLIC_VAPID_PUBLIC_KEY=BDYyajLbF8Op4vstjSIzBPKRd_qLxvQpYRJBj9VLBoe6TZF-dJVQOWtwxCGvMyas1qp7NImmBUgenK4Eu7krPcA
-VAPID_PRIVATE_KEY=tNgRs7W4-tDhaqLot8FTt2GUkV50jSBI0ltcqkEW_Jw
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=<generate with: npx web-push generate-vapid-keys>
+VAPID_PRIVATE_KEY=<generate with: npx web-push generate-vapid-keys>
 VAPID_SUBJECT=mailto:admin@brixsport.com
 
 # Cron
@@ -142,8 +142,8 @@ NEXT_PUBLIC_BASE_URL=
 NEXT_PUBLIC_WS_URL=
 
 # === PUSH NOTIFICATIONS ===
-NEXT_PUBLIC_VAPID_PUBLIC_KEY=BDYyajLbF8Op4vstjSIzBPKRd_qLxvQpYRJBj9VLBoe6TZF-dJVQOWtwxCGvMyas1qp7NImmBUgenK4Eu7krPcA
-VAPID_PRIVATE_KEY=tNgRs7W4-tDhaqLot8FTt2GUkV50jSBI0ltcqkEW_Jw
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=<generate with: npx web-push generate-vapid-keys>
+VAPID_PRIVATE_KEY=<generate with: npx web-push generate-vapid-keys>
 VAPID_SUBJECT=mailto:admin@brixsport.com
 
 # === CRON JOB ===
