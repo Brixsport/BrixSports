@@ -13,8 +13,8 @@ Your Web Push notification VAPID keys have been successfully generated:
 ```json
 {
   "subject": "mailto:admin@brixsport.com",
-  "publicKey": "BDYyajLbF8Op4vstjSIzBPKRd_qLxvQpYRJBj9VLBoe6TZF-dJVQOWtwxCGvMyas1qp7NImmBUgenK4Eu7krPcA",
-  "privateKey": "tNgRs7W4-tDhaqLot8FTt2GUkV50jSBI0ltcqkEW_Jw"
+  "publicKey": "<REDACTED:NEXT_PUBLIC_VAPID_PUBLIC_KEY>",
+  "privateKey": "<REDACTED:VAPID_PRIVATE_KEY>"
 }
 ```
 

@@ -1,0 +1,15 @@
+# tsc baseline for scripts/tsc-baseline-check.mjs (BACKLOG-468 item 2).
+# One normalized error per line: <file>: error <code>: <message> (no line/col).
+# Regenerate with: node scripts/tsc-baseline-check.mjs --update
+# Only ever shrink this file; never add entries to hide a new error.
+src/db/add-nesa-inter-school-festival.ts: error TS2769: No overload matches this call.
+src/db/add-nesa-inter-school-festival.ts: error TS2769: No overload matches this call.
+src/db/add-nesa-inter-school-festival.ts: error TS2769: No overload matches this call.
+src/db/check-database.ts: error TS2538: Type 'null' cannot be used as an index type.
+src/db/check-database.ts: error TS2538: Type 'null' cannot be used as an index type.
+src/db/check-database.ts: error TS2538: Type 'null' cannot be used as an index type.
+src/db/check-full-database.ts: error TS2538: Type 'null' cannot be used as an index type.
+src/db/check-full-database.ts: error TS2538: Type 'null' cannot be used as an index type.
+src/db/check-full-database.ts: error TS2538: Type 'null' cannot be used as an index type.
+src/db/fix-bells-team-ids.ts: error TS2769: No overload matches this call.
+src/db/migrations/add-user-lineups.ts: error TS2307: Cannot find module './index' or its corresponding type declarations.
