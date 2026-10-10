@@ -42,7 +42,14 @@ export async function GET(request: NextRequest) {
             .orderBy(matchEvents.minute, matchEvents.second)
             .limit(100);
 
-        return NextResponse.json({ events });
+        // Logger identity is NDPR-banned from public responses: only admin/logger sessions get full rows.
+        const authUser = await getAuthUser(request).catch(() => null);
+        const canSeeLoggerIdentity = authUser?.role === 'admin' || authUser?.role === 'logger';
+        const responseEvents = canSeeLoggerIdentity
+            ? events
+            : events.map(({ loggerId, loggerName, ...rest }) => rest);
+
+        return NextResponse.json({ events: responseEvents });
     } catch (error) {
         console.error('Error fetching events:', error);
         return NextResponse.json(
