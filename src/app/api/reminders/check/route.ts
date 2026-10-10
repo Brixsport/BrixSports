@@ -48,9 +48,16 @@ if (vapidPublicKey && vapidPrivateKey) {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 }
 
+// BACKLOG-468 item 8: fail closed. The old `|| 'dev-cron-secret'` fallback let
+// anyone trigger the check whenever CRON_SECRET was unset. Now an unset secret
+// rejects every request (and says why in the server log) instead.
 function isAuthorized(request: NextRequest): boolean {
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+        console.error('[Reminder Checker] CRON_SECRET is not set; rejecting request (fail closed)');
+        return false;
+    }
     const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET || 'dev-cron-secret';
     return authHeader === `Bearer ${cronSecret}`;
 }
 

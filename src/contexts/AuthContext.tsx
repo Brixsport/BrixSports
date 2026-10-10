@@ -163,6 +163,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
             if (response.ok) {
+                // BACKLOG-464 item 2: the refresh route rotates the cookie AND returns
+                // the new token in the body. verifyAuth prefers a Bearer header over the
+                // cookie, so a stale localStorage copy would 401 every Bearer caller once
+                // the original token expires. Only overwrite an existing copy -- a
+                // cookie-only session (no localStorage token) stays cookie-only.
+                try {
+                    const body = await response.json();
+                    if (
+                        typeof body?.token === 'string' &&
+                        body.token.length > 0 &&
+                        localStorage.getItem('authToken')
+                    ) {
+                        localStorage.setItem('authToken', body.token);
+                    }
+                } catch (parseError) {
+                    // Body unreadable -- the cookie was still rotated; don't fail the refresh.
+                    console.warn('[AuthContext] refreshSession could not read refresh body:', parseError);
+                }
                 await checkAuth();
             } else if (response.status === 401 || response.status === 403) {
                 // BUG-217: genuinely expired/invalid session -- safe to log out.

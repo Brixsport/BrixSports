@@ -6,6 +6,7 @@ import { Search, X, TrendingUp, Clock, Users, Trophy, Calendar, Loader2, ArrowRi
 import { useRouter } from 'next/navigation';
 import { useDebounce } from '@/hooks/useDebounce';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { safeToLocale } from '@/lib/safe-date';
 import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
 
 interface SearchResult {
@@ -366,7 +367,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                         )}
                                                     </div>
                                                     <div className="text-xs text-foreground/60 mt-1">
-                                                        {match.competition?.name} • {new Date(match.startTime).toLocaleDateString()}
+                                                        {match.competition?.name} • {safeToLocale(match.startTime, 'date', undefined, 'TBD')}
                                                     </div>
                                                 </button>
                                             ))}

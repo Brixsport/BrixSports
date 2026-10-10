@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { X, Trophy, Users, TrendingUp, Calendar, MapPin, Award, Star } from 'lucide-react';
+import { safeToLocale } from '@/lib/safe-date';
 
 interface Team {
     id: string;
@@ -405,7 +406,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                                 </div>
                                                             ) : (
                                                                 <div className="text-sm text-foreground/60">
-                                                                    {new Date(match.startTime).toLocaleDateString()}
+                                                                    {safeToLocale(match.startTime, 'date', undefined, 'TBD')}
                                                                 </div>
                                                             )}
                                                             <div className="text-xs text-foreground/40 mt-1">{match.status}</div>

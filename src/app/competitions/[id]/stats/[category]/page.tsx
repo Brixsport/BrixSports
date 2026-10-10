@@ -4,6 +4,7 @@ import { ArrowLeft, AlertCircle, Loader2, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 
 interface Competition {
   id: string;
@@ -42,17 +43,25 @@ export default function StatCategoryPage() {
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // BACKLOG-471: only a real 404 means "competition not found". A network error or
+  // 5xx is a failed load with a retry, never a claim that the competition is gone.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setLoadFailed(false);
+        setNotFound(false);
         const compRes = await fetch(`/api/competitions/${competitionId}`);
-        const compData = await compRes.json();
-        if (!compRes.ok || !compData.competition) {
+        if (compRes.status === 404) {
           setNotFound(true);
           return;
         }
+        if (!compRes.ok) throw new Error(`HTTP ${compRes.status}`);
+        const compData = await compRes.json();
+        if (!compData.competition) throw new Error('Unexpected competition response shape');
         setCompetition(compData.competition);
 
         const sport = compData.competition.sport;
@@ -67,23 +76,33 @@ export default function StatCategoryPage() {
         const leadersRes = await fetch(
           `/api/players/stats/leaders?type=${category}&competitionId=${competitionId}&sport=${sport}&limit=50`
         );
+        if (!leadersRes.ok) throw new Error(`HTTP ${leadersRes.status}`);
         const leadersData = await leadersRes.json();
-        setLeaders(leadersData.leaders || []);
+        if (!Array.isArray(leadersData.leaders)) throw new Error('Unexpected leaders response shape');
+        setLeaders(leadersData.leaders);
       } catch (err) {
         console.error('Error fetching stat category:', err);
-        setNotFound(true);
+        setLoadFailed(true);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [competitionId, category]);
+  }, [competitionId, category, attempt]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
+        <LoadFailedState title="Couldn't load these stats" onRetry={() => setAttempt((n) => n + 1)} />
       </div>
     );
   }

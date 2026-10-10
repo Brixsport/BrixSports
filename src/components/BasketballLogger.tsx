@@ -6,7 +6,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
+import { generateClientEventId } from '@/lib/event-id';
+import { classifyEventPostStatus, describeEventRejection } from '@/lib/event-post-outcome';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -206,6 +208,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // same IndexedDB store sw-admin.js already drains, so no service-worker
     // change is needed, only the write side.
     const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BACKLOG-466 item 2: events the server rejected on replay (non-retryable 4xx).
+    const [failedQueuedCount, setFailedQueuedCount] = useState(0);
     // BUG-142 (remaining scope): period-transition PATCH / undo DELETE retries,
     // via the separate pendingAdminChanges queue (see admin-offline-queue.ts).
     const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
@@ -213,10 +217,16 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
         const handleMessage = (e: MessageEvent) => {
-            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
-                setQueuedOfflineCount(0);
+            // BACKLOG-466 item 2: SYNC_COMPLETE now means the queue is truly empty;
+            // SYNC_PARTIAL carries what is still pending / permanently failed.
+            const counts = parseMatchEventSyncMessage(e.data);
+            if (counts) {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
             } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
                 setQueuedAdminChangeCount(0);
+            } else if (e.data?.type === 'SYNC_PARTIAL' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(typeof e.data.remaining === 'number' ? e.data.remaining : 0);
             }
         };
         navigator.serviceWorker.addEventListener('message', handleMessage);
@@ -233,8 +243,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             navigator.serviceWorker.ready.then((reg) => {
                 if ('sync' in reg) {
                     const syncReg = reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } };
-                    syncReg.sync.register('sync-match-events').catch(() => {});
-                    syncReg.sync.register('sync-admin-changes').catch(() => {});
+                    // `sync` can exist yet reject register() (Background Sync disabled by the
+                    // browser / privacy mode): fall back to the direct drain message, same as iOS.
+                    syncReg.sync.register('sync-match-events').catch(() => {
+                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    });
+                    syncReg.sync.register('sync-admin-changes').catch(() => {
+                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                    });
                 } else if (navigator.serviceWorker.controller) {
                     navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
                     navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
@@ -246,6 +262,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         };
         window.addEventListener('online', triggerDrain);
         document.addEventListener('visibilitychange', handleVisibility);
+        // BACKLOG-466 item 3: hydrate the queued badge from IndexedDB and drain once
+        // on mount (a killed tab / evicted iOS PWA leaves rows nothing drained).
+        getQueuedEventCounts()
+            .then((counts) => {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
+            })
+            .catch((err) => console.error('[BasketballLogger] Could not read offline queue:', err));
+        triggerDrain();
         return () => {
             window.removeEventListener('online', triggerDrain);
             document.removeEventListener('visibilitychange', handleVisibility);
@@ -887,7 +912,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const made = isShotType ? (points ?? 0) > 0 : undefined;
 
         const newEvent = {
-            id: `e${events.length + 1}`,
+            // BACKLOG-466 item 1: was `e${events.length + 1}` (not unique across the
+            // match, and too short to be an idempotency key). Now also sent as the
+            // POST body `id` so the server adopts it and a queued replay is a no-op.
+            id: generateClientEventId('bk'),
             type,
             minute: getElapsedMinute(),
             second: getElapsedSecondsInPeriod(),
@@ -946,6 +974,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         // this project's own rule that logging errors must never appear to succeed
         // silently.
         const eventPayload = {
+            id: newEvent.id,
             type,
             minute: newEvent.minute,
             second: newEvent.second,
@@ -959,14 +988,68 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             loggerId: currentLogger?.id,
             loggerName: currentLogger?.name,
         };
+        // BACKLOG-466 items 4/7: shared queue path for a network failure AND for a
+        // transient non-OK response (5xx/408/429, or a 401 that survived a refresh).
+        // The client id in eventPayload.id makes the later replay idempotent.
+        const queueForRetry = async (why: string): Promise<boolean> => {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                setEventSaveError(`Failed to save "${type}" (${why}) — no session found. Event NOT queued; please re-login and re-log this event manually.`);
+                return false;
+            }
+            const QUEUE_MIN_TTL_SECONDS = 30 * 60;
+            if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
+                setEventSaveError(`Session expiring soon — "${type}" was NOT queued for offline sync (${why}). Please re-login before continuing offline, then re-log this event.`);
+                return false;
+            }
+            try {
+                await queueOfflineEvent(match.id, eventPayload, token);
+            } catch (queueErr) {
+                console.error('Failed to queue event:', queueErr);
+                setEventSaveError(`Failed to save "${type}" (${why}) and queueing also failed. Event kept locally only - re-log it once you are back online.`);
+                return false;
+            }
+            setQueuedOfflineCount(prev => prev + 1);
+            setEventSaveError(`"${type}" not saved yet (${why}) — queued, will save automatically once back online.`);
+            try {
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
+                    }
+                }
+            } catch (syncErr) {
+                console.warn('[BasketballLogger] Queued, but sync registration failed:', syncErr);
+            }
+            console.log('[BasketballLogger] Event queued for background sync');
+            return true;
+        };
+        const postEvent = () => fetch(`/api/matches/${match.id}/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(eventPayload),
+        });
         try {
-            const res = await fetch(`/api/matches/${match.id}/events`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(eventPayload),
-            });
-            if (!res.ok) {
-                setEventSaveError(`Failed to save "${type}" (${res.status}) — event kept locally only. Check connection and retry logging it if needed.`);
+            let res = await postEvent();
+            // 401: one cookie-based refresh (also re-stores localStorage.authToken), one retry.
+            if (classifyEventPostStatus(res.status) === 'refresh-auth') {
+                try {
+                    const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                    if (refreshRes.ok) {
+                        const refreshed = await refreshRes.json().catch(() => null);
+                        if (refreshed?.token) localStorage.setItem('authToken', refreshed.token);
+                        res = await postEvent();
+                    }
+                } catch (refreshErr) {
+                    console.warn('[BasketballLogger] Token refresh failed:', refreshErr);
+                }
+            }
+            const action = classifyEventPostStatus(res.status);
+            if (action === 'queue' || action === 'refresh-auth') {
+                console.error('[BasketballLogger] Event POST not saved, queueing:', res.status);
+                if (!(await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`))) return;
+            } else if (action === 'rejected') {
+                setEventSaveError(describeEventRejection(res.status, type));
             } else {
                 setEventSaveError(null);
                 // BUG-129: the local temp id (`e${events.length + 1}`) must be swapped
@@ -986,31 +1069,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             // background sync (BUG-142), mirroring FootballLogger's own mechanism
             // exactly rather than leaving this the silent-loss dead end it was.
             console.error('Failed to persist event:', error);
-            const token = localStorage.getItem('authToken');
-            if (!token) {
-                setEventSaveError(`Failed to save "${type}" — offline and no session found. Event NOT queued; please re-login and re-log this event manually.`);
-                return;
-            }
-            const QUEUE_MIN_TTL_SECONDS = 30 * 60;
-            if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
-                setEventSaveError(`Session expiring soon — "${type}" was NOT queued for offline sync. Please re-login before continuing offline, then re-log this event.`);
-                return;
-            }
-            try {
-                await queueOfflineEvent(match.id, eventPayload, token);
-                setQueuedOfflineCount(prev => prev + 1);
-                setEventSaveError(`"${type}" queued for offline sync — will save automatically once back online.`);
-                if ('serviceWorker' in navigator) {
-                    const reg = await navigator.serviceWorker.ready;
-                    if ('sync' in reg) {
-                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
-                    }
-                }
-                console.log('[BasketballLogger] Event queued for background sync');
-            } catch (queueErr) {
-                console.error('Failed to queue event:', queueErr);
-                setEventSaveError(`Failed to save "${type}" — offline or unreachable, and queueing also failed. Event kept locally only.`);
-            }
+            if (!(await queueForRetry('offline'))) return;
         }
 
         // Dispatch WebSocket event for live updates
@@ -1305,6 +1364,39 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     </div>
                 </div>
             </div>
+
+            {/* BACKLOG-466 items 2/3: persistent queue status. Basketball had a banner for
+                the moment of queueing but nothing showing what was still pending, or
+                what the server rejected on replay, after a reload or a partial sync. */}
+            {(queuedOfflineCount > 0 || failedQueuedCount > 0) && (
+                <div className="max-w-7xl mx-auto mb-4 px-4 flex flex-wrap gap-2">
+                    {queuedOfflineCount > 0 && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 rounded-lg border border-orange-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                            <span className="text-xs font-black uppercase tracking-tight text-orange-400">
+                                {queuedOfflineCount} Queued - waiting to sync
+                            </span>
+                        </div>
+                    )}
+                    {failedQueuedCount > 0 && (
+                        <button
+                            type="button"
+                            title="These queued events were rejected by the server and were NOT saved. Re-log them manually, then tap to dismiss."
+                            onClick={() => {
+                                clearFailedQueuedEvents()
+                                    .then(() => setFailedQueuedCount(0))
+                                    .catch((err) => console.error('[BasketballLogger] Failed to clear rejected queue rows:', err));
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 rounded-lg border border-red-500/40"
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <span className="text-xs font-black uppercase tracking-tight text-red-400">
+                                {failedQueuedCount} Not Saved - tap to dismiss
+                            </span>
+                        </button>
+                    )}
+                </div>
+            )}
 
             {eventSaveError && (
                 <div className="max-w-7xl mx-auto mb-4 px-4">

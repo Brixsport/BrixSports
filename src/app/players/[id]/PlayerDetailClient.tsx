@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { PlayerAvatar } from '@/lib/utils/player-avatar';
 import { useFavorites } from '@/hooks/useFavorites';
 import { displayMinute } from '@/lib/eventMinute';
+import { safeFormat } from '@/lib/safe-date';
 
 interface PlayerData {
     player: any;
@@ -402,7 +403,7 @@ export default function PlayerDetailClient() {
                                             >
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="text-sm text-foreground/60">
-                                                        {matchData.match && format(new Date(matchData.match.startTime), 'MMM d, yyyy')}
+                                                        {matchData.match && safeFormat(matchData.match.startTime, 'MMM d, yyyy', 'TBD')}
                                                     </div>
                                                     <div className="text-sm font-semibold">
                                                         {matchData.match?.homeScore} - {matchData.match?.awayScore}
@@ -648,7 +649,7 @@ export default function PlayerDetailClient() {
                                             <div>
                                                 <div className="font-semibold">{event.type.replace('_', ' ')}</div>
                                                 <div className="text-sm text-foreground/60">
-                                                    {event.match && format(new Date(event.match.startTime), 'MMM d, yyyy')}
+                                                    {event.match && safeFormat(event.match.startTime, 'MMM d, yyyy', 'TBD')}
                                                 </div>
                                             </div>
                                         </div>

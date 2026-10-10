@@ -225,7 +225,7 @@ export default function ProfilePage() {
                 setUser(userData);
             } catch (error) {
                 console.error('Error fetching user:', error);
-                localStorage.removeItem('token'); // Clear invalid token
+                localStorage.removeItem('authToken'); // Clear invalid token (BACKLOG-464 item 9: was the wrong key 'token')
                 router.push('/login');
             } finally {
                 setLoading(false);
@@ -385,16 +385,23 @@ export default function ProfilePage() {
                                         <button
                                             onClick={async () => {
                                                 const token = localStorage.getItem('authToken');
-                                                await fetch(`/api/users/${user.id}`, {
-                                                    method: 'PATCH',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                        'Authorization': `Bearer ${token}`
-                                                    },
-                                                    body: JSON.stringify({ bio: user.bio })
-                                                });
-                                                setIsEditing(false);
-                                                toast.success("Bio updated!");
+                                                // BACKLOG-464 item 9: only report success once the server confirmed.
+                                                try {
+                                                    const res = await fetch(`/api/users/${user.id}`, {
+                                                        method: 'PATCH',
+                                                        headers: {
+                                                            'Content-Type': 'application/json',
+                                                            'Authorization': `Bearer ${token}`
+                                                        },
+                                                        body: JSON.stringify({ bio: user.bio })
+                                                    });
+                                                    if (!res.ok) throw new Error(`Bio update failed (${res.status})`);
+                                                    setIsEditing(false);
+                                                    toast.success("Bio updated!");
+                                                } catch (error) {
+                                                    console.error('Error saving bio:', error);
+                                                    toast.error("Failed to save bio. Please try again.");
+                                                }
                                             }}
                                             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-[10px] font-black uppercase tracking-widest"
                                         >

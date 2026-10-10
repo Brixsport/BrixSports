@@ -254,7 +254,9 @@ class PushNotificationService {
                 ? { deviceId: anon.deviceId, matchId: anon.matchId, subscription }
                 : { userId, subscription };
 
-            console.log('[PushService] Sending subscription request:', requestBody);
+            // BACKLOG-464 item 12: don't log the request body -- it carries the push
+            // subscription's p256dh/auth keys and endpoint.
+            console.log('[PushService] Sending subscription request');
 
             const response = await fetch('/api/notifications/subscribe', {
                 method: 'POST',
