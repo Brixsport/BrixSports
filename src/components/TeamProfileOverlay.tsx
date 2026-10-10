@@ -144,16 +144,16 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-md overflow-y-auto"
             onClick={onClose}
         >
             <div className="min-h-screen flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
-                <div className="sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10">
+                <div className="sticky top-0 z-10 bg-card border-b border-border">
                     <div className="max-w-5xl mx-auto px-4 pt-4 pb-2">
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 relative rounded-xl overflow-hidden bg-white/5">
+                                <div className="w-16 h-16 relative rounded-xl overflow-hidden bg-muted">
                                     {isValidImagePath(team.logo) ? (
                                         <Image
                                             src={team.logo}
@@ -169,37 +169,37 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                 </div>
                                 <div>
                                     <h1 className="text-xl font-bold">{team.name}</h1>
-                                    <p className="text-sm text-white/60">{team.shortName}</p>
+                                    <p className="text-sm text-foreground/60">{team.shortName}</p>
                                     {team.university && (
-                                        <p className="text-[10px] uppercase tracking-wider text-white/40 mt-1">{team.university}</p>
+                                        <p className="text-[10px] uppercase tracking-wider text-foreground/40 mt-1">{team.university}</p>
                                     )}
                                 </div>
                             </div>
 
                             <div className="flex flex-col items-end gap-2">
-                                <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                                <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors">
                                     <X size={20} />
                                 </button>
                                 {standing && (
                                     <div className="flex gap-4">
                                         <div className="text-right">
                                             <p className="text-lg font-bold text-primary leading-none">{standing.won}</p>
-                                            <p className="text-[10px] text-white/40 uppercase">W</p>
+                                            <p className="text-[10px] text-foreground/40 uppercase">W</p>
                                         </div>
                                         {isFootball && (
                                             <div className="text-right">
                                                 <p className="text-lg font-bold text-yellow-500 leading-none">{standing.drawn}</p>
-                                                <p className="text-[10px] text-white/40 uppercase">D</p>
+                                                <p className="text-[10px] text-foreground/40 uppercase">D</p>
                                             </div>
                                         )}
                                         <div className="text-right">
                                             <p className="text-lg font-bold text-red-500 leading-none">{standing.lost}</p>
-                                            <p className="text-[10px] text-white/40 uppercase">L</p>
+                                            <p className="text-[10px] text-foreground/40 uppercase">L</p>
                                         </div>
                                         {!isFootball && (
                                             <div className="text-right">
                                                 <p className="text-lg font-bold leading-none">{winPercentage}%</p>
-                                                <p className="text-[10px] text-white/40 uppercase">Win%</p>
+                                                <p className="text-[10px] text-foreground/40 uppercase">Win%</p>
                                             </div>
                                         )}
                                     </div>
@@ -208,14 +208,14 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                         </div>
 
                         {/* Tabs */}
-                        <div className="flex gap-1 overflow-x-auto scrollbar-hide border-t border-white/5 pt-2">
+                        <div className="flex gap-1 overflow-x-auto scrollbar-hide border-t border-border pt-2">
                             {tabs.map((tab) => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab.id
-                                        ? 'bg-primary text-black'
-                                        : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted text-foreground/60 hover:bg-muted/70 hover:text-foreground'
                                         }`}
                                 >
                                     <tab.icon size={12} />
@@ -231,7 +231,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                     {loading ? (
                         <div className="py-20 text-center">
                             <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                            <p className="text-white/40">Loading team data...</p>
+                            <p className="text-foreground/40">Loading team data...</p>
                         </div>
                     ) : (
                         <AnimatePresence mode="wait">
@@ -245,33 +245,33 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                     className="space-y-6"
                                 >
                                     {standing && (
-                                        <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                            <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">
+                                        <div className="bg-muted rounded-2xl border border-border p-6">
+                                            <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-4">
                                                 Team Statistics
                                             </h3>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                 <div>
                                                     <p className="text-2xl font-bold">{standing.played}</p>
-                                                    <p className="text-xs text-white/40">Games Played</p>
+                                                    <p className="text-xs text-foreground/40">Games Played</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-2xl font-bold text-primary">{standing.points}</p>
-                                                    <p className="text-xs text-white/40">Points</p>
+                                                    <p className="text-xs text-foreground/40">Points</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-2xl font-bold">{standing.goalsFor}</p>
-                                                    <p className="text-xs text-white/40">{isFootball ? 'Goals For' : 'Points For'}</p>
+                                                    <p className="text-xs text-foreground/40">{isFootball ? 'Goals For' : 'Points For'}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-2xl font-bold">{standing.goalsAgainst}</p>
-                                                    <p className="text-xs text-white/40">{isFootball ? 'Goals Against' : 'Points Against'}</p>
+                                                    <p className="text-xs text-foreground/40">{isFootball ? 'Goals Against' : 'Points Against'}</p>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                        <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">
+                                    <div className="bg-muted rounded-2xl border border-border p-6">
+                                        <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-4">
                                             Recent Form
                                         </h3>
                                         <div className="space-y-2">
@@ -286,7 +286,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                     return (
                                                         <div
                                                             key={match.id}
-                                                            className="flex items-center justify-between p-3 bg-white/5 rounded-xl"
+                                                            className="flex items-center justify-between p-3 bg-muted rounded-xl"
                                                         >
                                                             <div className="flex items-center gap-3">
                                                                 <div
@@ -308,7 +308,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                     );
                                                 })
                                             ) : (
-                                                <p className="text-white/40 text-center py-4">No recent matches</p>
+                                                <p className="text-foreground/40 text-center py-4">No recent matches</p>
                                             )}
                                         </div>
                                     </div>
@@ -329,7 +329,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                 <div
                                                     key={player.id}
                                                     onClick={() => onSelectPlayer?.(player)}
-                                                    className="bg-white/5 rounded-2xl border border-white/10 p-6 hover:border-primary/50 transition-all cursor-pointer"
+                                                    className="bg-muted rounded-2xl border border-border p-6 hover:border-primary/50 transition-all cursor-pointer"
                                                 >
                                                     <div className="flex items-start justify-between mb-4">
                                                         <div>
@@ -337,7 +337,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                                 {player.name}
                                                                 {player.rating != null && player.rating >= 8 && <Star size={16} className="text-primary fill-primary" />}
                                                             </h3>
-                                                            <p className="text-sm text-white/40">
+                                                            <p className="text-sm text-foreground/40">
                                                                 #{player.number} • {player.position}
                                                             </p>
                                                         </div>
@@ -345,7 +345,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                             {player.rating != null ? player.rating.toFixed(1) : '-'}
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-4 text-xs text-white/60">
+                                                    <div className="flex items-center gap-4 text-xs text-foreground/60">
                                                         <div>
                                                             <Award size={14} className="inline mr-1" />
                                                             {player.eyePoints} Eye Points
@@ -354,7 +354,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="col-span-full text-center py-12 text-white/40">
+                                            <div className="col-span-full text-center py-12 text-foreground/40">
                                                 No players found
                                             </div>
                                         )}
@@ -382,17 +382,17 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                             return (
                                                 <div
                                                     key={match.id}
-                                                    className="bg-white/5 rounded-2xl border border-white/10 p-4 hover:border-primary/50 transition-all"
+                                                    className="bg-muted rounded-2xl border border-border p-4 hover:border-primary/50 transition-all"
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex-1">
-                                                            <p className="text-xs text-white/40 mb-2">{match.competition}</p>
+                                                            <p className="text-xs text-foreground/40 mb-2">{match.competition}</p>
                                                             <div className="flex items-center gap-3">
                                                                 <span className="font-semibold">
                                                                     {isHome ? 'vs' : '@'} {opponentName}
                                                                 </span>
                                                             </div>
-                                                            <p className="text-xs text-white/40 mt-2">
+                                                            <p className="text-xs text-foreground/40 mt-2">
                                                                 <MapPin size={12} className="inline mr-1" />
                                                                 {match.venue}
                                                             </p>
@@ -404,18 +404,18 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                                     {isHome ? match.awayScore : match.homeScore}
                                                                 </div>
                                                             ) : (
-                                                                <div className="text-sm text-white/60">
+                                                                <div className="text-sm text-foreground/60">
                                                                     {new Date(match.startTime).toLocaleDateString()}
                                                                 </div>
                                                             )}
-                                                            <div className="text-xs text-white/40 mt-1">{match.status}</div>
+                                                            <div className="text-xs text-foreground/40 mt-1">{match.status}</div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             );
                                         })
                                     ) : (
-                                        <div className="text-center py-12 text-white/40">No matches found</div>
+                                        <div className="text-center py-12 text-foreground/40">No matches found</div>
                                     )}
                                 </motion.div>
                             )}
@@ -427,18 +427,18 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -20 }}
-                                    className="bg-white/5 rounded-2xl border border-white/10 p-6"
+                                    className="bg-muted rounded-2xl border border-border p-6"
                                 >
-                                    <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-6">
+                                    <h3 className="font-bold text-sm uppercase tracking-wider text-foreground/60 mb-6">
                                         Detailed Statistics
                                     </h3>
                                     <div className="space-y-6">
                                         <div>
                                             <div className="flex justify-between text-sm mb-2">
-                                                <span className="text-white/60">Win Percentage</span>
+                                                <span className="text-foreground/60">Win Percentage</span>
                                                 <span className="font-bold">{winPercentage}%</span>
                                             </div>
-                                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                            <div className="h-2 bg-muted rounded-full overflow-hidden">
                                                 <div
                                                     className="h-full bg-primary"
                                                     style={{ width: `${winPercentage}%` }}
@@ -447,22 +447,22 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <p className="text-xs text-white/40 mb-1">{isFootball ? 'Avg Goals For' : 'Avg Points For'}</p>
+                                            <div className="bg-muted rounded-xl p-4">
+                                                <p className="text-xs text-foreground/40 mb-1">{isFootball ? 'Avg Goals For' : 'Avg Points For'}</p>
                                                 <p className="text-2xl font-bold">
                                                     {(standing.goalsFor / (standing.played || 1)).toFixed(1)}
                                                 </p>
                                             </div>
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <p className="text-xs text-white/40 mb-1">{isFootball ? 'Avg Goals Against' : 'Avg Points Against'}</p>
+                                            <div className="bg-muted rounded-xl p-4">
+                                                <p className="text-xs text-foreground/40 mb-1">{isFootball ? 'Avg Goals Against' : 'Avg Points Against'}</p>
                                                 <p className="text-2xl font-bold">
                                                     {(standing.goalsAgainst / (standing.played || 1)).toFixed(1)}
                                                 </p>
                                             </div>
                                         </div>
 
-                                        <div className="bg-white/5 rounded-xl p-4">
-                                            <p className="text-xs text-white/40 mb-1">{isFootball ? 'Goal Difference' : 'Point Differential'}</p>
+                                        <div className="bg-muted rounded-xl p-4">
+                                            <p className="text-xs text-foreground/40 mb-1">{isFootball ? 'Goal Difference' : 'Point Differential'}</p>
                                             <p className={`text-3xl font-bold ${standing.goalDifference > 0 ? 'text-blue-500' : standing.goalDifference < 0 ? 'text-red-500' : ''}`}>
                                                 {standing.goalDifference > 0 ? '+' : ''}{standing.goalDifference}
                                             </p>

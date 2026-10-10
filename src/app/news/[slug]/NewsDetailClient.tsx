@@ -310,7 +310,7 @@ export default function NewsDetailClient() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
         );
@@ -318,10 +318,10 @@ export default function NewsDetailClient() {
 
     if (!article) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="text-center">
-                    <h1 className="text-2xl font-bold text-white mb-4">Article not found</h1>
-                    <Link href="/news" className="text-primary hover:text-white transition-colors">
+                    <h1 className="text-2xl font-bold text-foreground mb-4">Article not found</h1>
+                    <Link href="/news" className="text-primary hover:text-foreground transition-colors">
                         ← Back to News
                     </Link>
                 </div>
@@ -330,13 +330,13 @@ export default function NewsDetailClient() {
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-[#e0e0e0]">
+        <div className="min-h-screen bg-background text-[#e0e0e0]">
             {/* Minimalist Header */}
-            <div className="border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-40">
+            <div className="border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-40">
                 <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
                     <Link
                         href="/news"
-                        className="flex items-center gap-2 text-white/40 hover:text-white transition-colors text-sm font-medium"
+                        className="flex items-center gap-2 text-foreground/40 hover:text-foreground transition-colors text-sm font-medium"
                     >
                         <ArrowLeft className="w-4 h-4" />
                         Back to News
@@ -347,7 +347,7 @@ export default function NewsDetailClient() {
                             onClick={handleBookmark}
                             className={`p-2 rounded-full transition-all ${isBookmarked
                                 ? 'text-yellow-500'
-                                : 'text-white/40 hover:bg-white/5 hover:text-white'
+                                : 'text-foreground/40 hover:bg-muted hover:text-foreground'
                                 }`}
                             title={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
                         >
@@ -355,7 +355,7 @@ export default function NewsDetailClient() {
                         </button>
                         <button
                             onClick={() => setShowShareMenu(!showShareMenu)}
-                            className="p-2 rounded-full text-white/40 hover:bg-white/5 hover:text-white transition-colors relative"
+                            className="p-2 rounded-full text-foreground/40 hover:bg-muted hover:text-foreground transition-colors relative"
                             title="Share"
                         >
                             <Share2 className="w-5 h-5" />
@@ -372,21 +372,21 @@ export default function NewsDetailClient() {
                                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="absolute right-4 md:right-[calc(50%-24rem)] top-14 w-56 bg-[#111] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+                                className="absolute right-4 md:right-[calc(50%-24rem)] top-14 w-56 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden"
                             >
                                 <div className="p-1">
-                                    <button onClick={() => handleShare('facebook')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
+                                    <button onClick={() => handleShare('facebook')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted rounded-lg transition-colors text-left text-sm text-foreground/80">
                                         <Facebook className="w-4 h-4 text-[#1877f2]" /> Facebook
                                     </button>
-                                    <button onClick={() => handleShare('twitter')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
+                                    <button onClick={() => handleShare('twitter')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted rounded-lg transition-colors text-left text-sm text-foreground/80">
                                         <Twitter className="w-4 h-4 text-[#1da1f2]" /> Twitter
                                     </button>
-                                    <button onClick={() => handleShare('whatsapp')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
+                                    <button onClick={() => handleShare('whatsapp')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted rounded-lg transition-colors text-left text-sm text-foreground/80">
                                         <MessageCircle className="w-4 h-4 text-[#25d366]" /> WhatsApp
                                     </button>
-                                    <div className="h-px bg-white/5 my-1" />
-                                    <button onClick={() => handleShare('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
-                                        <Copy className="w-4 h-4 text-white/40" /> Copy Link
+                                    <div className="h-px bg-border my-1" />
+                                    <button onClick={() => handleShare('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted rounded-lg transition-colors text-left text-sm text-foreground/80">
+                                        <Copy className="w-4 h-4 text-foreground/40" /> Copy Link
                                     </button>
                                 </div>
                             </motion.div>
@@ -409,22 +409,22 @@ export default function NewsDetailClient() {
                         )}
                     </div>
 
-                    <h1 className="text-4xl md:text-5xl font-display font-bold text-white mb-6 leading-[1.15]">
+                    <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-6 leading-[1.15]">
                         {article.title}
                     </h1>
 
-                    <p className="text-xl text-white/60 leading-relaxed mb-8 max-w-2xl mx-auto">
+                    <p className="text-xl text-foreground/60 leading-relaxed mb-8 max-w-2xl mx-auto">
                         {article.excerpt}
                     </p>
 
-                    <div className="flex items-center justify-center gap-4 border-t border-b border-white/5 py-4">
+                    <div className="flex items-center justify-center gap-4 border-t border-b border-border py-4">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
-                                <User className="w-5 h-5 text-white/60" />
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                                <User className="w-5 h-5 text-foreground/60" />
                             </div>
                             <div className="text-left">
-                                <div className="text-sm font-bold text-white">{article.authorName}</div>
-                                <div className="flex items-center gap-2 text-xs text-white/40">
+                                <div className="text-sm font-bold text-foreground">{article.authorName}</div>
+                                <div className="flex items-center gap-2 text-xs text-foreground/40">
                                     <span>{new Date(article.publishedAt || article.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                     <span>•</span>
                                     <span>{readingTime || '5 min read'}</span>
@@ -437,7 +437,7 @@ export default function NewsDetailClient() {
                 {/* Featured Image */}
                 {article.imageUrl && (
                     <figure className="mb-12">
-                        <div className="rounded-xl overflow-hidden border border-white/10 shadow-2xl">
+                        <div className="rounded-xl overflow-hidden border border-border shadow-2xl">
                             <img
                                 src={article.imageUrl}
                                 alt={article.title}
@@ -450,25 +450,25 @@ export default function NewsDetailClient() {
                 {/* Main Content */}
                 <div
                     className="prose prose-invert prose-lg max-w-none mb-16
-                    prose-headings:font-display prose-headings:font-bold prose-headings:text-white
+                    prose-headings:font-display prose-headings:font-bold prose-headings:text-foreground
                     prose-p:text-[#d4d4d4] prose-p:font-sans prose-p:text-[18px] prose-p:leading-[1.8] prose-p:tracking-normal
                     prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-                    prose-strong:text-white prose-strong:font-bold
-                    prose-blockquote:border-l-primary prose-blockquote:bg-white/5 prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:rounded-r-lg
+                    prose-strong:text-foreground prose-strong:font-bold
+                    prose-blockquote:border-l-primary prose-blockquote:bg-muted prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:rounded-r-lg
                     prose-img:rounded-xl prose-img:shadow-xl
-                    prose-code:text-primary prose-code:bg-white/5 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
+                    prose-code:text-primary prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
                     prose-li:text-[#d4d4d4]"
                     dangerouslySetInnerHTML={{ __html: formatNewsContent(article.content) }}
                 />
 
                 {/* Tags */}
                 {article.tags && (
-                    <div className="flex items-center gap-2 flex-wrap mb-12 pb-12 border-b border-white/5">
+                    <div className="flex items-center gap-2 flex-wrap mb-12 pb-12 border-b border-border">
                         {JSON.parse(article.tags).map((tag: string, index: number) => (
                             <Link
                                 key={index}
                                 href={`/news?search=${tag}`}
-                                className="px-3 py-1.5 rounded-lg bg-white/5 text-white/60 text-sm hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                                className="px-3 py-1.5 rounded-lg bg-muted text-foreground/60 text-sm hover:bg-muted/80 hover:text-foreground transition-colors cursor-pointer"
                             >
                                 #{tag}
                             </Link>
@@ -484,13 +484,13 @@ export default function NewsDetailClient() {
                                 onClick={handleLike}
                                 className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all border ${isLiked
                                     ? 'bg-red-500/10 border-red-500/50 text-red-500'
-                                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'
+                                    : 'bg-muted border-border text-foreground/60 hover:bg-muted/80 hover:text-foreground'
                                     }`}
                             >
                                 <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
                                 <span className="font-bold text-sm">{likeCount}</span>
                             </button>
-                            <h3 className="text-lg font-bold text-white/80">
+                            <h3 className="text-lg font-bold text-foreground/80">
                                 {commentCount} comments
                             </h3>
                         </div>
@@ -504,13 +504,13 @@ export default function NewsDetailClient() {
                                 onChange={(e) => setCommentText(e.target.value)}
                                 placeholder="What are your thoughts?"
                                 rows={3}
-                                className="w-full pl-4 pr-12 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 resize-none transition-all"
+                                className="w-full pl-4 pr-12 py-3 bg-muted border border-border rounded-xl text-foreground placeholder-foreground/30 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 resize-none transition-all"
                                 maxLength={1000}
                             />
                             <button
                                 type="submit"
                                 disabled={!commentText.trim()}
-                                className="absolute right-3 bottom-3 p-2 rounded-lg bg-primary text-black hover:bg-primary/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg"
+                                className="absolute right-3 bottom-3 p-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg"
                             >
                                 <Send className="w-4 h-4" />
                             </button>
@@ -532,39 +532,39 @@ export default function NewsDetailClient() {
                                     className="group"
                                 >
                                     <div className="flex gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center">
-                                            <span className="text-xs font-bold text-white/60">
+                                        <div className="w-8 h-8 rounded-full bg-muted flex-shrink-0 flex items-center justify-center">
+                                            <span className="text-xs font-bold text-foreground/60">
                                                 {comment.userName.charAt(0).toUpperCase()}
                                             </span>
                                         </div>
                                         <div className="flex-1">
-                                            <div className="bg-[#0a0a0a] border border-white/5 rounded-xl p-4 mb-2">
+                                            <div className="bg-card border border-border rounded-xl p-4 mb-2">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <span className="font-bold text-sm text-white">{comment.userName}</span>
-                                                    <span className="text-xs text-white/20">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                                                    <span className="font-bold text-sm text-foreground">{comment.userName}</span>
+                                                    <span className="text-xs text-foreground/20">{new Date(comment.createdAt).toLocaleDateString()}</span>
                                                 </div>
-                                                <p className="text-white/80 text-sm leading-relaxed">{comment.content}</p>
+                                                <p className="text-foreground/80 text-sm leading-relaxed">{comment.content}</p>
                                             </div>
 
                                             {/* Comment Actions */}
                                             <div className="flex items-center gap-4 px-2">
                                                 <button
                                                     onClick={() => handleCommentLike(comment.id)}
-                                                    className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${commentLikeData.isLiked ? 'text-red-500' : 'text-white/40 hover:text-white'}`}
+                                                    className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${commentLikeData.isLiked ? 'text-red-500' : 'text-foreground/40 hover:text-foreground'}`}
                                                 >
                                                     <Heart className={`w-3.5 h-3.5 ${commentLikeData.isLiked ? 'fill-current' : ''}`} />
                                                     {commentLikeData.count > 0 && <span>{commentLikeData.count}</span>}
                                                 </button>
                                                 <button
                                                     onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
-                                                    className="text-xs font-medium text-white/40 hover:text-white transition-colors"
+                                                    className="text-xs font-medium text-foreground/40 hover:text-foreground transition-colors"
                                                 >
                                                     Reply
                                                 </button>
                                                 {comment.userId === userId && (
                                                     <button
                                                         onClick={() => handleDeleteComment(comment.id)}
-                                                        className="text-xs font-medium text-white/40 hover:text-red-500 transition-colors ml-auto"
+                                                        className="text-xs font-medium text-foreground/40 hover:text-red-500 transition-colors ml-auto"
                                                     >
                                                         Delete
                                                     </button>
@@ -586,13 +586,13 @@ export default function NewsDetailClient() {
                                                                 onChange={(e) => setReplyText(e.target.value)}
                                                                 placeholder="Write a reply..."
                                                                 rows={2}
-                                                                className="w-full pl-4 pr-12 py-2 bg-[#0a0a0a] border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-primary/50 text-sm resize-none"
+                                                                className="w-full pl-4 pr-12 py-2 bg-muted border border-border rounded-xl text-foreground placeholder-foreground/30 focus:outline-none focus:border-primary/50 text-sm resize-none"
                                                                 maxLength={1000}
                                                             />
                                                             <button
                                                                 onClick={() => handleAddReply(comment.id)}
                                                                 disabled={!replyText.trim()}
-                                                                className="absolute right-2 bottom-2 p-1.5 rounded-lg bg-white/10 text-white/60 hover:bg-primary hover:text-black transition-colors disabled:opacity-0"
+                                                                className="absolute right-2 bottom-2 p-1.5 rounded-lg bg-muted text-foreground/60 hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-0"
                                                             >
                                                                 <Send className="w-3 h-3" />
                                                             </button>
@@ -603,21 +603,21 @@ export default function NewsDetailClient() {
 
                                             {/* Replies */}
                                             {hasReplies && (
-                                                <div className="mt-3 pl-4 border-l-2 border-white/5 space-y-4">
+                                                <div className="mt-3 pl-4 border-l-2 border-border space-y-4">
                                                     {replies.map(reply => (
                                                         <div key={reply.id} className="flex gap-3">
-                                                            <div className="w-6 h-6 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center">
-                                                                <span className="text-[10px] font-bold text-white/60">
+                                                            <div className="w-6 h-6 rounded-full bg-muted flex-shrink-0 flex items-center justify-center">
+                                                                <span className="text-[10px] font-bold text-foreground/60">
                                                                     {reply.userName.charAt(0).toUpperCase()}
                                                                 </span>
                                                             </div>
                                                             <div className="flex-1">
-                                                                <div className="bg-[#0a0a0a] border border-white/5 rounded-lg p-3">
+                                                                <div className="bg-card border border-border rounded-lg p-3">
                                                                     <div className="flex items-center justify-between mb-1">
-                                                                        <span className="font-bold text-xs text-white">{reply.userName}</span>
-                                                                        <span className="text-[10px] text-white/20">{new Date(reply.createdAt).toLocaleDateString()}</span>
+                                                                        <span className="font-bold text-xs text-foreground">{reply.userName}</span>
+                                                                        <span className="text-[10px] text-foreground/20">{new Date(reply.createdAt).toLocaleDateString()}</span>
                                                                     </div>
-                                                                    <p className="text-white/80 text-sm leading-relaxed">{reply.content}</p>
+                                                                    <p className="text-foreground/80 text-sm leading-relaxed">{reply.content}</p>
                                                                 </div>
                                                             </div>
                                                         </div>

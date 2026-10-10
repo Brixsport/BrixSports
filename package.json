@@ -27,7 +27,13 @@
     "migrate:organization-ownership": "tsx src/db/migrations/add-organization-ownership.ts",
     "migrate:player-memberships": "tsx src/db/migrations/backfill-player-team-memberships.ts",
     "migrate:organization-affiliations": "tsx src/db/migrations/add-organization-affiliations-and-governance.ts",
-    "migrate:all": "tsx src/db/migrations/run-migrations.ts"
+    "migrate:all": "tsx src/db/migrations/run-migrations.ts",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:smoke": "tsx tests/smoke/critical-flows.ts",
+    "test:smoke:dual-logger": "tsx tests/smoke/dual-logger-race.test.ts",
+    "test:smoke:realtime": "tsx tests/smoke/realtime-broadcast.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "3.1029.0",
@@ -89,7 +95,7 @@
     "dotted-map": "^2.2.3",
     "downloadjs": "^1.4.7",
     "drizzle-kit": "^0.31.6",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "0.45.2",
     "embla-carousel-auto-scroll": "^8.6.0",
     "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
@@ -105,8 +111,8 @@
     "motion": "^12.23.24",
     "motion-dom": "^12.23.23",
     "nanoid": "^5.1.6",
-    "next": "15.3.8",
-    "next-auth": "^4.24.13",
+    "next": "15.5.24",
+    "next-auth": "4.24.15",
     "next-cloudinary": "^6.17.5",
     "next-themes": "^0.4.6",
     "nodemailer": "^7.0.13",
@@ -152,11 +158,12 @@
     "@types/three": "^0.178.0",
     "@types/web-push": "^3.6.4",
     "eslint": "^9.38.0",
-    "eslint-config-next": "^16.0.1",
+    "eslint-config-next": "15.5.24",
     "sharp": "0.35.3",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

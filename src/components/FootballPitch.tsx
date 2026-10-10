@@ -110,8 +110,8 @@ export function FootballPitch({ players, lineup, teamName, onPlayerClick, isHome
 
             {/* Team name */}
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
-                <div className="bg-black/60 backdrop-blur-sm px-4 py-1 rounded-full border border-white/20">
-                    <span className="text-xs font-bold uppercase tracking-wider text-white">{teamName}</span>
+                <div className="bg-card/60 backdrop-blur-sm px-4 py-1 rounded-full border border-border">
+                    <span className="text-xs font-bold uppercase tracking-wider text-foreground">{teamName}</span>
                 </div>
             </div>
 
@@ -214,10 +214,10 @@ function PlayerDot({ player, rating, position, style, onClick, isGoalkeeper }: P
 
             {/* Player info tooltip */}
             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
-                <div className="bg-black/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap">
-                    <p className="text-xs font-bold text-white">{player.name}</p>
+                <div className="bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border whitespace-nowrap">
+                    <p className="text-xs font-bold text-foreground">{player.name}</p>
                     <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-white/60 uppercase">{position}</span>
+                        <span className="text-[10px] text-foreground/60 uppercase">{position}</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
                             rating >= 6.0 ? 'bg-blue-500/20 text-blue-400' :
                                 'bg-red-500/20 text-red-400'

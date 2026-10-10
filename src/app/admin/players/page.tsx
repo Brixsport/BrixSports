@@ -393,13 +393,22 @@ function AdminPlayersPageContent() {
                         </div>
                     ) : filteredPlayers.length > 0 ? (
                         <div className="overflow-x-auto">
+                            {/* BACKLOG-346: this table's own scroll wrapper (overflow-x-auto) made
+                                the 670px table technically reachable by scrolling on a 375px
+                                viewport, but the Actions column sat off-screen by default -- same
+                                shrink-to-fit-not-scroll direction as BACKLOG-336's /admin/loggers
+                                fix (a data table's actions must be visible without scrolling).
+                                Tightened padding/text across every column at the default (mobile)
+                                breakpoint, hid the least-essential Stats column below sm: (rating/
+                                age are one tap away on the player's own profile via the Actions
+                                column's View link), full desktop sizing untouched from md: up. */}
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-white/5 text-nowrap">
-                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Athlete Info</th>
-                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Position & Team</th>
-                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-center">Stats</th>
-                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-right">Actions</th>
+                                        <th className="px-2 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6 text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Athlete Info</th>
+                                        <th className="px-2 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6 text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Position & Team</th>
+                                        <th className="hidden lg:table-cell px-2 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6 text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-center">Stats</th>
+                                        <th className="px-1 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6 text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -411,9 +420,9 @@ function AdminPlayersPageContent() {
                                                 key={player.id}
                                                 className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group"
                                             >
-                                                <td className="px-4 md:px-8 py-4 md:py-6">
-                                                    <div className="flex items-center gap-3 md:gap-4">
-                                                        <div className="w-10 h-10 md:w-12 md:h-12 bg-white/10 rounded-lg md:rounded-xl flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/30 transition-colors shrink-0">
+                                                <td className="px-2 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6">
+                                                    <div className="flex items-center gap-2 md:gap-3 lg:gap-4">
+                                                        <div className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 bg-white/10 rounded-lg lg:rounded-xl flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/30 transition-colors shrink-0">
                                                             {player.image ? (
                                                                 <img src={player.image} alt="" className="w-full h-full object-cover" />
                                                             ) : (
@@ -421,57 +430,62 @@ function AdminPlayersPageContent() {
                                                             )}
                                                         </div>
                                                         <div className="min-w-0">
-                                                            <div className="font-display font-black text-sm md:text-base italic uppercase truncate">{player.name}</div>
-                                                            <div className="text-[8px] md:text-[10px] font-bold text-white/40 uppercase tracking-tight flex items-center gap-2">
-                                                                {player.jerseyName && <span className="truncate max-w-[60px] md:max-w-none">{player.jerseyName}</span>}
+                                                            <div className="font-display font-black text-sm lg:text-base italic uppercase truncate max-w-[90px] md:max-w-none">{player.name}</div>
+                                                            {/* BACKLOG-346 follow-up: jerseyName/ID line hidden below md: -- was still
+                                                                widening this column enough to push Actions off-screen by default even
+                                                                after the first shrink pass; both are one tap away on the player's own
+                                                                profile via the Actions column's View link, same "least essential"
+                                                                rationale already applied to the Stats column. */}
+                                                            <div className="hidden lg:flex text-[8px] lg:text-[10px] font-bold text-white/40 uppercase tracking-tight items-center gap-2">
+                                                                {player.jerseyName && <span className="truncate max-w-[60px] lg:max-w-none">{player.jerseyName}</span>}
                                                                 {player.jerseyName && <span className="w-1 h-1 bg-white/10 rounded-full shrink-0" />}
                                                                 <span className="text-primary/60 shrink-0">ID: {player.id.slice(0, 8)}</span>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 md:px-8 py-4 md:py-6">
-                                                    <div className="min-w-[120px]">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="px-1.5 py-0.5 bg-primary/20 text-primary text-[8px] md:text-[10px] font-black rounded uppercase italic">#{player.number}</span>
-                                                            <span className="font-bold text-xs md:text-sm">{player.position}</span>
+                                                <td className="px-2 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6">
+                                                    <div className="min-w-0 md:min-w-[120px]">
+                                                        <div className="flex items-center gap-1 md:gap-2 mb-1">
+                                                            <span className="px-1.5 py-0.5 bg-primary/20 text-primary text-[8px] lg:text-[10px] font-black rounded uppercase italic">#{player.number}</span>
+                                                            <span className="font-bold text-xs lg:text-sm truncate max-w-[60px] md:max-w-none">{player.position}</span>
                                                         </div>
-                                                        <div className="text-[10px] md:text-xs text-white/40 font-semibold truncate max-w-[150px]">{team?.name || 'Unknown Team'}</div>
+                                                        <div className="text-[10px] lg:text-xs text-white/40 font-semibold truncate max-w-[80px] md:max-w-[150px]">{team?.name || 'Unknown Team'}</div>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 md:px-8 py-4 md:py-6">
-                                                    <div className="flex items-center justify-center gap-3 md:gap-4">
+                                                <td className="hidden lg:table-cell px-2 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6">
+                                                    <div className="flex items-center justify-center gap-3 lg:gap-4">
                                                         <div className="text-center">
-                                                            <p className="text-[8px] md:text-[10px] font-black text-white/20 uppercase tracking-tighter">Rating</p>
-                                                            <p className="font-display font-black text-primary italic leading-none text-base md:text-lg">{player.rating?.toFixed(1) || '—'}</p>
+                                                            <p className="text-[8px] lg:text-[10px] font-black text-white/20 uppercase tracking-tighter">Rating</p>
+                                                            <p className="font-display font-black text-primary italic leading-none text-base lg:text-lg">{player.rating?.toFixed(1) || '—'}</p>
                                                         </div>
-                                                        <div className="w-px h-4 md:h-6 bg-white/10" />
+                                                        <div className="w-px h-4 lg:h-6 bg-white/10" />
                                                         <div className="text-center">
-                                                            <p className="text-[8px] md:text-[10px] font-black text-white/20 uppercase tracking-tighter">Age</p>
-                                                            <p className="font-display font-black text-white italic leading-none text-base md:text-lg">{player.age || '—'}</p>
+                                                            <p className="text-[8px] lg:text-[10px] font-black text-white/20 uppercase tracking-tighter">Age</p>
+                                                            <p className="font-display font-black text-white italic leading-none text-base lg:text-lg">{player.age || '—'}</p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 md:px-8 py-4 md:py-6 text-right">
-                                                    <div className="flex items-center justify-end gap-1 md:gap-2">
+                                                <td className="px-1 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6 text-right">
+                                                    <div className="flex items-center justify-end gap-0.5 md:gap-1 lg:gap-2">
                                                         <Link
                                                             href={`/admin/players/${player.id}`}
-                                                            className="p-1.5 md:p-2 hover:bg-white/5 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
+                                                            className="p-1 md:p-1.5 lg:p-2 hover:bg-white/5 rounded-lg lg:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
                                                             title="View profile"
                                                         >
-                                                            <ExternalLink size={18} className="text-white/40 group-hover/btn:text-primary" />
+                                                            <ExternalLink size={16} className="text-white/40 group-hover/btn:text-primary md:w-[18px] md:h-[18px]" />
                                                         </Link>
                                                         <button
                                                             onClick={() => handleOpenEdit(player)}
-                                                            className="p-1.5 md:p-2 hover:bg-white/5 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
+                                                            className="p-1 md:p-1.5 lg:p-2 hover:bg-white/5 rounded-lg lg:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
                                                         >
-                                                            <Edit size={18} className="text-white/40 group-hover/btn:text-white" />
+                                                            <Edit size={16} className="text-white/40 group-hover/btn:text-white md:w-[18px] md:h-[18px]" />
                                                         </button>
                                                         <button
                                                             onClick={() => confirmDelete(player)}
-                                                            className="p-1.5 md:p-2 hover:bg-red-500/10 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-red-500/20 group/btn"
+                                                            className="p-1 md:p-1.5 lg:p-2 hover:bg-red-500/10 rounded-lg lg:rounded-xl transition-all border border-transparent hover:border-red-500/20 group/btn"
                                                         >
-                                                            <Trash2 size={18} className="text-white/40 group-hover/btn:text-red-500" />
+                                                            <Trash2 size={16} className="text-white/40 group-hover/btn:text-red-500 md:w-[18px] md:h-[18px]" />
                                                         </button>
                                                     </div>
                                                 </td>

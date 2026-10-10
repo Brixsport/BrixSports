@@ -343,10 +343,10 @@ export default function MatchRatingsAdjustPage() {
                         <ChevronLeft className="w-6 h-6" />
                     </button>
 
-                    <div className="flex items-center gap-12 bg-white/5 backdrop-blur-md px-12 py-6 rounded-3xl border border-white/10 shadow-lg">
+                    <div className="flex items-center gap-3 md:gap-12 bg-white/5 backdrop-blur-md px-4 py-4 md:px-12 md:py-6 rounded-3xl border border-white/10 shadow-lg max-w-full">
                         {/* Home Team */}
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="w-20 h-20 relative">
+                        <div className="flex flex-col items-center gap-3 shrink-0">
+                            <div className="w-12 h-12 md:w-20 md:h-20 relative">
                                 <Image
                                     src={match.homeTeam.logo}
                                     alt={match.homeTeam.name}
@@ -358,9 +358,9 @@ export default function MatchRatingsAdjustPage() {
                         </div>
 
                         {/* Valid Score */}
-                        <div className="text-center">
-                            <div className="text-xs text-white/40 font-bold tracking-widest uppercase mb-2">{match.competition}</div>
-                            <div className="text-5xl font-black font-mono tracking-tighter flex items-center gap-4">
+                        <div className="text-center min-w-0">
+                            <div className="text-xs text-white/40 font-bold tracking-widest uppercase mb-2 truncate">{match.competition}</div>
+                            <div className="text-3xl md:text-5xl font-black font-mono tracking-tighter flex items-center gap-2 md:gap-4">
                                 <span>{match.homeScore}</span>
                                 <span className="text-white/20">-</span>
                                 <span>{match.awayScore}</span>
@@ -371,8 +371,8 @@ export default function MatchRatingsAdjustPage() {
                         </div>
 
                         {/* Away Team */}
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="w-20 h-20 relative">
+                        <div className="flex flex-col items-center gap-3 shrink-0">
+                            <div className="w-12 h-12 md:w-20 md:h-20 relative">
                                 <Image
                                     src={match.awayTeam.logo}
                                     alt={match.awayTeam.name}

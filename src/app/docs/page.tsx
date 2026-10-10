@@ -8,6 +8,7 @@ import {
     Copy, Check, Menu, X, type LucideIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface DocSection {
     id: string;
@@ -736,6 +737,7 @@ git push origin feature/your-feature-name
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center gap-3">
+                            <BackButton />
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
                                 <BookOpen className="w-6 h-6 text-white" />
                             </div>

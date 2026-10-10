@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Circle, Target, AlertCircle, ArrowRightLeft, Eye,
+    Circle, Target, Eye,
     TrendingUp, Award, Clock, Zap, Shield, Activity
 } from 'lucide-react';
+import { FaFutbol } from 'react-icons/fa';
 import { format } from 'date-fns';
 
 interface Event {
@@ -17,6 +19,7 @@ interface Event {
     player?: {
         id: string;
         name: string;
+        jerseyName?: string;
         number: number;
     };
     // WS events from match-state-manager carry playerSnapshot instead of player
@@ -29,6 +32,7 @@ interface Event {
     relatedPlayer?: {
         id: string;
         name: string;
+        jerseyName?: string;
         number: number;
     };
     team?: {
@@ -51,19 +55,64 @@ interface LiveMatchTimelineProps {
     sport?: string;
 }
 
+const KEY_EVENT_TYPES = new Set(['GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION']);
+
+// BACKLOG-294: show the jersey/known-as name everywhere a player
+// appears on this page, not the full real name.
+function displayName(person?: { name?: string; jerseyName?: string } | null): string | undefined {
+    return person?.jerseyName || person?.name || undefined;
+}
+
+// Same exact path data as lucide-react's `ArrowRightLeft` icon (pinned
+// v0.552.0, node_modules/lucide-react/dist/esm/icons/arrow-right-left.js) --
+// reproduced as a custom SVG only so the top (right-pointing) and bottom
+// (left-pointing) arrow can each carry their own color; lucide's own
+// component renders every path with a single `currentColor`, so a two-tone
+// version isn't reachable through its normal props.
+function SubstitutionIcon({ className }: { className?: string }) {
+    return (
+        <svg
+            className={className}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <g className="text-green-400">
+                <path d="m16 3 4 4-4 4" />
+                <path d="M20 7H4" />
+            </g>
+            <g className="text-red-400">
+                <path d="m8 21-4-4 4-4" />
+                <path d="M4 17h16" />
+            </g>
+        </svg>
+    );
+}
+
 export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoints, sport = 'football' }: LiveMatchTimelineProps) {
+    // BACKLOG-294: opens on "Key events" by default, with "All" a click away 
+    //(Key events is the pre-selected pill).
+    const [filter, setFilter] = useState<'all' | 'key'>('key');
+
     const getEventIcon = (type: string) => {
         switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
-                return <Target className="w-5 h-5" />;
+                // Figma uses a literal soccer ball, not a generic target/crosshair.
+                return <FaFutbol className="w-4 h-4" />;
             case 'ASSIST':
                 return <TrendingUp className="w-5 h-5" />;
             case 'YELLOW_CARD':
-                return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+                // Figma's card badge is a literal solid card rectangle, not an icon glyph.
+                return <div className="w-3.5 h-5 rounded-[2px] bg-yellow-400" />;
             case 'RED_CARD':
-                return <AlertCircle className="w-5 h-5 text-red-500" />;
+                return <div className="w-3.5 h-5 rounded-[2px] bg-red-600" />;
             case 'SUBSTITUTION':
-                return <ArrowRightLeft className="w-5 h-5" />;
+                // Same two-tone in/out icon as the Key events view (SubstitutionIcon),
+                // not a plain single-color ArrowRightLeft -- Richard's explicit ask.
+                return <SubstitutionIcon className="w-5 h-5" />;
             case 'SAVE':
                 return <Shield className="w-5 h-5" />;
             case 'PENALTY_SAVED':
@@ -86,8 +135,37 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
         }
     };
 
+    // Icon badge background/foreground per event type -- sits in the outer
+    // minute column (icon above, minute below), matching the Figma commentary
+    // reference exactly, instead of duplicating the icon inside the card too.
+    const getIconBadgeStyle = (type: string) => {
+        switch (type.toUpperCase().replace(/\s+/g, '_')) {
+            case 'GOAL':
+            case 'FIELD_GOAL':
+            case 'THREE_POINTER':
+                return 'bg-primary/15 text-primary';
+            case 'YELLOW_CARD':
+            case 'RED_CARD':
+                // Neutral container -- the card rectangle itself (see getEventIcon)
+                // already carries the color, matching Figma's flat card badge.
+                return 'bg-muted';
+            case 'SUBSTITUTION':
+                return 'bg-green-500/15 text-green-400';
+            case 'EYE_POINT':
+                return 'bg-purple-500/15 text-purple-400';
+            case 'SAVE':
+            case 'BLOCK':
+            case 'PENALTY_SAVED':
+                return 'bg-amber-500/15 text-amber-400';
+            case 'PENALTY_MISSED':
+                return 'bg-red-500/15 text-red-400';
+            default:
+                return 'bg-muted text-foreground/60';
+        }
+    };
+
     const getEventColor = (type: string) => {
-        const baseStyle = "bg-white/5 border border-white/10 backdrop-blur-sm transition-all hover:bg-white/10";
+        const baseStyle = "bg-muted border border-border backdrop-blur-sm transition-all hover:bg-muted/70";
         switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
             case 'FIELD_GOAL':
@@ -117,7 +195,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
 
     // Advanced Commentary Generators
     const generateGoalCommentary = (event: Event, seed: number) => {
-        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName;
+        const playerName = displayName(event.player) ?? displayName(event.playerSnapshot);
         const isLateGame = event.minute > 85;
         const isEarlyGame = event.minute < 10;
         const detail = event.detail?.toLowerCase() || '';
@@ -166,7 +244,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const generateBasketballScoreCommentary = (event: Event, seed: number, type: '2pt' | '3pt' | 'ft') => {
-        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Player';
+        const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Player';
         const isClutch = event.minute > 36; // Late 4th quarter
 
         let templates: string[] = [];
@@ -205,7 +283,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const getEventDescription = (event: Event) => {
-        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Unknown';
+        const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Unknown';
         const playerNumber = event.player?.number;
         const seed = event.minute + (event.type?.length || 0) + (playerName?.length || 0) + (event.detail?.length || 0);
 
@@ -214,11 +292,11 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const goalText = generateGoalCommentary(event, seed);
                 return (
                     <div>
-                        <span className="font-bold text-lg block mb-1">⚽ {goalText}</span>
+                        <span className="font-bold text-lg block mb-1">{goalText}</span>
                         <div className="text-sm opacity-90">
-                            {playerNumber && <span className="font-mono bg-white/10 px-1 rounded mr-2">#{playerNumber}</span>}
+                            {playerNumber && <span className="font-mono bg-muted px-1 rounded mr-2">#{playerNumber}</span>}
                             {event.relatedPlayer && (
-                                <span className="text-white/70">Assist by {event.relatedPlayer.name}</span>
+                                <span className="text-foreground/70">Assist by {displayName(event.relatedPlayer)}</span>
                             )}
                         </div>
                     </div>
@@ -226,8 +304,8 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             case 'ASSIST':
                 return (
                     <div>
-                        <span className="font-bold">🎯 Great vision!</span> Assist by {playerName}
-                        {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
+                        <span className="font-bold">Great vision!</span> Assist by {playerName}
+                        {playerNumber && <span className="text-foreground/60 ml-1">#{playerNumber}</span>}
                     </div>
                 );
             case 'YELLOW_CARD':
@@ -240,9 +318,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const yellowText = getCommentaryTemplate(yellowTemplates, seed).replace('{player}', playerName);
                 return (
                     <div>
-                        <span className="font-bold text-yellow-500 text-base block mb-0.5">🟨 Caution</span>
+                        <span className="font-bold text-yellow-500 text-base block mb-0.5">Caution</span>
                         <span>{yellowText}</span>
-                        {event.detail && <div className="text-sm text-white/60 mt-1 italic">Reason: {event.detail}</div>}
+                        {event.detail && <div className="text-sm text-foreground/60 mt-1 italic">Reason: {event.detail}</div>}
                     </div>
                 );
             case 'RED_CARD':
@@ -254,22 +332,22 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const redText = getCommentaryTemplate(redTemplates, seed).replace('{player}', playerName);
                 return (
                     <div>
-                        <span className="font-bold text-red-500 text-lg block mb-1">🟥 SENT OFF!</span>
+                        <span className="font-bold text-red-500 text-lg block mb-1">SENT OFF!</span>
                         {redText}
-                        {event.detail && <div className="text-sm text-white/60 mt-1">Reason: {event.detail}</div>}
+                        {event.detail && <div className="text-sm text-foreground/60 mt-1">Reason: {event.detail}</div>}
                     </div>
                 );
             case 'SUBSTITUTION':
                 return (
                     <div>
-                        <span className="font-bold block mb-1">🔄 Substitution</span>
+                        <span className="font-bold block mb-1">Substitution</span>
                         <div className="text-sm grid gap-1">
                             <div className="text-green-400 flex items-center gap-2">
-                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName}
+                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {displayName(event.player) ?? displayName(event.playerSnapshot)}
                             </div>
                             {event.relatedPlayer && (
                                 <div className="text-red-400 flex items-center gap-2">
-                                    <span className="text-[10px] font-bold bg-red-500/20 px-1 rounded">OUT</span> {event.relatedPlayer.name}
+                                    <span className="text-[10px] font-bold bg-red-500/20 px-1 rounded">OUT</span> {displayName(event.relatedPlayer)}
                                 </div>
                             )}
                         </div>
@@ -283,34 +361,34 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const saveText = getCommentaryTemplate(saveTemplates, seed).replace('{player}', playerName);
                 return (
                     <div>
-                        <span className="font-bold">{sport === 'basketball' ? '🚫' : '🧤'} {saveText}</span>
+                        <span className="font-bold">{saveText}</span>
                     </div>
                 );
             case 'FIELD_GOAL':
                 const fgText = generateBasketballScoreCommentary(event, seed, '2pt');
                 return (
                     <div>
-                        <span className="font-bold text-lg block text-green-400">🏀 {fgText}</span>
+                        <span className="font-bold text-lg block text-green-400">{fgText}</span>
                     </div>
                 );
             case 'THREE_POINTER':
                 const threeText = generateBasketballScoreCommentary(event, seed, '3pt');
                 return (
                     <div>
-                        <span className="font-bold text-lg block text-yellow-400">🎯 {threeText}</span>
+                        <span className="font-bold text-lg block text-yellow-400">{threeText}</span>
                     </div>
                 );
             case 'FREE_THROW':
                 const ftText = generateBasketballScoreCommentary(event, seed, 'ft');
                 return (
                     <div>
-                        <span className="font-bold">✨ {ftText}</span>
+                        <span className="font-bold">{ftText}</span>
                     </div>
                 );
             case 'STEAL':
                 return (
                     <div>
-                        <span className="font-bold">🛡️ STOLEN!</span> {playerName} takes the ball away.
+                        <span className="font-bold">STOLEN!</span> {playerName} takes the ball away.
                     </div>
                 );
             default:
@@ -325,8 +403,16 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
         }
     };
 
+    // BACKLOG-294:  Timeline tab has an All/Key events segmented filter --
+    // 'key' narrows to goals/cards/subs, matching the two-column team-side layout
+    // in the reference screenshots. Applied before grouping so period headers only
+    // show up for periods that still have a visible event under the current filter.
+    const filteredEvents = filter === 'key'
+        ? events.filter(e => KEY_EVENT_TYPES.has(e.type.toUpperCase().replace(/\s+/g, '_')))
+        : events;
+
     // Group events by period (first half, second half, etc.)
-    const groupedEvents = events.reduce((acc, event) => {
+    const groupedEvents = filteredEvents.reduce((acc, event) => {
         let period = 'First Half';
         if (event.period) {
             switch (event.period) {
@@ -360,9 +446,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     if (events.length === 0) {
         return (
             <div className="text-center py-20">
-                <Activity className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">No events yet</h3>
-                <p className="text-white/40">Match events will appear here as they happen</p>
+                <Activity className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">No events yet</h3>
+                <p className="text-foreground/40">Match events will appear here as they happen</p>
             </div>
         );
     }
@@ -376,24 +462,42 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     if (hasUnknownMinuteEvents) {
         return (
             <div className="text-center py-20">
-                <Clock className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">Timeline not available</h3>
-                <p className="text-white/40">Match timeline will be displayed here once available</p>
+                <Clock className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">Timeline not available</h3>
+                <p className="text-foreground/40">Match timeline will be displayed here once available</p>
             </div>
         );
     }
 
     return (
         <div className="space-y-8">
-            {Object.entries(groupedEvents).map(([period, periodEvents]) => (
+            {/* All / Key events segmented filter (Figma) */}
+            <div className="inline-flex bg-muted border border-border rounded-full p-1">
+                {(['all', 'key'] as const).map(f => (
+                    <button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${filter === f ? 'bg-primary text-primary-foreground' : 'text-foreground/60 hover:text-foreground'
+                            }`}
+                    >
+                        {f === 'all' ? 'All' : 'Key events'}
+                    </button>
+                ))}
+            </div>
+
+            {filter === 'key' && (
+                <KeyEventsList events={filteredEvents} homeTeam={homeTeam} awayTeam={awayTeam} sport={sport} />
+            )}
+
+            {filter === 'all' && Object.entries(groupedEvents).map(([period, periodEvents]) => (
                 <div key={period}>
                     {/* Period Header */}
                     <div className="flex items-center gap-4 mb-6">
-                        <div className="h-px flex-1 bg-white/10" />
-                        <div className="px-4 py-1.5 bg-white/5 rounded-full border border-white/10 backdrop-blur-sm">
-                            <span className="font-semibold text-xs text-white/60 uppercase tracking-wider">{period}</span>
+                        <div className="h-px flex-1 bg-muted" />
+                        <div className="px-4 py-1.5 bg-muted rounded-full border border-border backdrop-blur-sm">
+                            <span className="font-semibold text-xs text-foreground/60 uppercase tracking-wider">{period}</span>
                         </div>
-                        <div className="h-px flex-1 bg-white/10" />
+                        <div className="h-px flex-1 bg-muted" />
                     </div>
 
                     {/* Events */}
@@ -404,7 +508,6 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                             // via teamId against the homeTeam/awayTeam props instead, which
                             // this component already receives independently.
                             const isHomeTeam = event.teamId === homeTeam.id;
-                            const eventTeam = event.teamId ? (isHomeTeam ? homeTeam : awayTeam) : null;
 
                             return (
                                 <motion.div
@@ -412,12 +515,22 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                     initial={{ opacity: 0, x: isHomeTeam ? -20 : 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: index * 0.05 }}
-                                    className={`flex items-start gap-4 ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'
-                                        }`}
+                                    // BACKLOG-342: re-examined against the Figma ref directly --
+                                    // it IS side-mirrored by team (home team's badge sits on the
+                                    // left, away team's on the right; e.g. the home scorer's badge
+                                    // is left-aligned while the away scorers' badges sit right),
+                                    // contradicting BACKLOG-332's "uniform, not mirrored" reading
+                                    // of the same file. Restoring the mirror; team-less events
+                                    // (no `teamId`) fall back to the left, matching the badge's
+                                    // own `isHomeTeam` default when `event.teamId` is undefined.
+                                    className={`flex items-start gap-4 ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'}`}
                                 >
-                                    {/* Time */}
-                                    <div className="flex-shrink-0 w-16 text-center">
-                                        <div className="text-sm font-bold text-primary">
+                                    {/* Icon + Time badge */}
+                                    <div className="flex-shrink-0 w-14 flex flex-col items-center gap-1.5">
+                                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${getIconBadgeStyle(event.type)}`}>
+                                            {getEventIcon(event.type)}
+                                        </div>
+                                        <div className="text-xs font-bold text-primary text-center leading-tight">
                                             {(() => {
                                                 const min = event.minute;
                                                 // -1 is the established "minute unknown" sentinel written by
@@ -469,25 +582,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                         className={`flex-1 max-w-2xl p-4 rounded-xl border ${getEventColor(event.type)} backdrop-blur-sm`}
                                     >
                                         <div className="flex items-start gap-3">
-                                            {/* Icon */}
-                                            <div className="flex-shrink-0 mt-0.5">
-                                                {getEventIcon(event.type)}
-                                            </div>
-
                                             {/* Content */}
                                             <div className="flex-1">
                                                 {getEventDescription(event)}
-
-                                                {/* Team Badge */}
-                                                {eventTeam && (
-                                                    <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5">
-                                                        <div
-                                                            className="w-3 h-3 rounded-full"
-                                                            style={{ backgroundColor: eventTeam.color }}
-                                                        />
-                                                        <span className="text-xs font-medium">{eventTeam.name}</span>
-                                                    </div>
-                                                )}
 
                                                 {/* Eye Point Badge */}
                                                 {event.isEyePoint && (
@@ -499,9 +596,6 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Spacer for alignment */}
-                                    <div className="flex-shrink-0 w-16" />
                                 </motion.div>
                             );
                         })}
@@ -518,12 +612,12 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {(eyePoints ?? []).map((award) => (
-                            <div key={award.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                            <div key={award.id} className="flex items-center gap-3 p-3 bg-muted rounded-lg">
                                 <Award className="w-5 h-5 text-purple-500" />
                                 <div>
-                                    <div className="font-semibold">{award.player?.name}</div>
+                                    <div className="font-semibold">{displayName(award.player)}</div>
                                     {award.reason && (
-                                        <div className="text-sm text-white/60">{award.reason}</div>
+                                        <div className="text-sm text-foreground/60">{award.reason}</div>
                                     )}
                                 </div>
                             </div>
@@ -531,6 +625,123 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// BACKLOG-294:  "Key events" view is a distinct, compact two-column layout
+// (home events left-aligned, away right-aligned, running score badge on goals) --
+// visually different enough from the "All" view's descriptive cards above that it's
+// its own renderer rather than a filtered pass through getEventDescription/getEventIcon.
+// Kept fully separate so nothing here can regress the existing "All" rendering.
+interface KeyEventsListProps {
+    events: Event[];
+    homeTeam: any;
+    awayTeam: any;
+    sport?: string;
+}
+
+function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps) {
+    if (events.length === 0) {
+        return (
+            <div className="text-center py-12">
+                <Activity className="w-12 h-12 text-foreground/20 mx-auto mb-3" />
+                <p className="text-foreground/40">No key events in this match yet</p>
+            </div>
+        );
+    }
+
+    // The events prop arrives newest-first (API order) -- wrong direction for a
+    // running score, which must accumulate oldest-to-newest. Sorted copy only;
+    // never mutates the prop.
+    const chronological = [...events].sort(
+        (a, b) => (a.minute - b.minute) || ((a.second ?? 0) - (b.second ?? 0))
+    );
+
+    let homeScore = 0;
+    let awayScore = 0;
+    const rows = chronological.map(event => {
+        const isHomeTeam = event.teamId === homeTeam.id;
+        const normType = event.type.toUpperCase().replace(/\s+/g, '_');
+
+        if (normType === 'GOAL') {
+            // An own goal credits the OTHER team's score -- same detection this
+            // file's generateGoalCommentary already uses for the "All" view.
+            const isOwnGoal = event.detail?.toLowerCase().includes('own goal') ?? false;
+            if (isHomeTeam !== isOwnGoal) homeScore += 1; else awayScore += 1;
+        }
+
+        return { event, isHomeTeam, normType, scoreAtEvent: { home: homeScore, away: awayScore } };
+    });
+
+    // `rows` itself must stay oldest-to-newest -- the running score above only
+    // accumulates correctly in that direction. Display order is newest-first
+    // (latest event at the top); reverse a copy only after the score at each
+    // event is already computed.
+    const displayRows = [...rows].reverse();
+
+    const minuteLabel = (event: Event) =>
+        sport?.toLowerCase() === 'basketball' ? `${event.period ?? ''} ${event.minute}`.trim() : `${event.minute}'`;
+
+    return (
+        <div className="space-y-4">
+            {displayRows.map(({ event, isHomeTeam, normType, scoreAtEvent }) => {
+                const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Unknown';
+                // Figma's Key events row isn't a fixed minute-column + separately
+                // mirrored content pair: for goals and substitutions the ENTIRE
+                // group -- minute included -- reverses order on the away side
+                // (`Timeline-key-events.jpeg`: a home goal reads minute/score/
+                // ball/name/assist left-to-right, an away goal reads the exact
+                // reverse, assist/name/ball/score/minute). Cards don't reverse at
+                // all -- only the row's alignment (left vs right) flips; minute
+                // always comes first. One flex group per row: outer div picks the
+                // edge (justify-start/end), flex-row-reverse (goal/sub, away only)
+                // handles the internal mirror.
+                const mirrorsOrder = normType === 'GOAL' || normType === 'SUBSTITUTION';
+
+                return (
+                    <div
+                        key={event.id}
+                        className={`flex items-center bg-muted border border-border rounded-2xl px-6 py-4 ${isHomeTeam ? 'justify-start' : 'justify-end'
+                            }`}
+                    >
+                        <div className={`flex items-center gap-2 ${mirrorsOrder && !isHomeTeam ? 'flex-row-reverse' : ''}`}>
+                            <span className="text-xs font-bold text-primary flex-shrink-0">
+                                {minuteLabel(event)}
+                            </span>
+                            {normType === 'GOAL' && (
+                                <>
+                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-border text-xs font-bold">
+                                        {scoreAtEvent.home}-{scoreAtEvent.away}
+                                    </span>
+                                    <FaFutbol className="w-3.5 h-3.5 flex-shrink-0 text-foreground/80" />
+                                    <span className="font-bold truncate max-w-[160px]">{playerName}</span>
+                                    {/* Assist name is secondary info -- capped at a small fixed
+                                        width so it can't eat into the scorer's own name space
+                                        (both truncating equally made the scorer's name
+                                        illegible on anything but a short one). */}
+                                    {event.relatedPlayer && (
+                                        <span className="text-foreground/50 text-sm truncate max-w-[72px] flex-shrink-0">({displayName(event.relatedPlayer)})</span>
+                                    )}
+                                </>
+                            )}
+                            {(normType === 'YELLOW_CARD' || normType === 'RED_CARD') && (
+                                <>
+                                    <div className={`flex-shrink-0 w-3 h-4 rounded-sm ${normType === 'YELLOW_CARD' ? 'bg-yellow-500' : 'bg-red-600'}`} />
+                                    <span className="font-bold truncate max-w-[200px]">{playerName}</span>
+                                </>
+                            )}
+                            {normType === 'SUBSTITUTION' && (
+                                <>
+                                    <span className="truncate max-w-[120px]">{displayName(event.relatedPlayer) ?? 'Unknown'}</span>
+                                    <SubstitutionIcon className="w-4 h-4 flex-shrink-0" />
+                                    <span className="truncate max-w-[120px]">{playerName}</span>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
         </div>
     );
 }

@@ -1,6 +1,9 @@
 'use client';
 
 import React from 'react';
+import { Shirt, ArrowRightLeft } from 'lucide-react';
+import { FaFutbol } from 'react-icons/fa';
+import { SoccerBootIcon } from '../icons/SoccerBootIcon';
 import { Player } from '@/types';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -17,6 +20,8 @@ export interface PitchPlayer {
     subMinute?: number;
     goals?: number;
     assists?: number;
+    card?: 'yellow' | 'red';
+    penalty?: boolean;
 }
 
 export interface ResponsivePitchProps {
@@ -49,18 +54,18 @@ export function ResponsivePitch({
     // Vertical: Inverse
 
     return (
-        <div className={cn("w-full h-full relative select-none", className)}>
+        <div className={cn("@container w-full h-full relative select-none", className)}>
             {/* Aspect Ratio Container */}
             {/* Horizontal: pb-[64%] (approx 105/68) or pb-[56.25%] (16:9) */}
             {/* Vertical: pb-[150%] */}
             <div
                 className={cn(
                     "relative w-full h-full rounded-xl overflow-hidden shadow-2xl border border-white/10",
-                    isBasketball ? "bg-[#1a1c2c]" : "bg-[#2a2a2a]"
+                    isBasketball ? "bg-[#1a1c2c]" : "bg-[#0d1f12]"
                 )}
             >
-                {/* Pitch Background - Dark Premium Theme */}
-                <div className={cn("absolute inset-0", isBasketball ? "bg-gradient-to-br from-[#121421] to-[#1a1c2c]" : "bg-[#1a1a1a]")}>
+                {/* Pitch Background - dark pitch-green (matches Figma), premium dark theme for basketball */}
+                <div className={cn("absolute inset-0", isBasketball ? "bg-gradient-to-br from-[#121421] to-[#1a1c2c]" : "bg-gradient-to-b from-[#1c3a22] to-[#0d1f12]")}>
                     {/* Subtle gradient overlay */}
                     <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/20" />
 
@@ -70,7 +75,7 @@ export function ResponsivePitch({
                             style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #fff 1px, transparent 0)', backgroundSize: '24px 24px' }} />
                     ) : (
                         <div
-                            className="absolute inset-0 opacity-[0.03]"
+                            className="absolute inset-0 opacity-[0.05]"
                             style={{
                                 backgroundImage: orientation === 'horizontal'
                                     ? 'repeating-linear-gradient(90deg, transparent, transparent 5%, #fff 5%, #fff 10%)'
@@ -124,7 +129,7 @@ function PlayerDot({
     orientation: 'vertical' | 'horizontal';
     variant?: '11-a-side' | '5-a-side' | 'basketball' | '3x3';
 }) {
-    const { player, position, rating, isCaptain, isMotM, goals, assists } = data;
+    const { player, position, rating, isCaptain, isMotM, goals, assists, card, penalty, isSubstituted, subMinute } = data;
 
     // Invert Y axis if needed, or handle varying coordinate systems
     // Assuming inputs are: x (0-100 left-right), y (0-100 top-bottom)
@@ -133,6 +138,14 @@ function PlayerDot({
     // For 5-a-side/Basketball, we might want less compression or different logic
     const VISUAL_Y_SCALE = (variant === '5-a-side' || variant === 'basketball' || variant === '3x3') ? 0.85 : 0.92;
     const visualY = 50 + (position.y - 50) * VISUAL_Y_SCALE;
+    const isCompactVariant = variant === '5-a-side' || variant === 'basketball' || variant === '3x3';
+    // Sized off the pitch's own rendered width (cqw, via the @container ancestor in
+    // ResponsivePitch) rather than a fixed px floor -- a fixed floor doesn't shrink for
+    // tightly-spaced formation rows on a narrow pitch, so neighbouring players' name/badge
+    // rows below the jersey ran into each other. clamp() keeps a readable minimum while
+    // still shrinking with the container on any viewport or embed width.
+    const jerseySize = isCompactVariant ? 'clamp(20px, 9.5cqw, 44px)' : 'clamp(18px, 6.5cqw, 40px)';
+    const nameRowMaxWidth = isCompactVariant ? 'clamp(2.75rem, 24cqw, 6.875rem)' : 'clamp(2.5rem, 18cqw, 6.25rem)';
 
     return (
         <motion.div
@@ -149,70 +162,96 @@ function PlayerDot({
                 onClick?.();
             }}
         >
-            {/* Player Circle */}
-            <div className="relative">
-                <div
-                    className={cn(
-                        "rounded-full flex items-center justify-center",
-                        "border-2 shadow-lg transition-transform duration-200 group-hover:scale-110",
-                        "bg-zinc-900 text-white font-bold"
-                    )}
-                    style={{
-                        width: (variant === '5-a-side' || variant === 'basketball' || variant === '3x3') ? '6%' : '3.5%', // Larger dots for small variants
-                        aspectRatio: '1/1', // Keep it circular
-                        minWidth: '22px', // Minimum visibility
-                        minHeight: '22px',
-                        fontSize: 'clamp(10px, 1.25cqw, 14px)', // clear text scaling
-                        borderColor: isMotM ? '#FFD700' : isCaptain ? '#FFFFFF' : 'rgba(255,255,255,0.8)',
-                        backgroundColor: color,
-                        boxShadow: isMotM ? '0 0 15px rgba(255, 215, 0, 0.5)' : '0 4px 6px rgba(0,0,0,0.3)'
-                    }}
-                >
-                    <span style={{ fontSize: '100%' }}>{player.number}</span>
-                </div>
-
-                {/* Captain Badge */}
-                {isCaptain && (
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-black text-black border border-white shadow-sm">
-                        C
-                    </div>
-                )}
-
-                {/* Goal Indicator */}
-                {goals && goals > 0 && (
-                    <div className="absolute -top-1 -left-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[8px] font-black text-white border border-white shadow-sm">
-                        ⚽
-                        {goals > 1 && <span className="absolute -top-1 -right-1 text-[6px]">{goals}</span>}
-                    </div>
-                )}
-
-                {/* Assist Indicator */}
-                {assists && assists > 0 && (
-                    <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-[8px] font-black text-white border border-white shadow-sm">
-                        👟
-                        {assists > 1 && <span className="absolute -top-1 -right-1 text-[6px]">{assists}</span>}
-                    </div>
-                )}
-            </div>
-
-            {/* Name Label */}
-            <div className="mt-1">
-                <div className="bg-black/80 backdrop-blur-sm text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-medium truncate max-w-[80px] text-center shadow-md border border-white/5">
-                    {player.jerseyName || player.name}
-                </div>
-            </div>
-
-            {/* Rating Pill */}
+            {/* Rating Pill (tight to the jersey, small footprint) */}
             {rating > 0 && (
                 <div
                     className={cn(
-                        "absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm border border-black/20",
+                        "px-1 py-0.5 rounded text-[8px] font-bold shadow-sm border border-black/20 -mb-0.5 z-10",
                         getRatingColor(rating)
                     )}
                 >
                     {rating.toFixed(1)}
                 </div>
             )}
+
+            {/* Jersey Icon - scaled up for clear visibility of shape + number.
+                w-8 h-8 is a static fallback floor: if a browser doesn't support cqw
+                container-query units, the whole inline `width` declaration below is
+                invalid and gets discarded, leaving these classes as the real size
+                instead of the marker collapsing to 0. */}
+            <div
+                className="relative flex items-center justify-center transition-transform duration-200 group-hover:scale-110 w-8 h-8"
+                style={{
+                    width: jerseySize,
+                    aspectRatio: '1/1',
+                    filter: isMotM ? 'drop-shadow(0 0 6px rgba(255, 215, 0, 0.7))' : 'drop-shadow(0 4px 4px rgba(0,0,0,0.3))'
+                }}
+            >
+                <Shirt
+                    className="absolute inset-0 w-full h-full"
+                    fill={color}
+                    stroke={isMotM ? '#FFD700' : 'rgba(255,255,255,0.7)'}
+                    strokeWidth={1.5}
+                />
+                <span
+                    className="relative z-10 font-bold text-white"
+                    style={{ fontSize: 'clamp(12px, 1.5cqw, 17px)' }}
+                >
+                    {player.number}
+                </span>
+            </div>
+
+            {/* Name + inline status row plain text on the pitch, no chip background).
+                Pitch-marker jersey-name truncation fix (no BACKLOG number assigned):
+                a jersey name longer than the clamped nameRowMaxWidth used to
+                hard-truncate to a single line
+                ("Abdul-jabb...") -- a layout-capacity problem, not a data problem
+                (the full name was always there, just nowhere to put it). Wrapping
+                to 2 lines instead costs vertical space, which formation rows have
+                more slack for than the horizontal space between neighbouring
+                markers, so it doesn't reintroduce the overlap risk the cqw-based
+                width clamp above was already added to prevent. */}
+            <div className="mt-1 flex items-start gap-0.5" style={{ maxWidth: nameRowMaxWidth, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+                {isCaptain && (
+                    <span className="text-yellow-400 text-[8px] font-black shrink-0">(C)</span>
+                )}
+                <span className="min-w-0 text-white text-[10px] sm:text-xs font-medium line-clamp-2 break-words text-center">
+                    {player.jerseyName || player.name}
+                </span>
+                {card === 'yellow' && (
+                    <span className="w-2.5 h-3 bg-yellow-400 rounded-[1px] shrink-0" title="Yellow card" />
+                )}
+                {card === 'red' && (
+                    <span className="w-2.5 h-3 bg-red-500 rounded-[1px] shrink-0" title="Red card" />
+                )}
+                {!!goals && goals > 0 && (
+                    <span
+                        className="flex items-center -space-x-1 text-white shrink-0"
+                        title={`${goals} goal${goals > 1 ? 's' : ''}${penalty ? ' (incl. penalty)' : ''}`}
+                    >
+                        {Array.from({ length: goals }).map((_, i) => (
+                            <FaFutbol key={i} className="w-2.5 h-2.5" />
+                        ))}
+                        {penalty && <span className="ml-0.5 text-[7px] font-bold text-white/70">(P)</span>}
+                    </span>
+                )}
+                {!!assists && assists > 0 && (
+                    <span
+                        className="flex items-center -space-x-1 text-white shrink-0"
+                        title={`${assists} assist${assists > 1 ? 's' : ''}`}
+                    >
+                        {Array.from({ length: assists }).map((_, i) => (
+                            <SoccerBootIcon key={i} className="w-2.5 h-2.5 -rotate-[30deg]" />
+                        ))}
+                    </span>
+                )}
+                {isSubstituted && (
+                    <span className="flex items-center gap-px text-red-400 text-[9px] font-bold shrink-0" title="Substituted off">
+                        <ArrowRightLeft className="w-2.5 h-2.5" />
+                        {subMinute ? `${subMinute}'` : ''}
+                    </span>
+                )}
+            </div>
         </motion.div>
     );
 }

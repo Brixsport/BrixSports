@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
                     name: players.name,
                     number: players.number,
                     position: players.position,
-                    avatar: players.avatar,
+                    avatar: players.image,
                     nationality: players.nationality,
                 }
             })

@@ -15,10 +15,9 @@ export async function GET(request: Request) {
         const whereConditions = [];
         if (sport) whereConditions.push(eq(standings.sport, sport));
 
-        const { or } = await import('drizzle-orm');
-
+        // competitionId is authoritative when present -- see BACKLOG-335.
         if (competitionId) {
-            whereConditions.push(or(eq(standings.competitionId, competitionId), eq(standings.competition, competition || '')));
+            whereConditions.push(eq(standings.competitionId, competitionId));
         } else if (competition) {
             whereConditions.push(eq(standings.competition, competition));
         }

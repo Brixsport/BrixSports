@@ -44,7 +44,7 @@ export function LiveUpdates({ matchId }: LiveUpdatesProps) {
 
     if (loading) {
         return (
-            <div className="bg-white/5 rounded-xl p-6">
+            <div className="bg-muted rounded-xl p-6">
                 <h3 className="font-bold mb-4 flex items-center gap-2">
                     <Activity size={16} className="text-primary" />
                     Live Updates
@@ -57,7 +57,7 @@ export function LiveUpdates({ matchId }: LiveUpdatesProps) {
     }
 
     return (
-        <div className="bg-white/5 rounded-xl p-6">
+        <div className="bg-muted rounded-xl p-6">
             <h3 className="font-bold mb-4 flex items-center gap-2">
                 <Activity size={16} className="text-primary animate-pulse" />
                 Live Updates
@@ -67,9 +67,9 @@ export function LiveUpdates({ matchId }: LiveUpdatesProps) {
                     events.slice().reverse().map((event) => (
                         <div
                             key={event.id}
-                            className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-primary/30 transition-all"
+                            className="flex items-start gap-3 p-3 bg-muted rounded-lg border border-border hover:border-primary/30 transition-all"
                         >
-                            <div className="w-10 h-10 rounded-full bg-black border border-white/10 flex items-center justify-center text-xs font-bold tabular-nums flex-shrink-0">
+                            <div className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-xs font-bold tabular-nums flex-shrink-0">
                                 {event.minute}'
                             </div>
                             <div className="flex-1">
@@ -77,7 +77,7 @@ export function LiveUpdates({ matchId }: LiveUpdatesProps) {
                                     <div className={`p-1 rounded ${event.type === 'Goal' || event.type === 'Penalty' ? 'bg-primary/20 text-primary' :
                                             event.type === 'Yellow Card' ? 'bg-yellow-500/20 text-yellow-500' :
                                                 event.type === 'Red Card' ? 'bg-red-500/20 text-red-500' :
-                                                    'bg-white/10 text-white/60'
+                                                    'bg-muted text-foreground/60'
                                         }`}>
                                         {event.type === 'Goal' || event.type === 'Penalty' ? <Trophy size={12} /> : <AlertCircle size={12} />}
                                     </div>
@@ -85,14 +85,14 @@ export function LiveUpdates({ matchId }: LiveUpdatesProps) {
                                         {event.type}
                                     </span>
                                 </div>
-                                <p className="text-xs text-white/60">
+                                <p className="text-xs text-foreground/60">
                                     {event.detail}
                                 </p>
                             </div>
                         </div>
                     ))
                 ) : (
-                    <p className="text-white/40 text-center py-8 text-sm">
+                    <p className="text-foreground/40 text-center py-8 text-sm">
                         No events yet. Updates will appear here as the match progresses.
                     </p>
                 )}

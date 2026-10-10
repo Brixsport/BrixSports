@@ -11,9 +11,24 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { matchId, message } = body;
 
-        if (!matchId || !message) {
+        if (!matchId || !message?.message) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
+
+        // BACKLOG-398: identity must come from the verified session, never the
+        // client body -- message.userId/userName/userAvatar were previously
+        // forwarded as-is, letting any authenticated Fan impersonate anyone
+        // (e.g. an admin) in every viewer's chat. Only the message text and a
+        // client-generated id (cosmetic, used for optimistic-UI dedup) are
+        // taken from the client; identity is always the verified session's.
+        const safeMessage = {
+            id: typeof message.id === 'string' ? message.id : `msg_${Date.now()}`,
+            userId: user.id,
+            userName: user.name || 'Fan',
+            userAvatar: user.avatar ?? undefined,
+            message: String(message.message),
+            timestamp: new Date(),
+        };
 
         // Forward to WebSocket server broadcast API
         const wsServerUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
@@ -33,7 +48,7 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify({
                 room: `chat:${matchId}`,
                 event: 'chat:message',
-                data: message
+                data: safeMessage
             })
         });
 

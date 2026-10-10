@@ -36,14 +36,19 @@ export async function GET(request: Request) {
         const teamId = searchParams.get('teamId');
         const search = searchParams.get('search');
 
-        // Fetch all teams first to identify basketball teams
-        // BACKLOG-262 item 3: hardcoded name list, not touched here -- separate,
-        // already-filed issue, out of this pass's scope.
-        const allTeams = await db.select({ id: teams.id, name: teams.name }).from(teams).all();
+        // BACKLOG-395: was `.select(...).from(teams).all()` -- unbounded fetch
+        // of every team row just to build a name filter. Pushed into the WHERE
+        // clause instead of a blind .limit() -- avoids the historic BUG-014
+        // truncation risk (teams beyond a row-count cap silently missing) as
+        // the teams table grows; same fix shape as basketball/teams/route.ts.
+        // BACKLOG-262 item 3: hardcoded name list itself, not touched here --
+        // separate, already-filed issue, out of this pass's scope.
         const basketballTeamNames = ['TBK', 'Titans', 'Storm', 'Rim Reapers', 'Vikings', 'Siberia'];
-        const basketballTeams = allTeams.filter(team =>
-            basketballTeamNames.includes(team.name)
-        );
+        const basketballTeams = await db
+            .select({ id: teams.id, name: teams.name })
+            .from(teams)
+            .where(inArray(teams.name, basketballTeamNames))
+            .all();
         const basketballTeamIds = basketballTeams.map(t => t.id);
 
         // Build query with conditional sorting

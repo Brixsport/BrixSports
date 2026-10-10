@@ -31,7 +31,6 @@ Disallow: /profile/
 
 # Disallow private user data
 Disallow: /notifications
-Disallow: /favourites
 Disallow: /dashboard
 
 # Allow specific API endpoints that provide public data

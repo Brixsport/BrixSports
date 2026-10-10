@@ -175,7 +175,7 @@ export default function CompetitionRegistration({
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 py-12 px-4">
+        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-purple-100/50 to-purple-50 dark:from-slate-900 dark:via-purple-900 dark:to-slate-900 py-12 px-4">
             <div className="max-w-5xl mx-auto">
                 {/* Header */}
                 <motion.div
@@ -187,10 +187,10 @@ export default function CompetitionRegistration({
                         <Trophy className="w-5 h-5 text-purple-400" />
                         <span className="text-purple-300 font-medium">Competition Registration</span>
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">
+                    <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-3">
                         {competitionName}
                     </h1>
-                    <p className="text-gray-300 text-lg">
+                    <p className="text-foreground/70 text-lg">
                         {playersPerSide}-aside • {gender.charAt(0).toUpperCase() + gender.slice(1)}
                     </p>
                 </motion.div>
@@ -207,7 +207,7 @@ export default function CompetitionRegistration({
                                         transition={{ delay: index * 0.1 }}
                                         className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all ${currentStep >= step.number
                                             ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/50'
-                                            : 'bg-gray-700 text-gray-400'
+                                            : 'bg-muted text-foreground/40'
                                             }`}
                                     >
                                         {currentStep > step.number ? (
@@ -216,13 +216,13 @@ export default function CompetitionRegistration({
                                             <step.icon className="w-6 h-6" />
                                         )}
                                     </motion.div>
-                                    <span className={`text-sm font-medium ${currentStep >= step.number ? 'text-white' : 'text-gray-500'
+                                    <span className={`text-sm font-medium ${currentStep >= step.number ? 'text-foreground' : 'text-foreground/40'
                                         }`}>
                                         {step.title}
                                     </span>
                                 </div>
                                 {index < steps.length - 1 && (
-                                    <div className={`h-1 flex-1 mx-4 rounded transition-all ${currentStep > step.number ? 'bg-purple-500' : 'bg-gray-700'
+                                    <div className={`h-1 flex-1 mx-4 rounded transition-all ${currentStep > step.number ? 'bg-purple-500' : 'bg-muted'
                                         }`} />
                                 )}
                             </div>
@@ -238,13 +238,13 @@ export default function CompetitionRegistration({
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
-                            className="bg-white/10 backdrop-blur-md rounded-2xl p-8 shadow-2xl"
+                            className="bg-card/80 border border-border backdrop-blur-md rounded-2xl p-8 shadow-2xl"
                         >
-                            <h2 className="text-2xl font-bold text-white mb-6">Team Information</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-6">Team Information</h2>
                             <form onSubmit={handleTeamSubmit} className="space-y-6">
                                 <div className="grid md:grid-cols-2 gap-6">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-2">
                                             Team Name *
                                         </label>
                                         <input
@@ -252,12 +252,12 @@ export default function CompetitionRegistration({
                                             required
                                             value={teamInfo.teamName}
                                             onChange={(e) => setTeamInfo({ ...teamInfo, teamName: e.target.value })}
-                                            className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                             placeholder="e.g., University of Lagos FC"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-2">
                                             School/University Name *
                                         </label>
                                         <input
@@ -266,7 +266,7 @@ export default function CompetitionRegistration({
                                             list="universities-list"
                                             value={teamInfo.schoolName}
                                             onChange={(e) => setTeamInfo({ ...teamInfo, schoolName: e.target.value })}
-                                            className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                             placeholder="e.g., University of Lagos"
                                         />
                                         <datalist id="universities-list">
@@ -276,7 +276,7 @@ export default function CompetitionRegistration({
                                         </datalist>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-2">
                                             Short Name *
                                         </label>
                                         <input
@@ -285,42 +285,42 @@ export default function CompetitionRegistration({
                                             maxLength={5}
                                             value={teamInfo.shortName}
                                             onChange={(e) => setTeamInfo({ ...teamInfo, shortName: e.target.value.toUpperCase() })}
-                                            className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                             placeholder="e.g., UNILAG"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-2">
                                             Team Color
                                         </label>
                                         <input
                                             type="color"
                                             value={teamInfo.color}
                                             onChange={(e) => setTeamInfo({ ...teamInfo, color: e.target.value })}
-                                            className="w-full h-12 px-2 bg-white/5 border border-gray-600 rounded-lg cursor-pointer"
+                                            className="w-full h-12 px-2 bg-muted border border-border rounded-lg cursor-pointer"
                                         />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    <label className="block text-sm font-medium text-foreground/70 mb-2">
                                         Team Logo
                                     </label>
                                     <div className="space-y-3">
                                         {/* Logo Preview */}
                                         {teamInfo.logo && (
-                                            <div className="flex items-center gap-4 p-4 bg-white/5 border border-gray-600 rounded-lg">
+                                            <div className="flex items-center gap-4 p-4 bg-muted border border-border rounded-lg">
                                                 <img
                                                     src={teamInfo.logo}
                                                     alt="Team Logo"
-                                                    className="w-16 h-16 object-contain rounded-lg bg-white/10"
+                                                    className="w-16 h-16 object-contain rounded-lg bg-card"
                                                     onError={(e) => {
                                                         (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect fill="%23374151" width="64" height="64"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%239CA3AF" font-size="12">No Image</text></svg>';
                                                     }}
                                                 />
                                                 <div className="flex-1">
-                                                    <p className="text-white text-sm font-medium">Logo Preview</p>
-                                                    <p className="text-gray-400 text-xs truncate">{teamInfo.logo}</p>
+                                                    <p className="text-foreground text-sm font-medium">Logo Preview</p>
+                                                    <p className="text-foreground/60 text-xs truncate">{teamInfo.logo}</p>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -337,7 +337,7 @@ export default function CompetitionRegistration({
                                             type="url"
                                             value={teamInfo.logo}
                                             onChange={(e) => setTeamInfo({ ...teamInfo, logo: e.target.value })}
-                                            className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                             placeholder="https://example.com/logo.png or upload below"
                                         />
 
@@ -370,11 +370,11 @@ export default function CompetitionRegistration({
                                     </div>
                                 </div>
 
-                                <div className="border-t border-gray-700 pt-6">
-                                    <h3 className="text-xl font-semibold text-white mb-4">Contact Information</h3>
+                                <div className="border-t border-border pt-6">
+                                    <h3 className="text-xl font-semibold text-foreground mb-4">Contact Information</h3>
                                     <div className="grid md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                            <label className="block text-sm font-medium text-foreground/70 mb-2">
                                                 Contact Name *
                                             </label>
                                             <input
@@ -382,12 +382,12 @@ export default function CompetitionRegistration({
                                                 required
                                                 value={teamInfo.contactName}
                                                 onChange={(e) => setTeamInfo({ ...teamInfo, contactName: e.target.value })}
-                                                className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                 placeholder="Team Manager/Coach"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                            <label className="block text-sm font-medium text-foreground/70 mb-2">
                                                 Email *
                                             </label>
                                             <input
@@ -395,12 +395,12 @@ export default function CompetitionRegistration({
                                                 required
                                                 value={teamInfo.contactEmail}
                                                 onChange={(e) => setTeamInfo({ ...teamInfo, contactEmail: e.target.value })}
-                                                className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                 placeholder="contact@example.com"
                                             />
                                         </div>
                                         <div className="md:col-span-2">
-                                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                            <label className="block text-sm font-medium text-foreground/70 mb-2">
                                                 Phone Number *
                                             </label>
                                             <input
@@ -408,7 +408,7 @@ export default function CompetitionRegistration({
                                                 required
                                                 value={teamInfo.contactPhone}
                                                 onChange={(e) => setTeamInfo({ ...teamInfo, contactPhone: e.target.value })}
-                                                className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                 placeholder="+234 XXX XXX XXXX"
                                             />
                                         </div>
@@ -416,14 +416,14 @@ export default function CompetitionRegistration({
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    <label className="block text-sm font-medium text-foreground/70 mb-2">
                                         Additional Notes (optional)
                                     </label>
                                     <textarea
                                         value={teamInfo.notes}
                                         onChange={(e) => setTeamInfo({ ...teamInfo, notes: e.target.value })}
                                         rows={4}
-                                        className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                         placeholder="Any special requirements or information..."
                                     />
                                 </div>
@@ -447,10 +447,10 @@ export default function CompetitionRegistration({
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
-                            className="bg-white/10 backdrop-blur-md rounded-2xl p-8 shadow-2xl"
+                            className="bg-card/80 border border-border backdrop-blur-md rounded-2xl p-8 shadow-2xl"
                         >
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-white">Add Players</h2>
+                                <h2 className="text-2xl font-bold text-foreground">Add Players</h2>
                                 <button
                                     onClick={addPlayer}
                                     className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
@@ -462,7 +462,7 @@ export default function CompetitionRegistration({
 
                             <div className="space-y-4 mb-8 max-h-[600px] overflow-y-auto pr-2">
                                 {players.length === 0 ? (
-                                    <div className="text-center py-12 text-gray-400">
+                                    <div className="text-center py-12 text-foreground/60">
                                         <Users className="w-16 h-16 mx-auto mb-4 opacity-50" />
                                         <p>No players added yet. Click "Add Player" to start.</p>
                                     </div>
@@ -472,10 +472,10 @@ export default function CompetitionRegistration({
                                             key={player.id}
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className="bg-white/5 border border-gray-700 rounded-xl p-6"
+                                            className="bg-muted border border-border rounded-xl p-6"
                                         >
                                             <div className="flex items-center justify-between mb-4">
-                                                <h3 className="text-lg font-semibold text-white">Player {index + 1}</h3>
+                                                <h3 className="text-lg font-semibold text-foreground">Player {index + 1}</h3>
                                                 <button
                                                     onClick={() => removePlayer(player.id)}
                                                     className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-all"
@@ -485,7 +485,7 @@ export default function CompetitionRegistration({
                                             </div>
                                             <div className="grid md:grid-cols-3 gap-4">
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Full Name *
                                                     </label>
                                                     <input
@@ -493,24 +493,24 @@ export default function CompetitionRegistration({
                                                         required
                                                         value={player.name}
                                                         onChange={(e) => updatePlayer(player.id, 'name', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="John Doe"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Name on Jersey (if different)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.jerseyName}
                                                         onChange={(e) => updatePlayer(player.id, 'jerseyName', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="Optional"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Number *
                                                     </label>
                                                     <input
@@ -520,17 +520,17 @@ export default function CompetitionRegistration({
                                                         max="99"
                                                         value={player.number}
                                                         onChange={(e) => updatePlayer(player.id, 'number', parseInt(e.target.value))}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Position *
                                                     </label>
                                                     <select
                                                         value={player.position}
                                                         onChange={(e) => updatePlayer(player.id, 'position', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                     >
                                                         {positions.map(pos => (
                                                             <option key={pos} value={pos}>{pos}</option>
@@ -538,7 +538,7 @@ export default function CompetitionRegistration({
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Age
                                                     </label>
                                                     <input
@@ -547,47 +547,47 @@ export default function CompetitionRegistration({
                                                         max="40"
                                                         value={player.age}
                                                         onChange={(e) => updatePlayer(player.id, 'age', parseInt(e.target.value))}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Height (cm)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.height}
                                                         onChange={(e) => updatePlayer(player.id, 'height', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="175"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Weight (kg)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.weight}
                                                         onChange={(e) => updatePlayer(player.id, 'weight', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="70"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Nationality
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.nationality}
                                                         onChange={(e) => updatePlayer(player.id, 'nationality', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="Nigeria"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         University *
                                                     </label>
                                                     <input
@@ -596,7 +596,7 @@ export default function CompetitionRegistration({
                                                         list="player-universities-list"
                                                         value={player.university}
                                                         onChange={(e) => updatePlayer(player.id, 'university', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder={teamInfo.schoolName || "Player's University"}
                                                     />
                                                     <datalist id="player-universities-list">
@@ -604,42 +604,42 @@ export default function CompetitionRegistration({
                                                             <option key={university} value={university} />
                                                         ))}
                                                     </datalist>
-                                                    <p className="text-xs text-gray-500 mt-1">
+                                                    <p className="text-xs text-foreground/40 mt-1">
                                                         Player's university (especially important for players not in a club team)
                                                     </p>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         College/Faculty/School (optional)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.college}
                                                         onChange={(e) => updatePlayer(player.id, 'college', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="e.g., Engineering, Sciences, Arts, Faculty of Law"
                                                     />
-                                                    <p className="text-xs text-gray-500 mt-1">
+                                                    <p className="text-xs text-foreground/40 mt-1">
                                                         Different universities use different terms (College, Faculty, School, etc.)
                                                     </p>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Department/Course/Program (optional)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.department}
                                                         onChange={(e) => updatePlayer(player.id, 'department', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="e.g., Computer Science, Medicine, Business Admin"
                                                     />
-                                                    <p className="text-xs text-gray-500 mt-1">
+                                                    <p className="text-xs text-foreground/40 mt-1">
                                                         Your specific department, course, or program of study
                                                     </p>
                                                 </div>
                                                 <div className="md:col-span-3">
-                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-foreground/60 mb-1">
                                                         Player Photo
                                                     </label>
                                                     <div className="flex items-center gap-3">
@@ -647,7 +647,7 @@ export default function CompetitionRegistration({
                                                             <img
                                                                 src={player.image}
                                                                 alt={player.name}
-                                                                className="w-12 h-12 object-cover rounded-lg bg-white/10"
+                                                                className="w-12 h-12 object-cover rounded-lg bg-card"
                                                                 onError={(e) => {
                                                                     (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect fill="%23374151" width="48" height="48"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%239CA3AF" font-size="10">No Photo</text></svg>';
                                                                 }}
@@ -658,7 +658,7 @@ export default function CompetitionRegistration({
                                                                 type="url"
                                                                 value={player.image}
                                                                 onChange={(e) => updatePlayer(player.id, 'image', e.target.value)}
-                                                                className="flex-1 px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                                className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                                 placeholder="Photo URL or upload"
                                                             />
                                                             <div className="relative">
@@ -697,7 +697,7 @@ export default function CompetitionRegistration({
                             <div className="flex justify-between">
                                 <button
                                     onClick={() => setCurrentStep(1)}
-                                    className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
+                                    className="px-6 py-3 bg-muted hover:bg-muted/70 text-foreground font-semibold rounded-lg transition-all flex items-center gap-2"
                                 >
                                     <ArrowLeft className="w-5 h-5" />
                                     Back
@@ -720,52 +720,52 @@ export default function CompetitionRegistration({
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
-                            className="bg-white/10 backdrop-blur-md rounded-2xl p-8 shadow-2xl"
+                            className="bg-card/80 border border-border backdrop-blur-md rounded-2xl p-8 shadow-2xl"
                         >
-                            <h2 className="text-2xl font-bold text-white mb-6">Review & Submit</h2>
+                            <h2 className="text-2xl font-bold text-foreground mb-6">Review & Submit</h2>
 
                             {/* Team Summary */}
-                            <div className="bg-white/5 border border-gray-700 rounded-xl p-6 mb-6">
-                                <h3 className="text-xl font-semibold text-white mb-4">Team Information</h3>
+                            <div className="bg-muted border border-border rounded-xl p-6 mb-6">
+                                <h3 className="text-xl font-semibold text-foreground mb-4">Team Information</h3>
                                 <div className="grid md:grid-cols-2 gap-4 text-sm">
                                     <div>
-                                        <span className="text-gray-400">Team Name:</span>
-                                        <p className="text-white font-medium">{teamInfo.teamName}</p>
+                                        <span className="text-foreground/60">Team Name:</span>
+                                        <p className="text-foreground font-medium">{teamInfo.teamName}</p>
                                     </div>
                                     <div>
-                                        <span className="text-gray-400">School:</span>
-                                        <p className="text-white font-medium">{teamInfo.schoolName}</p>
+                                        <span className="text-foreground/60">School:</span>
+                                        <p className="text-foreground font-medium">{teamInfo.schoolName}</p>
                                     </div>
                                     <div>
-                                        <span className="text-gray-400">Short Name:</span>
-                                        <p className="text-white font-medium">{teamInfo.shortName}</p>
+                                        <span className="text-foreground/60">Short Name:</span>
+                                        <p className="text-foreground font-medium">{teamInfo.shortName}</p>
                                     </div>
                                     <div>
-                                        <span className="text-gray-400">Contact:</span>
-                                        <p className="text-white font-medium">{teamInfo.contactName}</p>
+                                        <span className="text-foreground/60">Contact:</span>
+                                        <p className="text-foreground font-medium">{teamInfo.contactName}</p>
                                     </div>
                                     <div>
-                                        <span className="text-gray-400">Email:</span>
-                                        <p className="text-white font-medium">{teamInfo.contactEmail}</p>
+                                        <span className="text-foreground/60">Email:</span>
+                                        <p className="text-foreground font-medium">{teamInfo.contactEmail}</p>
                                     </div>
                                     <div>
-                                        <span className="text-gray-400">Phone:</span>
-                                        <p className="text-white font-medium">{teamInfo.contactPhone}</p>
+                                        <span className="text-foreground/60">Phone:</span>
+                                        <p className="text-foreground font-medium">{teamInfo.contactPhone}</p>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Players Summary */}
-                            <div className="bg-white/5 border border-gray-700 rounded-xl p-6 mb-8">
-                                <h3 className="text-xl font-semibold text-white mb-4">
+                            <div className="bg-muted border border-border rounded-xl p-6 mb-8">
+                                <h3 className="text-xl font-semibold text-foreground mb-4">
                                     Players ({players.length})
                                 </h3>
                                 <div className="space-y-2">
                                     {players.map((player, index) => (
-                                        <div key={player.id} className="flex items-center justify-between py-2 border-b border-gray-700 last:border-0">
+                                        <div key={player.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                                             <div className="flex items-center gap-4">
-                                                <span className="text-gray-400 font-mono">#{player.number}</span>
-                                                <span className="text-white font-medium">{player.name}</span>
+                                                <span className="text-foreground/60 font-mono">#{player.number}</span>
+                                                <span className="text-foreground font-medium">{player.name}</span>
                                             </div>
                                             <span className="text-purple-400 text-sm">{player.position}</span>
                                         </div>
@@ -776,7 +776,7 @@ export default function CompetitionRegistration({
                             <div className="flex justify-between">
                                 <button
                                     onClick={() => setCurrentStep(2)}
-                                    className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
+                                    className="px-6 py-3 bg-muted hover:bg-muted/70 text-foreground font-semibold rounded-lg transition-all flex items-center gap-2"
                                 >
                                     <ArrowLeft className="w-5 h-5" />
                                     Back

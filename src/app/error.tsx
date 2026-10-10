@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Home, RefreshCcw, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 // BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031)
@@ -23,28 +23,23 @@ interface ErrorPageProps {
 }
 
 export default function ErrorPage({ error, reset }: ErrorPageProps) {
-  const [isClient, setIsClient] = useState(false);
   // This boundary only ever catches unhandled render exceptions — real 404s
   // are handled separately by Next.js's notFound()/not-found.tsx. There is
   // no reliable way to know a real HTTP status here, so we no longer guess one.
   const errorCode = '500';
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    setIsClient(true);
     // Log error to console for debugging
     console.error('Application error:', error);
   }, [error]);
 
-  const getErrorMessage = () => "Houston, we have a problem! The server fumbled the ball.";
+  const getErrorMessage = () => "Houston, we have a problem! The server dropped the ball.";
 
   const getSubMessage = () => "Our servers are having a tough game. Let's take a water break and try again.";
 
-  if (!isClient) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center px-4 py-8 overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8 overflow-hidden">
       {/* Background Stadium Effect */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         {/* Stadium lights */}
@@ -52,9 +47,10 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
         <div className="absolute top-0 right-1/4 w-32 h-32 bg-white/5 rounded-full blur-3xl" />
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-64 h-32 bg-blue-500/10 rounded-full blur-3xl" />
         
-        {/* Crowd noise effect - animated dots */}
+        {/* Crowd noise effect - animated dots. Purely decorative, infinite-loop
+            motion -- skipped entirely when the user prefers reduced motion. */}
         <div className="absolute bottom-0 left-0 right-0 h-1/3 opacity-20">
-          {[...Array(50)].map((_, i) => (
+          {!prefersReducedMotion && [...Array(50)].map((_, i) => (
             <motion.div
               key={i}
               className="absolute w-1 h-1 bg-white rounded-full"
@@ -77,19 +73,12 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
       </div>
 
       <div className="relative z-10 max-w-4xl w-full text-center">
-        {/* 3D Scene Container */}
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="relative w-full h-[250px] sm:h-[300px] md:h-[400px] mb-6 md:mb-8 rounded-xl md:rounded-2xl overflow-hidden shadow-2xl"
-        >
-          {/* BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031) */}
-          {/* <SoccerGoalScene errorCode={errorCode} /> */}
-          
-          {/* Overlay gradient */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
-        </motion.div>
+        {/* BACKSCOPED: 2026-06-11 — Three.js scene container removed. Reinstate
+            when: lightweight replacement built (see BACKLOG-031). The empty
+            container + its dark overlay gradient (a leftover meant to sit under
+            the now-gone 3D scene) were removed entirely, not just commented --
+            with no scene inside it, the overlay rendered as a bare hardcoded-dark
+            gradient smear on the page, breaking visibly in light mode. */}
 
         {/* Error Code */}
         <motion.div
@@ -119,7 +108,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="text-2xl md:text-3xl font-bold text-white mt-6 mb-2"
+          className="text-2xl md:text-3xl font-bold text-foreground mt-6 mb-2"
         >
           {getErrorMessage()}
         </motion.h2>
@@ -129,28 +118,29 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="text-white/60 text-lg mb-8 max-w-lg mx-auto"
+          className="text-muted-foreground text-lg mb-8 max-w-lg mx-auto"
         >
           {getSubMessage()}
         </motion.p>
 
-        {/* Error Details (if available) */}
-        {error?.message && (
+        {/* Error Details — never the raw error.message/digest (CLAUDE.md: never
+            return raw errors to the client). Dev-mode only, generic in prod. */}
+        {process.env.NODE_ENV === 'development' && error?.message && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
-            className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-xl max-w-lg mx-auto"
+            className="mb-8 p-4 bg-destructive/10 border border-destructive/20 rounded-xl max-w-lg mx-auto"
           >
-            <div className="flex items-center gap-2 text-red-400 text-sm mb-2">
+            <div className="flex items-center gap-2 text-destructive text-sm mb-2">
               <AlertTriangle className="w-4 h-4" />
-              <span className="font-semibold">Error Details</span>
+              <span className="font-semibold">Error Details (dev only)</span>
             </div>
-            <p className="text-red-300/80 text-sm font-mono break-all">
+            <p className="text-destructive/80 text-sm font-mono break-all">
               {error.message}
             </p>
             {error.digest && (
-              <p className="text-red-300/60 text-xs mt-2">
+              <p className="text-destructive/60 text-xs mt-2">
                 Error ID: {error.digest}
               </p>
             )}
@@ -166,7 +156,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
         >
           <button
             onClick={reset}
-            className="group flex items-center gap-2 px-8 py-4 bg-primary hover:bg-primary/90 text-black font-bold rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-primary/25"
+            className="group flex items-center gap-2 px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-primary/25"
           >
             <RefreshCcw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" />
             Try Again
@@ -174,7 +164,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
 
           <Link
             href="/"
-            className="group flex items-center gap-2 px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all border border-white/10 hover:border-white/20"
+            className="group flex items-center gap-2 px-8 py-4 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold rounded-xl transition-all border border-border"
           >
             <Home className="w-5 h-5 group-hover:scale-110 transition-transform" />
             Back to Home
@@ -186,9 +176,9 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
-          className="mt-12 text-white/30 text-sm"
+          className="mt-12 text-muted-foreground/70 text-sm"
         >
-          Even Messi misses sometimes. Don't worry, we've got this!
+          Even the pros miss sometimes. Don't worry, we've got this!
         </motion.p>
       </div>
     </div>

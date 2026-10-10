@@ -165,7 +165,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                 animate={{ opacity: 1, y: 0 }}
                 className={`${isReply ? 'ml-12' : ''}`}
             >
-                <div className="flex gap-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                <div className="flex gap-3 p-4 bg-muted/50 rounded-xl border border-border">
                     {/* Avatar */}
                     <div className="flex-shrink-0">
                         {comment.user?.avatar ? (
@@ -175,8 +175,8 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                                 className="w-10 h-10 rounded-full object-cover"
                             />
                         ) : (
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                                <User className="w-5 h-5 text-white" />
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
+                                <User className="w-5 h-5 text-primary-foreground" />
                             </div>
                         )}
                     </div>
@@ -184,14 +184,14 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-white">
+                            <span className="font-semibold text-foreground">
                                 {comment.user?.name || 'Anonymous'}
                             </span>
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-foreground/40">
                                 {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
                             </span>
                         </div>
-                        <p className="text-slate-300 text-sm mb-3 break-words">
+                        <p className="text-foreground/80 text-sm mb-3 break-words">
                             {comment.content}
                         </p>
 
@@ -202,7 +202,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                                 disabled={!userId}
                                 className={`flex items-center gap-1 text-sm transition-colors ${isLiked
                                         ? 'text-red-400'
-                                        : 'text-slate-500 hover:text-red-400'
+                                        : 'text-foreground/40 hover:text-red-400'
                                     }`}
                             >
                                 <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
@@ -212,7 +212,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                             {!isReply && userId && (
                                 <button
                                     onClick={() => setReplyTo(comment.id)}
-                                    className="flex items-center gap-1 text-sm text-slate-500 hover:text-blue-400 transition-colors"
+                                    className="flex items-center gap-1 text-sm text-foreground/40 hover:text-primary transition-colors"
                                 >
                                     <Reply className="w-4 h-4" />
                                     Reply
@@ -222,7 +222,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                             {canDelete && (
                                 <button
                                     onClick={() => handleDelete(comment.id)}
-                                    className="flex items-center gap-1 text-sm text-slate-500 hover:text-red-400 transition-colors ml-auto"
+                                    className="flex items-center gap-1 text-sm text-foreground/40 hover:text-red-400 transition-colors ml-auto"
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </button>
@@ -243,7 +243,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                                         value={replyContent}
                                         onChange={(e) => setReplyContent(e.target.value)}
                                         placeholder="Write a reply..."
-                                        className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary"
                                         onKeyPress={(e) => {
                                             if (e.key === 'Enter' && !e.shiftKey) {
                                                 e.preventDefault();
@@ -254,7 +254,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                                     <button
                                         onClick={() => handleSubmitReply(comment.id)}
                                         disabled={submitting || !replyContent.trim()}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <Send className="w-4 h-4" />
                                     </button>
@@ -263,7 +263,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                                             setReplyTo(null);
                                             setReplyContent('');
                                         }}
-                                        className="px-3 py-2 text-slate-400 hover:text-white transition-colors"
+                                        className="px-3 py-2 text-foreground/60 hover:text-foreground transition-colors"
                                     >
                                         Cancel
                                     </button>
@@ -287,7 +287,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
 
     if (!userId) {
         return (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-foreground/60">
                 <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>Sign in to join the discussion</p>
             </div>
@@ -297,7 +297,7 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
     return (
         <div className="space-y-4">
             {/* Header */}
-            <div className="flex items-center gap-2 text-slate-300">
+            <div className="flex items-center gap-2 text-foreground/80">
                 <MessageCircle className="w-5 h-5" />
                 <h3 className="font-semibold">
                     Discussion ({comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})
@@ -311,12 +311,12 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Share your thoughts..."
-                    className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    className="flex-1 px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
                 />
                 <button
                     type="submit"
                     disabled={submitting || !newComment.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                     <Send className="w-4 h-4" />
                     Post
@@ -326,10 +326,10 @@ export default function PollComments({ pollId, userId }: PollCommentsProps) {
             {/* Comments List */}
             {loading ? (
                 <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
             ) : comments.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-foreground/40">
                     <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p>No comments yet. Be the first to share your thoughts!</p>
                 </div>

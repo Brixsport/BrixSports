@@ -536,6 +536,12 @@ export const userFavorites = sqliteTable('user_favorites', {
     favoriteType: text('favorite_type').notNull(),
     favoriteId: text('favorite_id').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    // Fan Account Blueprint, ADR-001 Decision 1: per-team alert control at the
+    // point of favoriting, mirroring userFollows.notificationsEnabled below.
+    // Default true matches this column's pre-migration real behavior exactly
+    // (every favorite was already unconditionally alert-eligible) -- see
+    // dev/add-userfavorites-notifications-column.mjs, RUNLOG.md 2026-09-10.
+    notificationsEnabled: integer('notifications_enabled', { mode: 'boolean' }).default(true),
 });
 
 // User Follows table
@@ -915,6 +921,21 @@ export const notificationSendLog = sqliteTable('notification_send_log', {
     failedCount: integer('failed_count').notNull().default(0),
     errors: text('errors'), // JSON array of error strings, nullable
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Fan Account Blueprint Phase 3, ADR-001 Decision 2: one row per dismissal,
+// not a shared JSON-array column -- a JSON blob is a read-modify-write on one
+// row, and two dismiss events firing close together would race exactly the
+// way BACKLOG-316's bracket-node claim did before its atomic fix. Follows the
+// same "many small events, not a denormalized blob" convention as
+// notificationSendLog above. Unique on (userId, tourId) so a double-fire
+// can't create duplicates -- enforced at the DB layer via a unique index
+// (dev/add-fan-tour-dismissals-table.mjs), not just app-level dedup.
+export const fanTourDismissals = sqliteTable('fan_tour_dismissals', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tourId: text('tour_id').notNull(), // e.g. 'favourites-intro'
+    dismissedAt: integer('dismissed_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
 // Password Reset Tokens table

@@ -10,6 +10,7 @@ import {
     Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User, Megaphone, Layers
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 
 const navItems = [
     { icon: <Activity size={18} />, label: "Live Monitor", href: "/admin" },
@@ -22,23 +23,28 @@ const navItems = [
     { icon: <Calendar size={18} />, label: "Import Matches", href: "/admin/past-matches/import", adminOnly: true },
     { icon: <Timer size={18} />, label: "Track Events", href: "/admin/track-events" },
     { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams", adminOnly: true },
-    { icon: <Newspaper size={18} />, label: "News", href: "/admin/news", adminOnly: true },
-    { icon: <TrendingUp size={18} />, label: "Transfers", href: "/admin/transfers", adminOnly: true },
-    { icon: <Megaphone size={18} />, label: "Advertisements", href: "/admin/advertisements", adminOnly: true },
+    // D3/BACKLOG-155: these 4 already gate their own page content behind
+    // FeatureGate -- flagKey here just keeps the nav link itself from
+    // advertising a panel that shows "temporarily disabled" the moment you click it.
+    { icon: <Newspaper size={18} />, label: "News", href: "/admin/news", adminOnly: true, flagKey: "features.news.enabled" },
+    { icon: <TrendingUp size={18} />, label: "Transfers", href: "/admin/transfers", adminOnly: true, flagKey: "features.transfers.enabled" },
+    { icon: <Megaphone size={18} />, label: "Advertisements", href: "/admin/advertisements", adminOnly: true, flagKey: "features.ads.enabled" },
     { icon: <UserPlus size={18} />, label: "Bulk Register", href: "/admin/bulk-register" },
     { icon: <Users size={18} />, label: "Loggers", href: "/admin/loggers" },
     { icon: <Server size={18} />, label: "Infrastructure", href: "/admin/infrastructure", adminOnly: true },
-    { icon: <Shield size={18} />, label: "Access Control", href: "/admin/access", adminOnly: true },
-    { icon: <Settings size={18} />, label: "Algorithm Setup", href: "/admin/settings", adminOnly: true },
+    { icon: <Shield size={18} />, label: "Access Control", href: "/admin/access", adminOnly: true, flagKey: "features.usermanagement.enabled" },
+    { icon: <Settings size={18} />, label: "System Settings", href: "/admin/settings", adminOnly: true },
 ];
 
 export function AdminSidebar() {
     const { user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const pathname = usePathname();
+    const isFeatureEnabled = useFeatureFlags();
 
     const filteredNavItems = navItems.filter(item => {
         if (item.adminOnly && user?.role !== 'admin') return false;
+        if (item.flagKey && !isFeatureEnabled(item.flagKey)) return false;
         return true;
     });
 

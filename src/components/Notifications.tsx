@@ -64,7 +64,7 @@ function NotificationToast({ notifications, onClose }: { notifications: Notifica
             initial={{ opacity: 0, x: 100, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 100, scale: 0.5 }}
-            className="pointer-events-auto bg-black/90 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl w-80 flex items-start gap-4"
+            className="pointer-events-auto bg-card backdrop-blur-xl border border-border p-4 rounded-2xl shadow-2xl w-80 flex items-start gap-4"
           >
             <div className={`p-2 rounded-xl ${notif.type === 'match' ? 'bg-primary/20 text-primary' :
                 notif.type === 'player' ? 'bg-secondary/20 text-secondary' :
@@ -76,11 +76,11 @@ function NotificationToast({ notifications, onClose }: { notifications: Notifica
             </div>
             <div className="flex-1">
               <h4 className="text-xs font-black tracking-widest uppercase mb-1">{notif.title}</h4>
-              <p className="text-[11px] text-white/60 leading-relaxed font-medium italic">{notif.message}</p>
+              <p className="text-[11px] text-foreground/60 leading-relaxed font-medium italic">{notif.message}</p>
             </div>
             <button
               onClick={() => onClose(notif.id)}
-              className="text-white/20 hover:text-white transition-colors"
+              className="text-foreground/20 hover:text-foreground transition-colors"
             >
               <X size={14} />
             </button>

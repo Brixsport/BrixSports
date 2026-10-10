@@ -204,7 +204,7 @@ export default function PushDiagnosticPage() {
       <h1 className="text-2xl font-bold mb-6">🔍 Push Notification Deep Diagnostics</h1>
       
       <div className="mb-6 space-y-2">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={runClientDiagnostics} disabled={loading}>
             Run Client Diagnostics
           </Button>
@@ -215,7 +215,7 @@ export default function PushDiagnosticPage() {
             Server Diagnostics
           </Button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={testSend} disabled={loading} variant="secondary">
             Test Direct Send
           </Button>

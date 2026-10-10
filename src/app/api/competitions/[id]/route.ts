@@ -8,8 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, matches, standings, bracketNodes, competitions } from '@/db/schema';
-import { eq, sql, or } from 'drizzle-orm';
+import { teams, matches, standings, bracketNodes, competitions, organizations } from '@/db/schema';
+import { eq, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
 interface RouteParams {
@@ -50,13 +50,16 @@ export async function GET(
             return NextResponse.json(competitionByName); // Simple return if found by name
         }
 
-        const competitionName = competition.name;
+        // competitionId is authoritative -- do NOT OR it with a name fallback
+        // (BACKLOG-335: two real competitions can share an exact name, and
+        // OR'ing in a name match even when a real id is known silently pulls
+        // in the other competition's matches/standings/brackets too).
 
         // Get matches for this competition
         const competitionMatches = await db
             .select()
             .from(matches)
-            .where(or(eq(matches.competitionId, competition.id), eq(matches.competition, competitionName)));
+            .where(eq(matches.competitionId, competition.id));
 
         // Get standings for this competition
         const competitionStandings = await db
@@ -66,13 +69,13 @@ export async function GET(
             })
             .from(standings)
             .leftJoin(teams, eq(standings.teamId, teams.id))
-            .where(or(eq(standings.competitionId, competition.id), eq(standings.competition, competitionName)));
+            .where(eq(standings.competitionId, competition.id));
 
         // Get brackets (if tournament)
         const brackets = await db
             .select()
             .from(bracketNodes)
-            .where(or(eq(bracketNodes.competitionId, competition.id), eq(bracketNodes.competition, competitionName)));
+            .where(eq(bracketNodes.competitionId, competition.id));
 
         // Get unique teams from matches
         const teamIds = new Set<string>();
@@ -165,6 +168,8 @@ export async function PATCH(
             status,
             isMultiSport,
             logo,
+            hostOrganizationId,
+            governingOrganizationId,
         } = body;
 
         // Check if competition exists
@@ -190,8 +195,24 @@ export async function PATCH(
         if (format !== undefined) updateData.format = format;
         if (structure !== undefined) updateData.structure = structure || null;
         if (season !== undefined) updateData.season = season;
-        if (startDate !== undefined) updateData.startDate = new Date(startDate);
-        if (endDate !== undefined) updateData.endDate = new Date(endDate);
+        // Bundled review finding (2026-09-09): an unparseable startDate/endDate
+        // previously became an Invalid Date object written straight through (or
+        // threw at insert, surfacing as an unhelpful generic 500) -- same class as
+        // BACKLOG-343's openEditModal/handleUpdate crash on the client side.
+        if (startDate !== undefined) {
+            const parsedStart = new Date(startDate);
+            if (isNaN(parsedStart.getTime())) {
+                return NextResponse.json({ error: 'Invalid startDate' }, { status: 422 });
+            }
+            updateData.startDate = parsedStart;
+        }
+        if (endDate !== undefined) {
+            const parsedEnd = new Date(endDate);
+            if (isNaN(parsedEnd.getTime())) {
+                return NextResponse.json({ error: 'Invalid endDate' }, { status: 422 });
+            }
+            updateData.endDate = parsedEnd;
+        }
         if (description !== undefined) updateData.description = description;
         if (level !== undefined) updateData.level = level;
         if (scope !== undefined) updateData.scope = scope;
@@ -202,6 +223,21 @@ export async function PATCH(
         if (status !== undefined) updateData.status = status;
         if (isMultiSport !== undefined) updateData.isMultiSport = isMultiSport;
         if (logo !== undefined) updateData.logo = logo;
+        // BACKLOG-333: no UI sets these yet (no selector exists -- see route.ts's
+        // POST handler for the full TODO), but accepting them here means a future
+        // selector needs no further route changes, just a form field wired to it.
+        // Bundled review finding (2026-09-09): no existence check on either id --
+        // same gap as the POST handler, closed the same way here.
+        if (hostOrganizationId !== undefined) {
+            const [org] = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, hostOrganizationId)).limit(1);
+            if (!org) return NextResponse.json({ error: 'Invalid hostOrganizationId: organization not found' }, { status: 422 });
+            updateData.hostOrganizationId = hostOrganizationId;
+        }
+        if (governingOrganizationId !== undefined) {
+            const [org] = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, governingOrganizationId)).limit(1);
+            if (!org) return NextResponse.json({ error: 'Invalid governingOrganizationId: organization not found' }, { status: 422 });
+            updateData.governingOrganizationId = governingOrganizationId;
+        }
 
         // Update competition
         await db

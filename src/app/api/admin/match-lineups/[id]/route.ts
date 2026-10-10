@@ -3,6 +3,9 @@ import { getAuthUser } from '@/lib/auth';
 import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
+import { resolveSlot } from '@/lib/lineup/placement';
+import { getMatchConfig } from '@/lib/matchConfig';
+import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
 export async function POST(
@@ -64,16 +67,18 @@ export async function POST(
             );
         }
 
-        // Determine required starters from competition's playersPerSide
-        let requiredStarters = 11; // default
-        if (match[0].competition) {
-            const comp = await db.select().from(competitions)
-                .where(eq(competitions.name, match[0].competition))
-                .limit(1);
-            if (comp.length > 0 && comp[0].playersPerSide) {
-                requiredStarters = comp[0].playersPerSide;
-            }
-        }
+        // BACKLOG-329 (found live-testing BACKLOG-323 step 6): this used to run
+        // its own independent `competitions.name === match.competition` lookup
+        // for playersPerSide -- a third, drifting copy of logic matchConfig.ts's
+        // own comment already documented replacing "two independent, drifting
+        // copies" of (the lineup-publish route and the admin UI), but this route
+        // was missed. That lookup fails for any match without an exact
+        // competition-name match (friendlies, or a real mismatch as found live:
+        // a real 7-a-side match's competition row didn't resolve here, silently
+        // falling back to the hardcoded 11 and rejecting every valid 7-starter
+        // publish attempt). Use the same canonical resolver everything else uses.
+        const matchConfig = await getMatchConfig(matchId);
+        const requiredStarters = matchConfig?.config.playersPerSide ?? 11;
 
         // Validate lineup has the correct number of starters
         if (!lineup.starters || lineup.starters.length !== requiredStarters) {
@@ -81,6 +86,43 @@ export async function POST(
                 { error: `Lineup must have exactly ${requiredStarters} starters` },
                 { status: 400 }
             );
+        }
+
+        // BACKLOG-323: the rebuilt admin builder sends explicit slotId/x/y per
+        // starter (placementVersion:2) instead of a free-text position label.
+        // Never trust the client's x/y directly -- re-derive both from the
+        // formation registry server-side, and reject unknown or duplicate
+        // slotIds outright rather than silently accepting a stale/tampered
+        // coordinate. Lineups without slotId (legacy callers, if any survive)
+        // pass through unchanged below.
+        if (lineup.placementVersion === 2) {
+            const seenSlotIds = new Set<string>();
+            for (const starter of lineup.starters) {
+                if (typeof starter.slotId !== 'string' || starter.slotId.length === 0) {
+                    return NextResponse.json(
+                        { error: 'Every starter must have a slotId for a placementVersion 2 lineup', code: 'MISSING_SLOT_ID' },
+                        { status: 422 }
+                    );
+                }
+                if (seenSlotIds.has(starter.slotId)) {
+                    return NextResponse.json(
+                        { error: `Duplicate slot assignment: ${starter.slotId}`, code: 'DUPLICATE_SLOT_ID' },
+                        { status: 422 }
+                    );
+                }
+                seenSlotIds.add(starter.slotId);
+
+                const slot = resolveSlot(lineup.formation, starter.slotId);
+                if (!slot) {
+                    return NextResponse.json(
+                        { error: `Unknown slot "${starter.slotId}" for formation "${lineup.formation}"`, code: 'UNKNOWN_SLOT_ID' },
+                        { status: 422 }
+                    );
+                }
+                // Re-derive from the registry -- ignore whatever x/y the client sent.
+                starter.x = slot.x;
+                starter.y = slot.y;
+            }
         }
 
         // Get existing lineups or create new object
@@ -110,9 +152,13 @@ export async function POST(
                 .all();
 
             if (competition.length > 0 && competition[0].requireSquad) {
-                // Get all player IDs from the lineup
+                // Get all player IDs from the lineup. Was reading
+                // `lineup.startingXI`, a field this route's payload has never
+                // actually had (the real field is `starters`, used everywhere
+                // else in this same handler) -- squad validation was silently
+                // only ever checking substitutes, never starters.
                 const lineupPlayerIds = [
-                    ...(lineup.startingXI || []),
+                    ...(lineup.starters || []),
                     ...(lineup.substitutes || []),
                 ].map((p: any) => p.playerId).filter(Boolean);
 
@@ -170,13 +216,14 @@ export async function POST(
             updatedAt: new Date().toISOString()
         };
 
-        // Save back to database
-        await db.update(matches)
-            .set({
-                lineups: JSON.stringify(existingLineups),
-                updatedAt: new Date()
-            })
-            .where(eq(matches.id, matchId));
+        // Save back to database -- BACKLOG-220: compare-and-swap against the
+        // exact raw value read above. This route is the one that made
+        // concurrent home+away publish the normal case (BACKLOG-323 step 6),
+        // so this guard matters most here.
+        const writeResult = await writeMatchLineupsAtomic(matchId, match[0].lineups as string | null, existingLineups);
+        if (!writeResult.ok) {
+            return NextResponse.json(CONCURRENT_MODIFICATION_RESPONSE, { status: 409 });
+        }
 
         // Send push notification for lineup availability
         try {

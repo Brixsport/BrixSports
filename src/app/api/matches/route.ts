@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matches, teams } from '@/db/schema';
-import { eq, and, inArray, or, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
+import { matches, teams, matchLoggerAssignments } from '@/db/schema';
+import { eq, and, or, inArray, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { playerRatings } from '@/db/schema-ratings';
@@ -93,13 +93,40 @@ export async function GET(request: NextRequest) {
         const conditions = [];
 
         if (sport) conditions.push(eq(matches.sport, sport));
-        if (loggerId) conditions.push(eq(matches.loggerId, loggerId));
+        if (loggerId) {
+            // BACKLOG-416: matches.loggerId is the pre-multi-logger legacy
+            // column (see src/db/migrations/add-multi-logger-support.ts) --
+            // assignments made via the current POST /assign-logger endpoint
+            // only ever write matchLoggerAssignments, never this column, so
+            // filtering on it alone silently misses every match assigned
+            // through the current flow. OR in an active-assignment subquery
+            // so both the legacy column (if ever populated) and the current
+            // assignment table are honored.
+            conditions.push(
+                or(
+                    eq(matches.loggerId, loggerId),
+                    inArray(
+                        matches.id,
+                        db
+                            .select({ matchId: matchLoggerAssignments.matchId })
+                            .from(matchLoggerAssignments)
+                            .where(
+                                and(
+                                    eq(matchLoggerAssignments.loggerId, loggerId),
+                                    eq(matchLoggerAssignments.status, 'active')
+                                )
+                            )
+                    )
+                )!
+            );
+        }
         if (status) conditions.push(eq(matches.status, status));
         if (matchday) conditions.push(eq(matches.matchday, parseInt(matchday, 10)));
         if (round) conditions.push(eq(matches.round, round));
 
+        // competitionId is authoritative when present -- see BACKLOG-335.
         if (competitionId) {
-            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+            conditions.push(eq(matches.competitionId, competitionId));
         } else if (competition) {
             conditions.push(eq(matches.competition, competition));
         }
@@ -206,6 +233,23 @@ export async function GET(request: NextRequest) {
     }
 }
 
+// BACKLOG-397: explicit allow-list, not a raw `...matchData` spread -- an
+// unbounded spread let any field including approvalStatus/managerNotes/
+// approvedBy/loggerId be set at creation, bypassing both the admin-only
+// approval gate on PATCH and the assign-logger transaction's own validation.
+// Mirrors MATCH_LIST_FIELDS above: creation-time fields only, never the
+// admin-approval fields, never loggerId (assigned via its own endpoint),
+// never score/period/shootout fields (event-driven or PATCH-only).
+const MATCH_CREATE_FIELDS = [
+    'id', 'sport', 'homeTeamId', 'awayTeamId', 'status', 'startTime', 'venue',
+    'competition', 'competitionId', 'matchType', 'competitionLevel',
+    'friendlyType', 'friendlyDescription', 'highlightsUrl', 'livestreamUrl',
+    'livestreamType', 'livestreamEnabled', 'livestreamStartTime', 'round',
+    'matchday', 'groupName', 'livestreamEndTime', 'livestreamChatEnabled',
+    'livestreamChatUrl', 'penaltiesEnabledOverride', 'allowDrawsOverride',
+    'extraTimeEnabledOverride',
+] as const;
+
 export async function POST(request: NextRequest) {
     try {
         const authUser = await getAuthUser(request);
@@ -214,13 +258,17 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { stats, lineups, ...matchData } = body;
+        const { stats, lineups } = body;
+        const matchData: Record<string, unknown> = {};
+        for (const field of MATCH_CREATE_FIELDS) {
+            if (body[field] !== undefined) matchData[field] = body[field];
+        }
 
         // Ensure competition is never null/empty (database requires NOT NULL)
         // For friendly matches, use friendlyDescription or default to 'Friendly'
-        const competition = matchData.competition?.trim() ||
+        const competition = (matchData.competition as string | undefined)?.trim() ||
             (matchData.matchType === 'friendly'
-                ? (matchData.friendlyDescription?.trim() || 'Friendly')
+                ? ((matchData.friendlyDescription as string | undefined)?.trim() || 'Friendly')
                 : 'Unknown');
 
         matchData.competitionId = matchData.competitionId || null;
@@ -230,7 +278,7 @@ export async function POST(request: NextRequest) {
             competition,
             stats: stats ? JSON.stringify(stats) : null,
             lineups: lineups ? JSON.stringify(lineups) : null,
-        }).returning();
+        } as typeof matches.$inferInsert).returning();
 
         return NextResponse.json(newMatch[0], { status: 201 });
     } catch (error) {

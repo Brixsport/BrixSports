@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ArrowUp, ArrowDown, Repeat, CheckCircle, AlertCircle, Shuffle, Send, Undo2 } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface Team {
     id: string;
@@ -206,7 +207,10 @@ export default function CompetitionDrawPage() {
 
     return (
         <div className="min-h-screen bg-neutral-950 text-white p-6 max-w-4xl mx-auto">
-            <h1 className="text-2xl font-bold mb-1">Competition Draw</h1>
+            <div className="flex items-center gap-2 mb-1">
+                <BackButton fallbackHref={`/admin/competitions/${competitionId}`} />
+                <h1 className="text-2xl font-bold">Competition Draw</h1>
+            </div>
             <p className="text-white/50 text-sm mb-6">
                 Predetermined league-phase draw ({teams.length} teams registered). {isPublished ? 'Published — real matches exist for this draw.' : isDraft ? 'Draft — review and publish when ready.' : 'Set the seed order and compute the draw.'}
             </p>

@@ -5,16 +5,21 @@ import { eq, inArray, and, sql } from 'drizzle-orm';
 
 export async function GET() {
     try {
-        // Fetch all teams
-        const allTeams = await db.select().from(teams).all();
-
-        // Filter basketball teams (the ones we just created)
-        // BACKLOG-262 item 3: hardcoded name list, not touched here -- separate,
-        // already-filed issue, out of this pass's scope.
+        // BACKLOG-395: was `db.select().from(teams).all()` -- unbounded, the
+        // exact anti-pattern CLAUDE.md bans. Fix here pushes the existing
+        // fixed-name filter into the WHERE clause instead of adding a blind
+        // .limit() -- a cap would risk the historic BUG-014 truncation bug
+        // (teams beyond a row-count cap silently missing) as the teams table
+        // grows; filtering by name at the DB level naturally bounds the result
+        // to this fixed list regardless of table size.
+        // BACKLOG-262 item 3: hardcoded name list itself, not touched here --
+        // separate, already-filed issue, out of this pass's scope.
         const basketballTeamNames = ['TBK', 'Titans', 'Storm', 'Rim Reapers', 'Vikings', 'Siberia'];
-        const basketballTeams = allTeams.filter(team =>
-            basketballTeamNames.includes(team.name)
-        );
+        const basketballTeams = await db
+            .select()
+            .from(teams)
+            .where(inArray(teams.name, basketballTeamNames))
+            .all();
 
         const teamIds = basketballTeams.map(t => t.id);
 

@@ -58,7 +58,7 @@ export function FAQSection({
                     </div>
                     
                     {description && (
-                        <p className="text-white/60 mb-8 text-sm">
+                        <p className="text-foreground/60 mb-8 text-sm">
                             {description}
                         </p>
                     )}
@@ -67,7 +67,7 @@ export function FAQSection({
                         {faqs.map((faq, index) => (
                             <div
                                 key={index}
-                                className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-white/20"
+                                className="bg-muted border border-border rounded-2xl overflow-hidden transition-all hover:border-border"
                             >
                                 <button
                                     onClick={() => toggleFAQ(index)}
@@ -78,7 +78,7 @@ export function FAQSection({
                                         {faq.question}
                                     </span>
                                     <ChevronDown
-                                        className={`w-5 h-5 text-white/40 flex-shrink-0 transition-transform duration-300 ${
+                                        className={`w-5 h-5 text-foreground/40 flex-shrink-0 transition-transform duration-300 ${
                                             openIndex === index ? 'rotate-180' : ''
                                         }`}
                                     />
@@ -90,7 +90,7 @@ export function FAQSection({
                                     }`}
                                 >
                                     <div className="px-5 pb-5">
-                                        <p className="text-white/60 text-sm leading-relaxed">
+                                        <p className="text-foreground/60 text-sm leading-relaxed">
                                             {faq.answer}
                                         </p>
                                     </div>

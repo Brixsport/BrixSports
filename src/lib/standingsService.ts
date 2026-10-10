@@ -1,5 +1,5 @@
 import { db } from '@/db';
-import { matches, standings, teams, competitionSportSettings, competitionTeamEntries, matchEvents } from '@/db/schema';
+import { matches, standings, teams, competitions, competitionSportSettings, competitionTeamEntries, matchEvents } from '@/db/schema';
 import { eq, and, or, isNull, inArray, notInArray, asc, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
@@ -98,23 +98,34 @@ async function getPointsRule(competitionId: string | null, sport: string) {
 // must span every competition a team has played in) vs a specific competitionId
 // (used for the standings-table sync, competition-scoped, where a genuinely-null
 // competitionId on the match itself is matched with isNull, not skipped).
+//
+// `includeKnockouts` (BACKLOG-375): the standings table itself must always exclude
+// knockout rounds (BACKLOG-275 — a knockout result has no business in a group/league
+// table). But a team's own "how did we do this season" summary is a different
+// question — a team that reached the Final should show that, not just its 3 group
+// games. Default false preserves every existing caller's (syncCompetitionStandings,
+// syncTeamOverallRecord) behavior unchanged; only the new team-summary reader below
+// passes true.
 async function aggregateTeamRecord(
     teamId: string,
     sport: string,
     competitionFilter: string | null | 'all',
     pointsForWin: number,
-    pointsForDraw: number
+    pointsForDraw: number,
+    { includeKnockouts = false }: { includeKnockouts?: boolean } = {}
 ): Promise<TeamRecord> {
     const conditions = [
         eq(matches.status, 'FINISHED'),
         eq(matches.sport, sport),
         or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)),
+    ];
+    if (!includeKnockouts) {
         // BACKLOG-275: exclude knockout-round matches from league/group aggregation.
         // `round` is nullable — notInArray() alone evaluates to SQL NULL (not TRUE)
         // for a null-round row, which would silently drop every league/group match
         // too. Must explicitly re-include null rounds via isNull().
-        or(isNull(matches.round), notInArray(matches.round, KNOCKOUT_ROUNDS)),
-    ];
+        conditions.push(or(isNull(matches.round), notInArray(matches.round, KNOCKOUT_ROUNDS)));
+    }
     if (competitionFilter !== 'all') {
         conditions.push(competitionFilter ? eq(matches.competitionId, competitionFilter) : isNull(matches.competitionId));
     }
@@ -223,6 +234,87 @@ async function syncTeamOverallRecord(teamId: string, sport: string) {
         goalsAgainst: record.goalsAgainst,
         points: record.points,
     }).where(eq(teams.id, teamId));
+}
+
+// BACKLOG-375 — team-facing "Season Stats" card. Distinct from the two sync
+// functions above: those keep `standings`/`teams` correct for their own purposes
+// (a league table, a cross-competition snapshot) and must never change behavior.
+// This is a fresh read, always `includeKnockouts: true`, for a team's own summary
+// of what it actually did — a Cup run belongs in "how did we do this season," even
+// though it correctly never belongs in a group table.
+//
+// `competitionFilter`: a specific competitionId scopes to just that season/competition
+// (gated — no blending). `'all'` spans every competition AND friendlies (a friendly's
+// `competitionId` is null, so it falls out of any single-competition filter but is
+// correctly swept in by aggregateTeamRecord's own 'all' branch, which applies no
+// competitionId condition at all — this is existing, unchanged behavior, just newly
+// exposed to a caller that wants it). `null` means "matches with no competitionId"
+// specifically (friendlies only) — kept for completeness, not expected to be a common
+// selector choice.
+export async function getTeamCompetitionStats(
+    teamId: string,
+    sport: string,
+    competitionFilter: string | null | 'all'
+): Promise<TeamRecord> {
+    const { pointsForWin, pointsForDraw } = competitionFilter === 'all' || competitionFilter === null
+        ? { pointsForWin: DEFAULT_POINTS_FOR_WIN, pointsForDraw: DEFAULT_POINTS_FOR_DRAW }
+        : await getPointsRule(competitionFilter, sport);
+    return aggregateTeamRecord(teamId, sport, competitionFilter, pointsForWin, pointsForDraw, { includeKnockouts: true });
+}
+
+export interface TeamCompetitionSeason {
+    competitionId: string;
+    name: string;
+    season: string;
+    matchCount: number;
+    latestMatchTime: string | null;
+}
+
+// Distinct competitions this team has at least one FINISHED match in, for the
+// season/competition selector. Deliberately sourced from `matches` directly (not
+// `standings`) — a team can have FINISHED matches in a competition before any
+// standings row exists for it (e.g. all played matches were knockout-only, so
+// syncCompetitionStandings never ran a group-stage insert), and this list must not
+// silently omit that competition from the selector.
+export async function getTeamCompetitionSeasons(teamId: string, sport: string): Promise<TeamCompetitionSeason[]> {
+    const rows = await db
+        .select({
+            competitionId: matches.competitionId,
+            startTime: matches.startTime,
+            compName: competitions.name,
+            compSeason: competitions.season,
+        })
+        .from(matches)
+        .innerJoin(competitions, eq(matches.competitionId, competitions.id))
+        .where(and(
+            eq(matches.status, 'FINISHED'),
+            eq(matches.sport, sport),
+            or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)),
+        ));
+
+    const byCompetition = new Map<string, TeamCompetitionSeason>();
+    for (const row of rows) {
+        if (!row.competitionId) continue; // friendlies -- not a selectable "season"
+        const existing = byCompetition.get(row.competitionId);
+        if (existing) {
+            existing.matchCount++;
+            if (!existing.latestMatchTime || row.startTime > existing.latestMatchTime) {
+                existing.latestMatchTime = row.startTime;
+            }
+        } else {
+            byCompetition.set(row.competitionId, {
+                competitionId: row.competitionId,
+                name: row.compName,
+                season: row.compSeason,
+                matchCount: 1,
+                latestMatchTime: row.startTime,
+            });
+        }
+    }
+
+    return Array.from(byCompetition.values()).sort((a, b) =>
+        (b.latestMatchTime ?? '').localeCompare(a.latestMatchTime ?? '')
+    );
 }
 
 export async function recalculateStandingsForMatch(matchId: string) {

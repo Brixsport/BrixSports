@@ -170,28 +170,28 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                         key={poll.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl rounded-2xl border border-slate-700/50 overflow-hidden"
+                        className="bg-card backdrop-blur-xl rounded-2xl border border-border overflow-hidden"
                     >
                         {/* Poll Header */}
-                        <div className="p-6 border-b border-slate-700/50">
+                        <div className="p-6 border-b border-border">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <BarChart3 className="w-5 h-5 text-blue-400" />
-                                        <span className="text-sm font-medium text-blue-400 uppercase tracking-wide">
+                                        <BarChart3 className="w-5 h-5 text-primary" />
+                                        <span className="text-sm font-medium text-primary uppercase tracking-wide">
                                             {poll.pollType.replace('_', ' ')}
                                         </span>
                                         {liveUpdates && (
-                                            <span className="flex items-center gap-1 text-xs text-blue-400">
-                                                <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                                            <span className="flex items-center gap-1 text-xs text-primary">
+                                                <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
                                                 Live
                                             </span>
                                         )}
                                     </div>
-                                    <h3 className="text-xl font-bold text-white mb-2">
+                                    <h3 className="text-xl font-bold text-foreground mb-2">
                                         {poll.question}
                                     </h3>
-                                    <div className="flex items-center gap-4 text-sm text-slate-400">
+                                    <div className="flex items-center gap-4 text-sm text-foreground/60">
                                         <div className="flex items-center gap-1">
                                             <Users className="w-4 h-4" />
                                             <span>{poll.totalVotes} votes</span>
@@ -205,9 +205,9 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                                     </div>
                                 </div>
                                 {userVoted && (
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 rounded-full">
-                                        <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                                        <span className="text-sm font-medium text-blue-400">Voted</span>
+                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/20 border border-primary/30 rounded-full">
+                                        <CheckCircle2 className="w-4 h-4 text-primary" />
+                                        <span className="text-sm font-medium text-primary">Voted</span>
                                     </div>
                                 )}
                             </div>
@@ -228,15 +228,15 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                                             disabled={userVoted || isVoting || poll.status !== 'active'}
                                             className={`
                                                 relative w-full p-4 rounded-xl border-2 transition-all duration-300
-                                                ${userVoted 
-                                                    ? 'cursor-default' 
+                                                ${userVoted
+                                                    ? 'cursor-default'
                                                     : 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]'
                                                 }
-                                                ${isSelected 
-                                                    ? 'border-blue-500 bg-blue-500/10' 
-                                                    : 'border-slate-700/50 bg-slate-800/50 hover:border-slate-600'
+                                                ${isSelected
+                                                    ? 'border-primary bg-primary/10'
+                                                    : 'border-border bg-muted hover:border-foreground/30'
                                                 }
-                                                ${isLeading && userVoted ? 'ring-2 ring-blue-500/50' : ''}
+                                                ${isLeading && userVoted ? 'ring-2 ring-primary/50' : ''}
                                             `}
                                             whileHover={!userVoted ? { scale: 1.02 } : {}}
                                             whileTap={!userVoted ? { scale: 0.98 } : {}}
@@ -249,9 +249,9 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                                                     transition={{ duration: 0.8, ease: 'easeOut' }}
                                                     className={`
                                                         absolute inset-0 rounded-xl
-                                                        ${isLeading 
-                                                            ? 'bg-gradient-to-r from-blue-500/20 to-blue-600/20' 
-                                                            : 'bg-gradient-to-r from-blue-500/10 to-blue-600/10'
+                                                        ${isLeading
+                                                            ? 'bg-gradient-to-r from-primary/20 to-primary/30'
+                                                            : 'bg-gradient-to-r from-primary/10 to-primary/15'
                                                         }
                                                     `}
                                                 />
@@ -261,21 +261,21 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                                             <div className="relative flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
                                                     {isSelected && (
-                                                        <CheckCircle2 className="w-5 h-5 text-blue-400" />
+                                                        <CheckCircle2 className="w-5 h-5 text-primary" />
                                                     )}
-                                                    <span className="text-lg font-semibold text-white">
+                                                    <span className="text-lg font-semibold text-foreground">
                                                         {option.label}
                                                     </span>
                                                     {isLeading && userVoted && (
-                                                        <TrendingUp className="w-5 h-5 text-blue-400" />
+                                                        <TrendingUp className="w-5 h-5 text-primary" />
                                                     )}
                                                 </div>
                                                 {userVoted && (
                                                     <div className="flex items-center gap-3">
-                                                        <span className="text-sm text-slate-400">
+                                                        <span className="text-sm text-foreground/60">
                                                             {option.votes || 0} votes
                                                         </span>
-                                                        <span className="text-xl font-bold text-white min-w-[4rem] text-right">
+                                                        <span className="text-xl font-bold text-foreground min-w-[4rem] text-right">
                                                             {percentage}%
                                                         </span>
                                                     </div>
@@ -288,10 +288,10 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                         </div>
 
                         {/* Comments Toggle */}
-                        <div className="border-t border-slate-700/50">
+                        <div className="border-t border-border">
                             <button
                                 onClick={() => toggleComments(poll.id)}
-                                className="w-full px-6 py-4 flex items-center justify-between text-slate-300 hover:bg-slate-800/50 transition-colors"
+                                className="w-full px-6 py-4 flex items-center justify-between text-foreground/70 hover:bg-muted transition-colors"
                             >
                                 <div className="flex items-center gap-2">
                                     <MessageCircle className="w-5 h-5" />
@@ -312,7 +312,7 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                                         animate={{ height: 'auto', opacity: 1 }}
                                         exit={{ height: 0, opacity: 0 }}
                                         transition={{ duration: 0.3 }}
-                                        className="border-t border-slate-700/50 overflow-hidden"
+                                        className="border-t border-border overflow-hidden"
                                     >
                                         <div className="p-6">
                                             <PollComments pollId={poll.id} userId={userId} />
@@ -325,7 +325,7 @@ export default function MatchPollEnhanced({ matchId, userId, liveUpdates = true 
                         {/* Footer */}
                         {!userVoted && poll.status === 'active' && (
                             <div className="px-6 pb-6">
-                                <p className="text-sm text-slate-400 text-center">
+                                <p className="text-sm text-foreground/60 text-center">
                                     Select an option to cast your vote
                                 </p>
                             </div>

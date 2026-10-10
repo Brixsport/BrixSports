@@ -142,12 +142,34 @@ export async function GET(
         // Note: Player time tracking and eye points features not yet implemented in schema
 
         // Parse lineups if available
-        let lineups = null;
+        let lineups: any = null;
         if (match.match.lineups) {
             try {
                 lineups = JSON.parse(match.match.lineups);
             } catch (e) {
                 console.error('Error parsing lineups:', e);
+            }
+        }
+
+        // BACKLOG-323: this route had no auth check at all, unlike its sibling
+        // GET /api/matches/[id]/lineup (which already gates drafts correctly) --
+        // an unauthenticated viewer could read an unpublished draft lineup here,
+        // plus publishedByName/unlockedByName (both can be an admin's email --
+        // publish/route.ts and lineup/unlock/route.ts both fall back to
+        // authUser.name || authUser.email) on any published one. Mirror the
+        // sibling route's gate.
+        if (lineups && typeof lineups === 'object') {
+            const authUser = await getAuthUser(request).catch(() => null);
+            const canViewDraftsAndAuthorship = authUser?.role === 'admin' || authUser?.role === 'logger';
+            if (!canViewDraftsAndAuthorship) {
+                lineups = Object.fromEntries(
+                    Object.entries(lineups)
+                        .filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
+                        .map(([side, teamLineup]) => {
+                            const { publishedBy, publishedByName, publishedByRole, unlockedBy, unlockedByName, ...rest } = teamLineup as any;
+                            return [side, rest];
+                        })
+                );
             }
         }
 
@@ -696,7 +718,13 @@ export async function PATCH(
                 updateData.extraTime = null;
             }
         }
-        if (body.loggerId !== undefined) updateData.loggerId = body.loggerId;
+        // BACKLOG-398 medium: was writable by any assigned logger, unlike the
+        // neighboring homeScore/awayScore/approvalStatus fields on this same
+        // route which are correctly admin-gated -- not a privilege-escalation
+        // path (real logging authorization runs through matchLoggerAssignments,
+        // untouched by this field) but a silent data-integrity gap on an
+        // admin-attribution field.
+        if (body.loggerId !== undefined && authUser.role === 'admin') updateData.loggerId = body.loggerId;
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
         if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
 
@@ -714,9 +742,12 @@ export async function PATCH(
         if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
         // Approval fields are admin-only — loggers must not write these
         if (authUser.role === 'admin') {
-            if (body.approvalStatus) updateData.approvalStatus = body.approvalStatus;
+            if (body.approvalStatus) {
+                updateData.approvalStatus = body.approvalStatus;
+                // BACKLOG-397: audit field must always come from the verified session, never the client.
+                updateData.approvedBy = authUser.id;
+            }
             if (body.managerNotes !== undefined) updateData.managerNotes = body.managerNotes;
-            if (body.approvedBy) updateData.approvedBy = body.approvedBy;
             if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
         }
 

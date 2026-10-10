@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
         const competitionId = searchParams.get('competitionId');
         const sport = searchParams.get('sport');
         const limit = parseInt(searchParams.get('limit') || '10');
-        const { or } = await import('drizzle-orm');
 
         if (type === 'powerRanking') {
             const ratingConditions = [];
@@ -24,8 +23,13 @@ export async function GET(request: NextRequest) {
                 ratingConditions.push(eq(matches.sport, sport));
             }
 
+            // competitionId is authoritative when present -- do NOT OR it with a
+            // name fallback (BACKLOG-335: two real competitions can share an
+            // exact name, e.g. two seasons both literally named "BUSA LEAGUE
+            // FOOTBALL", and OR'ing in a name match even when a real id is known
+            // silently pulls in the other competition's data too).
             if (competitionId) {
-                ratingConditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+                ratingConditions.push(eq(matches.competitionId, competitionId));
             } else if (competition) {
                 ratingConditions.push(eq(matches.competition, competition));
             }
@@ -136,8 +140,9 @@ export async function GET(request: NextRequest) {
             }
 
             const basketballConditions = [];
+            // competitionId is authoritative when present -- see BACKLOG-335.
             if (competitionId) {
-                basketballConditions.push(or(eq(basketballPlayerStats.competitionId, competitionId), eq(basketballPlayerStats.competition, competition || '')));
+                basketballConditions.push(eq(basketballPlayerStats.competitionId, competitionId));
             } else if (competition) {
                 basketballConditions.push(eq(basketballPlayerStats.competition, competition));
             }
@@ -214,8 +219,9 @@ export async function GET(request: NextRequest) {
 
         // Existing Football/Generic Logic
         const conditions = [];
+        // competitionId is authoritative when present -- see BACKLOG-335.
         if (competitionId) {
-            conditions.push(or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || '')));
+            conditions.push(eq(playerStats.competitionId, competitionId));
         } else if (competition) {
             conditions.push(eq(playerStats.competition, competition));
         }

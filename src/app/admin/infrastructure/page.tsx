@@ -260,8 +260,12 @@ export default function InfrastructurePage() {
     return (
         <div className="min-h-screen bg-[#050505] text-white p-6 lg:p-12">
             <div className="max-w-7xl mx-auto space-y-8">
-                {/* Header */}
-                <div className="flex items-center justify-between">
+                {/* Header. BACKLOG-345: was `flex items-center justify-between` with no wrap --
+                    the title block and the WebSocket-status pill + Refresh button competed for
+                    the same row and pushed scrollWidth to 412px against a 375px viewport. Stack
+                    on mobile, restore the side-by-side row from sm: up (same card-header
+                    convention used elsewhere, e.g. admin/competitions, admin/teams/[id]). */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <h1 className="font-display text-4xl tracking-tight italic uppercase leading-none mb-2">
                             Infrastructure

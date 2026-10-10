@@ -6,11 +6,44 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { competitions, matches, standings } from '@/db/schema';
+import { competitions, matches, standings, organizations } from '@/db/schema';
 import { sql, eq, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+
+// BACKLOG-333: the admin create-competition flow never set an org at all, so every
+// competition created through the real admin UI silently dropped out of
+// buildCompetitionGroups()'s org-scoped grouping below (BACKLOG-291) -- if a
+// same-named competition already existed under a real org, the new null-org one
+// showed up as an orphaned duplicate in the public directory.
+// BrixSports is single-tenant today: a live DB read (2026-09-08) confirmed every
+// real org-linked competition (3/3, 100%) is hosted by Bells University of
+// Technology and governed by its BUSA student association -- so default new
+// competitions to that org instead of leaving the field null. This is a deliberate,
+// narrow default, not the real fix -- see TODO below.
+// TODO(BACKLOG-333 follow-up): once a second university is actually onboarded,
+// this default becomes wrong for that university's admins. The real fix is an org
+// selector in admin/competitions/page.tsx (populated from the existing
+// GET /api/admin/organizations), with these two fields wired through the form the
+// same way `sport`/`format` already are. Don't build that selector speculatively
+// before there's a second real tenant to choose between -- it has no way to be
+// tested meaningfully until then.
+// Double `org_` prefix on this one is intentional, not a typo -- confirmed against a
+// live DB read (2026-09-08 BACKLOG.md evidence block) that this is the real row id.
+const DEFAULT_HOST_ORGANIZATION_ID = 'org_bells-university-of-technology';
+const DEFAULT_GOVERNING_ORGANIZATION_ID = 'org_org_bells-university-busa';
+
+// Bundled review finding (2026-09-09): the defaults above are known-good, but an
+// explicit override from the caller was accepted with no existence check -- a bad
+// admin input (or a future selector-UI bug) could silently write a nonexistent org
+// id with no error. Only runs when the caller actually supplies a value; the
+// defaults themselves never hit this path.
+async function validateOrgId(id: string | undefined, label: string): Promise<string | null> {
+    if (!id) return null;
+    const org = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, id)).limit(1);
+    return org.length ? null : `Invalid ${label}: organization not found`;
+}
 
 // Groups season-instances of the same recurring league together (e.g. "BUSA LEAGUE
 // FOOTBALL" 2025/2026 and 2026/2027 as one entity with a season history), rather
@@ -19,20 +52,44 @@ import { checkRateLimit } from '@/lib/rate-limit';
 // leagues that happen to share a display name (or differ only in casing) never
 // merge -- see BACKLOG.md's standings/comp-stats audit for the full context this
 // came out of.
-function getCompetitionGroupKey(comp: { sport: string | null; name: string; hostOrganizationId: string | null }): string {
-    return `${comp.sport ?? 'multi'}::${comp.name.trim().toLowerCase()}::${comp.hostOrganizationId ?? 'none'}`;
-}
-
-// "Most recent season" is ordered by startDate/createdAt (real timestamps) rather
-// than the free-text `season` string ("2024" vs "2025/2026" vs "2026/2027" don't
-// all sort correctly the same way) -- same reasoning as the player-stats season
-// fallback fix elsewhere this session.
+//
+// Real-world gap found live (session 2026-09-05): the admin create-competition
+// API has never accepted/set hostOrganizationId at all, so every competition
+// created through the normal admin flow gets a null one -- a null-org season
+// of an otherwise-identical league silently failed to merge with its real-org
+// sibling, showing as a duplicate row in the public directory. Fixed with a
+// two-pass grouping: bucket by sport+name first, then only split further by
+// hostOrganizationId when the bucket actually contains 2+ *distinct real*
+// org ids (a genuine same-name-different-university collision) -- with 0 or 1
+// distinct real org id in the bucket, null-org rows merge into it rather than
+// forming their own phantom group. This does not paper over a real ambiguity:
+// if 2+ different real orgs already share the name, null-org rows still don't
+// get guessed into any of them, matching today's conservative behavior.
 function buildCompetitionGroups(comps: any[]) {
-    const groups = new Map<string, any[]>();
+    const bySportName = new Map<string, any[]>();
     for (const c of comps) {
-        const key = getCompetitionGroupKey(c);
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(c);
+        const coarseKey = `${c.sport ?? 'multi'}::${c.name.trim().toLowerCase()}`;
+        if (!bySportName.has(coarseKey)) bySportName.set(coarseKey, []);
+        bySportName.get(coarseKey)!.push(c);
+    }
+
+    const groups = new Map<string, any[]>();
+    for (const [coarseKey, bucket] of bySportName) {
+        const distinctRealOrgIds = Array.from(new Set(bucket.map(c => c.hostOrganizationId).filter(Boolean)));
+        if (distinctRealOrgIds.length <= 1) {
+            // 0 or 1 real org id in this sport+name bucket -- unambiguous, one group.
+            const key = `${coarseKey}::${distinctRealOrgIds[0] ?? 'none'}`;
+            groups.set(key, bucket);
+        } else {
+            // 2+ distinct real orgs share this sport+name -- genuine collision.
+            // Keep them separated by their own org id; null-org rows get their
+            // own bucket rather than being guessed into one of several orgs.
+            for (const c of bucket) {
+                const key = `${coarseKey}::${c.hostOrganizationId ?? 'none'}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key)!.push(c);
+            }
+        }
     }
 
     return Array.from(groups.entries()).map(([groupKey, seasons]) => {
@@ -74,18 +131,31 @@ export async function GET(request: NextRequest) {
         const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
-        // Get competitions from database
+        // BACKLOG-395: previously hardcoded `.limit(500)` regardless of the
+        // route's own accepted limit/offset params, then filtered by sport in
+        // memory -- rows beyond 500 were silently invisible no matter what
+        // page was requested, a real truncation bug (same class as historic
+        // BUG-014), not just a missing-limit style violation.
+        // Fix, sport-filtered case (the common path): push the sport/
+        // isMultiSport condition into the DB WHERE clause so the fetch is
+        // actually bounded by what's needed, not an arbitrary top-500 slice
+        // of the whole table.
+        // Season is intentionally NOT pushed into this query -- see
+        // buildCompetitionGroups' own comment: allSeasonsGroups must see every
+        // season of a sport-filtered competition, not just the season the
+        // caller is currently viewing, so a season-scoped response can still
+        // tell the caller what other seasons exist.
+        // Remaining known gap: the no-sport-filter case still fetches a single
+        // capped page (now 2000, was 500) rather than truly paginating at the
+        // DB level -- full correctness there needs grouping to happen
+        // DB-side, a bigger change than this pass's scope. Flagged, not silently left.
         let query = db.select().from(competitions);
-
-        const allCompetitions = await query.limit(500);
-
-        // Filter by sport if provided
-        let filteredCompetitions = allCompetitions;
         if (sport) {
-            filteredCompetitions = filteredCompetitions.filter(c =>
-                c.isMultiSport || c.sport === sport
-            );
+            query = query.where(or(eq(competitions.sport, sport), eq(competitions.isMultiSport, true))) as typeof query;
         }
+
+        const safetyCap = Math.min(Math.max(1, parseInt(searchParams.get('_maxFetch') || '2000', 10) || 2000), 5000);
+        let filteredCompetitions = await query.limit(safetyCap);
         // Built from the sport-filtered set BEFORE the season filter narrows
         // `filteredCompetitions` below, so a season-scoped response still tells
         // the caller what other seasons of the same competition exist (BACKLOG-229)
@@ -101,14 +171,17 @@ export async function GET(request: NextRequest) {
         if (includeStats) {
             const competitionsWithStats = await Promise.all(
                 filteredCompetitions.map(async (comp) => {
-                    // Get match count - prioritize ID, fallback to name for safety during transition
+                    // competitionId is authoritative when present -- do NOT OR it
+                    // with a name fallback (BACKLOG-335: two real competitions
+                    // can share an exact name, e.g. two seasons both literally
+                    // named "BUSA LEAGUE FOOTBALL", and OR'ing in a name match
+                    // even when a real id is known silently pulls in the other
+                    // competition's counts too). `comp.id` is always present for
+                    // a real DB row, so the name-only branch never actually ran.
                     const matchCount = await db
                         .select({ count: sql<number>`count(*)` })
                         .from(matches)
-                        .where(
-                            comp.id ? or(eq(matches.competitionId, comp.id), eq(matches.competition, comp.name))
-                                : eq(matches.competition, comp.name)
-                        );
+                        .where(eq(matches.competitionId, comp.id));
 
                     // Get unique teams count
                     const allMatches = await db
@@ -117,10 +190,7 @@ export async function GET(request: NextRequest) {
                             awayTeamId: matches.awayTeamId,
                         })
                         .from(matches)
-                        .where(
-                            comp.id ? or(eq(matches.competitionId, comp.id), eq(matches.competition, comp.name))
-                                : eq(matches.competition, comp.name)
-                        );
+                        .where(eq(matches.competitionId, comp.id));
 
                     const teamIds = new Set<string>();
                     allMatches.forEach(m => {
@@ -128,14 +198,11 @@ export async function GET(request: NextRequest) {
                         teamIds.add(m.awayTeamId);
                     });
 
-                    // Get standings count
+                    // Get standings count -- competitionId-only, see BACKLOG-335.
                     const standingsCount = await db
                         .select({ count: sql<number>`count(*)` })
                         .from(standings)
-                        .where(
-                            comp.id ? or(eq(standings.competitionId, comp.id), eq(standings.competition, comp.name))
-                                : eq(standings.competition, comp.name)
-                        );
+                        .where(eq(standings.competitionId, comp.id));
 
                     return {
                         ...comp,
@@ -198,7 +265,8 @@ export async function POST(request: NextRequest) {
         const {
             name, sport, format, structure, season, status,
             numberOfTeams, numberOfGroups, teamsPerGroup,
-            level, scope, rules, description, isMultiSport, logo
+            level, scope, rules, description, isMultiSport, logo,
+            hostOrganizationId, governingOrganizationId,
         } = body;
 
         if (!name || (!sport && !isMultiSport) || !format || !season) {
@@ -207,6 +275,11 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
+
+        const hostOrgError = await validateOrgId(hostOrganizationId, 'hostOrganizationId');
+        if (hostOrgError) return NextResponse.json({ error: hostOrgError }, { status: 422 });
+        const governingOrgError = await validateOrgId(governingOrganizationId, 'governingOrganizationId');
+        if (governingOrgError) return NextResponse.json({ error: governingOrgError }, { status: 422 });
 
         const newCompetition = {
             id: nanoid(),
@@ -225,6 +298,10 @@ export async function POST(request: NextRequest) {
             rules: rules ? JSON.stringify(rules) : null,
             description: description || null,
             logo: logo || null,
+            // BACKLOG-333: accept an explicit org from the caller (forward-compatible
+            // with a future selector UI) but default to the single real tenant today.
+            hostOrganizationId: hostOrganizationId || DEFAULT_HOST_ORGANIZATION_ID,
+            governingOrganizationId: governingOrganizationId || DEFAULT_GOVERNING_ORGANIZATION_ID,
             createdAt: new Date(),
             updatedAt: new Date(),
         };

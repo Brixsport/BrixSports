@@ -7,6 +7,7 @@ import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from '
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import Link from 'next/link';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
 
 interface SearchResults {
     teams: any[];
@@ -17,7 +18,7 @@ interface SearchResults {
 
 export default function SearchPage() {
     return (
-        <div className="min-h-screen bg-[#050505] text-white pb-20">
+        <div className="min-h-screen bg-background text-foreground pb-20">
             <React.Suspense fallback={
                 <div className="flex items-center justify-center py-20">
                     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -35,16 +36,33 @@ function SearchContent() {
     const query = searchParams.get('q') || '';
 
     const [results, setResults] = useState<SearchResults | null>(null);
-    const [loading, setLoading] = useState(true);
+    // BACKLOG-401 #5: this page had zero <input> elements and no query meant
+    // `loading` (initialized true) was never set false, since performSearch()
+    // only ever runs when `query` is already non-empty -- a permanent
+    // "Searching..." spinner for anyone reaching bare /search (e.g. the
+    // not-found.tsx Search button links here with no ?q=, or a plain
+    // bookmark/share of the route). Starts false now; the effect below only
+    // flips it true right before an actual search runs.
+    const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'teams' | 'players' | 'matches' | 'competitions'>('all');
     const [selectedSport, setSelectedSport] = useState<string | null>(null);
     const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
+    const [searchInput, setSearchInput] = useState(query);
 
     useEffect(() => {
+        setSearchInput(query);
         if (query) {
             performSearch();
         }
     }, [query, activeTab, selectedSport]);
+
+    const handleSearchSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const trimmed = searchInput.trim();
+        if (trimmed) {
+            router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+        }
+    };
 
     const performSearch = async () => {
         setLoading(true);
@@ -82,91 +100,74 @@ function SearchContent() {
         return results?.[category]?.length || 0;
     };
 
+    // BACKLOG-390 #3: was a row of pill buttons visually identical to the
+    // sport-filter row below it, reading as one confusing duplicate. Now the
+    // same UnderlineTabs bar used on match/team/player detail pages -- a
+    // distinct style from the sport pills, and scrolls on overflow for free.
+    const categoryTabs: UnderlineTab[] = [
+        { id: 'all', label: 'All', count: getTotalResults() },
+        { id: 'teams', label: 'Teams', icon: <Users className="w-3.5 h-3.5" />, count: getCategoryCount('teams') },
+        { id: 'players', label: 'Players', icon: <TrendingUp className="w-3.5 h-3.5" />, count: getCategoryCount('players') },
+        { id: 'matches', label: 'Matches', icon: <Calendar className="w-3.5 h-3.5" />, count: getCategoryCount('matches') },
+        { id: 'competitions', label: 'Competitions', icon: <Trophy className="w-3.5 h-3.5" />, count: getCategoryCount('competitions') },
+    ];
+
     return (
         <>
             {/* Header */}
-            <div className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10">
+            <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border">
                 <div className="max-w-7xl mx-auto px-4 py-6">
                     <div className="flex items-center gap-4 mb-4">
                         <button
                             onClick={() => router.back()}
-                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                            className="p-2 hover:bg-muted rounded-lg transition-colors"
                         >
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div>
                             <h1 className="text-2xl font-bold">Search Results</h1>
-                            <p className="text-white/60">
-                                {loading ? 'Searching...' : `${getTotalResults()} results for "${query}"`}
+                            <p className="text-foreground/60">
+                                {loading ? 'Searching...' : query ? `${getTotalResults()} results for "${query}"` : 'Search teams, players, matches, and competitions'}
                             </p>
                         </div>
                     </div>
 
-                    {/* Category Tabs */}
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        <button
-                            onClick={() => setActiveTab('all')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'all'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                }`}
-                        >
-                            All ({getTotalResults()})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('teams')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'teams'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                }`}
-                        >
-                            <Users className="w-4 h-4 inline mr-2" />
-                            Teams ({getCategoryCount('teams')})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('players')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'players'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                }`}
-                        >
-                            <TrendingUp className="w-4 h-4 inline mr-2" />
-                            Players ({getCategoryCount('players')})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('matches')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'matches'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                }`}
-                        >
-                            <Calendar className="w-4 h-4 inline mr-2" />
-                            Matches ({getCategoryCount('matches')})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('competitions')}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'competitions'
-                                ? 'bg-primary text-white'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                }`}
-                        >
-                            <Trophy className="w-4 h-4 inline mr-2" />
-                            Competitions ({getCategoryCount('competitions')})
-                        </button>
-                    </div>
+                    {/* BACKLOG-401 #5: this page previously had zero <input> elements at
+                        all -- it only ever worked as a landing target for a query already
+                        built into the URL (e.g. the header's inline overlay), with no way
+                        for a user who reached the bare route to actually search from here. */}
+                    <form onSubmit={handleSearchSubmit} className="relative mb-4">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
+                        <input
+                            type="search"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            placeholder="Search teams, players, matches, competitions..."
+                            aria-label="Search"
+                            className="w-full bg-muted border border-border rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-primary/50 transition-all"
+                        />
+                    </form>
 
-                    {/* Sport Filter */}
+                    {/* Category Tabs */}
+                    <UnderlineTabs
+                        tabs={categoryTabs}
+                        activeId={activeTab}
+                        onChange={(id) => setActiveTab(id as typeof activeTab)}
+                        layoutId="searchCategoryTabs"
+                    />
+
+                    {/* Sport Filter -- matches the homepage's status-filter pill style, no emojis */}
                     <div className="flex gap-2 mt-3">
                         {['Football', 'Basketball', 'Track'].map(sport => (
                             <button
                                 key={sport}
                                 onClick={() => setSelectedSport(selectedSport === sport ? null : sport)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedSport === sport
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                className={`px-4 min-h-11 flex items-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${selectedSport === sport
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-foreground/60 hover:bg-muted/80'
                                     }`}
                             >
-                                {sport === 'Football' ? '⚽' : sport === 'Basketball' ? '🏀' : '🏃'} {sport}
+                                {sport}
                             </button>
                         ))}
                     </div>
@@ -179,11 +180,17 @@ function SearchContent() {
                     <div className="flex items-center justify-center py-20">
                         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
                     </div>
+                ) : !query ? (
+                    <div className="text-center py-20">
+                        <Search className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground/60 mb-2">Search BrixSports</h3>
+                        <p className="text-foreground/40">Type above to find teams, players, matches, and competitions</p>
+                    </div>
                 ) : !results || getTotalResults() === 0 ? (
                     <div className="text-center py-20">
-                        <Search className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                        <h3 className="text-xl font-semibold text-white/60 mb-2">No results found</h3>
-                        <p className="text-white/40">Try a different search term or adjust your filters</p>
+                        <Search className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground/60 mb-2">No results found</h3>
+                        <p className="text-foreground/40">Try a different search term or adjust your filters</p>
                     </div>
                 ) : (
                     <div className="space-y-8">
@@ -203,7 +210,7 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <Link href={`/teams/${team.id}`}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center gap-3">
                                                         <div
                                                             className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -213,7 +220,7 @@ function SearchContent() {
                                                         </div>
                                                         <div>
                                                             <div className="font-bold text-lg">{team.name}</div>
-                                                            <div className="text-sm text-white/60">{team.sport}</div>
+                                                            <div className="text-sm text-foreground/60">{team.sport}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -240,14 +247,14 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <div onClick={() => setSelectedPlayer(player)}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                                                             <span className="text-xl font-bold">#{player.number}</span>
                                                         </div>
                                                         <div className="flex-1">
                                                             <div className="font-bold text-lg">{player.name}</div>
-                                                            <div className="text-sm text-white/60">
+                                                            <div className="text-sm text-foreground/60">
                                                                 {player.position} • {player.team?.name}
                                                             </div>
                                                         </div>
@@ -256,7 +263,7 @@ function SearchContent() {
                                                                 <div className="text-2xl font-bold text-primary">
                                                                     {player.rating.toFixed(1)}
                                                                 </div>
-                                                                <div className="text-xs text-white/60">Rating</div>
+                                                                <div className="text-xs text-foreground/60">Rating</div>
                                                             </div>
                                                         )}
                                                     </div>
@@ -284,14 +291,14 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <Link href={`/competitions/${comp.id}`}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center gap-3">
                                                         {comp.logo && (
                                                             <img src={comp.logo} alt={comp.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
                                                         )}
                                                         <div>
                                                             <div className="font-bold text-lg">{comp.name}</div>
-                                                            <div className="text-sm text-white/60">
+                                                            <div className="text-sm text-foreground/60">
                                                                 {comp.sport} • {comp.season}
                                                             </div>
                                                         </div>
@@ -320,17 +327,17 @@ function SearchContent() {
                                             transition={{ delay: index * 0.05 }}
                                         >
                                             <Link href={`/matches/${match.id}`}>
-                                                <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
+                                                <div className="p-4 bg-muted hover:bg-muted/80 rounded-xl border border-border hover:border-border transition-all cursor-pointer">
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-sm text-white/60">{match.competition?.name}</span>
-                                                        <span className="text-xs text-white/40">
+                                                        <span className="text-sm text-foreground/60">{match.competition?.name}</span>
+                                                        <span className="text-xs text-foreground/40">
                                                             {new Date(match.startTime).toLocaleDateString()}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-bold">{match.homeTeam?.shortName}</span>
-                                                            <span className="text-white/40">vs</span>
+                                                            <span className="text-foreground/40">vs</span>
                                                             <span className="font-bold">{match.awayTeam?.shortName}</span>
                                                         </div>
                                                         {match.status !== 'UPCOMING' && (

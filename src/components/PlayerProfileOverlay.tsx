@@ -65,28 +65,28 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[120] bg-black/98 backdrop-blur-2xl overflow-y-auto"
+      className="fixed inset-0 z-[120] bg-background backdrop-blur-2xl overflow-y-auto"
     >
       <div className="min-h-screen flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-xl border-b border-white/10 p-4 flex items-center justify-between">
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+        <div className="sticky top-0 z-10 bg-card/80 backdrop-blur-xl border-b border-border p-4 flex items-center justify-between">
+          <button onClick={onClose} className="p-2 hover:bg-muted/70 rounded-full transition-colors">
             <X size={24} />
           </button>
           <div className="flex flex-col items-center">
             <h2 className="text-xl font-display italic uppercase tracking-tight">{player.name}</h2>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-black tracking-widest text-primary uppercase">{team?.shortName || 'BRX'}</span>
-              <span className="text-[10px] text-white/20">•</span>
-              <span className="text-[10px] font-black tracking-widest text-white/40 uppercase">{player.position}</span>
-              <span className="text-[10px] text-white/20">•</span>
-              <span className="text-[10px] font-black tracking-widest text-white/40 uppercase">{playerSport === 'Basketball' ? '🏀' : '⚽'} {playerSport}</span>
+              <span className="text-[10px] text-foreground/20">•</span>
+              <span className="text-[10px] font-black tracking-widest text-foreground/40 uppercase">{player.position}</span>
+              <span className="text-[10px] text-foreground/20">•</span>
+              <span className="text-[10px] font-black tracking-widest text-foreground/40 uppercase">{playerSport === 'Basketball' ? '🏀' : '⚽'} {playerSport}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <a
               href={`/players/compare?player1=${player.id}&sport=${playerSport}`}
-              className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              className="p-2 rounded-full hover:bg-muted/70 text-foreground/60 hover:text-foreground transition-colors"
               title="Compare Player"
             >
               <GitCompare size={20} />
@@ -105,7 +105,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                   alert('Profile link copied to clipboard!');
                 }
               }}
-              className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              className="p-2 rounded-full hover:bg-muted/70 text-foreground/60 hover:text-foreground transition-colors"
               title="Share Profile"
             >
               <Share2 size={20} />
@@ -120,7 +120,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                   type: 'match'
                 });
               }}
-              className={`p-2 rounded-full transition-colors ${isFav ? 'bg-primary text-black' : 'hover:bg-white/10 text-primary'}`}
+              className={`p-2 rounded-full transition-colors ${isFav ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/70 text-primary'}`}
             >
               <Heart size={20} fill={isFav ? "currentColor" : "none"} />
             </button>
@@ -129,14 +129,14 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
 
         <div className="max-w-4xl mx-auto w-full px-4 py-12 space-y-12 pb-32">
           {/* Main Info Card */}
-          <section className="bg-gradient-to-br from-white/5 to-transparent rounded-[48px] border border-white/10 p-8 md:p-12">
+          <section className="bg-gradient-to-br from-muted to-transparent rounded-[48px] border border-border p-8 md:p-12">
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="relative">
-                <div className="w-48 h-48 bg-white/5 rounded-[40px] flex items-center justify-center text-7xl font-display italic border border-white/10 relative overflow-hidden group">
+                <div className="w-48 h-48 bg-muted rounded-[40px] flex items-center justify-center text-7xl font-display italic border border-border relative overflow-hidden group">
                   {player.number}
                   <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
-                <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-black font-black text-xl border-4 border-[#050505]">
+                <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-primary-foreground font-black text-xl border-4 border-background">
                   {stats.rating != null ? stats.rating.toFixed(1) : '-'}
                 </div>
               </div>
@@ -144,7 +144,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
               <div className="flex-1 space-y-8 text-center md:text-left">
                 <div>
                   <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                    <span className="px-3 py-1 bg-white/5 rounded-full text-[10px] font-black tracking-widest uppercase border border-white/10">
+                    <span className="px-3 py-1 bg-muted rounded-full text-[10px] font-black tracking-widest uppercase border border-border">
                       {playerSport} Star
                     </span>
                     {player.eyePoints > 50 && (
@@ -156,7 +156,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                   <h1 className="text-5xl md:text-7xl font-display italic uppercase tracking-tighter leading-none mb-4">
                     {player.name}
                   </h1>
-                  <p className="text-white/40 font-medium text-lg italic">{team?.name || 'Brix University'}</p>
+                  <p className="text-foreground/40 font-medium text-lg italic">{team?.name || 'Brix University'}</p>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -177,25 +177,25 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                 <TrendingUp size={18} className="text-primary" />
                 <h3 className="font-display italic uppercase tracking-tighter text-2xl">Attributes</h3>
               </div>
-              <div className="bg-white/5 rounded-[32px] p-8 border border-white/5 space-y-6">
+              <div className="bg-muted rounded-[32px] p-8 border border-border/50 space-y-6">
                 {player.attributes && typeof player.attributes === 'object' ? (
                   Object.entries(player.attributes).map(([attr, val]) => (
                     <div key={attr} className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black tracking-widest uppercase text-white/40">
+                      <div className="flex justify-between text-[10px] font-black tracking-widest uppercase text-foreground/40">
                         <span>{attr}</span>
-                        <span className="text-white">{val as number}</span>
+                        <span className="text-foreground">{val as number}</span>
                       </div>
-                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-border rounded-full overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${val}%` }}
-                          className={`h-full ${(val as number) >= 85 ? 'bg-primary' : (val as number) >= 75 ? 'bg-secondary' : 'bg-white/40'}`}
+                          className={`h-full ${(val as number) >= 85 ? 'bg-primary' : (val as number) >= 75 ? 'bg-secondary' : 'bg-muted-foreground'}`}
                         />
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-10 text-white/20 uppercase tracking-widest text-[10px] font-black">
+                  <div className="text-center py-10 text-foreground/20 uppercase tracking-widest text-[10px] font-black">
                     No attribute data available
                   </div>
                 )}
@@ -208,9 +208,9 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                 <Activity size={18} className="text-primary" />
                 <h3 className="font-display italic uppercase tracking-tighter text-2xl">Recent Form</h3>
               </div>
-              <div className="bg-white/5 rounded-[32px] p-8 border border-white/5 h-full flex flex-col justify-center gap-4">
+              <div className="bg-muted rounded-[32px] p-8 border border-border/50 h-full flex flex-col justify-center gap-4">
                 {loading ? (
-                  <div className="text-center py-10 text-white/40">Loading...</div>
+                  <div className="text-center py-10 text-foreground/40">Loading...</div>
                 ) : recentMatches.length > 0 ? (
                   recentMatches.slice(0, 3).map((matchData: any, index: number) => {
                     const eventCount = matchData.events?.length || 0;
@@ -229,13 +229,13 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                     }
 
                     return (
-                      <div key={index} className={`flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 ${eventCount === 0 ? 'opacity-50' : ''}`}>
-                        <span className="text-[10px] font-black tracking-widest uppercase text-white/40">
+                      <div key={index} className={`flex items-center justify-between p-4 rounded-2xl border border-border/50 ${eventCount === 0 ? 'bg-muted/50' : 'bg-muted'}`}>
+                        <span className="text-[10px] font-black tracking-widest uppercase text-foreground/40">
                           vs {matchData.match?.homeTeamId === team?.id ? matchData.match?.awayTeam?.shortName : matchData.match?.homeTeam?.shortName || 'TBD'}
                         </span>
                         <div className="flex items-center gap-4">
                           <span className="text-xs font-bold italic">{eventCount > 0 ? eventSummary : '-'}</span>
-                          <span className={`px-2 py-1 rounded-lg font-black text-xs ${eventCount > 0 ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
+                          <span className={`px-2 py-1 rounded-lg font-black text-xs ${eventCount > 0 ? 'bg-primary/20 text-primary' : 'bg-muted text-foreground/40'}`}>
                             {matchData.rating != null ? matchData.rating.toFixed(1) : '-'}
                           </span>
                         </div>
@@ -243,7 +243,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                     );
                   })
                 ) : (
-                  <div className="text-center py-10 text-white/20 uppercase tracking-widest text-[10px] font-black">
+                  <div className="text-center py-10 text-foreground/20 uppercase tracking-widest text-[10px] font-black">
                     No recent matches
                   </div>
                 )}
@@ -252,7 +252,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
           </section>
 
           {/* Season Stats */}
-          <section className="bg-gradient-to-br from-white/5 to-transparent rounded-[48px] border border-white/10 p-8 md:p-12">
+          <section className="bg-gradient-to-br from-muted to-transparent rounded-[48px] border border-border p-8 md:p-12">
             <div className="flex items-center gap-2 mb-8">
               <Trophy size={18} className="text-primary" />
               <h3 className="font-display italic uppercase tracking-tighter text-2xl">Season Statistics</h3>
@@ -284,7 +284,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
 function InfoMeta({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-white/40">
+      <div className="flex items-center gap-1.5 text-foreground/40">
         {icon}
         <span className="text-[10px] font-black tracking-widest uppercase">{label}</span>
       </div>
@@ -303,9 +303,9 @@ function StatCard({ label, value, color }: { label: string; value: number | stri
   };
 
   return (
-    <div className="text-center p-6 bg-white/5 rounded-2xl border border-white/10">
+    <div className="text-center p-6 bg-muted rounded-2xl border border-border">
       <div className={`text-3xl font-bold ${colorClasses[color]}`}>{value}</div>
-      <div className="text-xs text-white/60 mt-2 uppercase tracking-wider font-bold">{label}</div>
+      <div className="text-xs text-foreground/60 mt-2 uppercase tracking-wider font-bold">{label}</div>
     </div>
   );
 }

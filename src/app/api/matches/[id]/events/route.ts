@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/db/schema';
-import { eq, asc, and, sql, gt, isNull } from 'drizzle-orm';
+import { eq, asc, and, sql, gt, isNull, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification } from '@/lib/socket';
@@ -158,40 +158,33 @@ export async function POST(
             );
         }
 
-        // BUG-196: duplicate-submission guard. Found live during session 48's football
-        // Tier 0 sweep -- two concurrent identical POSTs (a double-tap, or a client retry
-        // after a slow/lost ack) each created a genuine, separate match_events row and,
-        // for a scoring type, each incremented the score independently -- confirmed live,
-        // a real Goal double-submit inflated away_score by 2 instead of 1. Player-attributed
-        // events only (playerId required): a repeat of the identical (match, type, minute,
-        // player) within a short window is treated as the same real-world event and the
-        // original is returned instead of inserting a second row. Player-less event types
-        // (corner, offside, etc.) are intentionally excluded -- those can legitimately repeat
-        // with identical fields moments apart and a false-positive dedup there would silently
-        // drop a real event.
-        if (playerId) {
-            const dedupWindowStart = new Date(Date.now() - 10_000);
-            const [existingEvent] = await db
-                .select()
-                .from(matchEvents)
-                .where(
-                    and(
-                        eq(matchEvents.matchId, matchId),
-                        eq(matchEvents.type, type),
-                        eq(matchEvents.minute, minute),
-                        eq(matchEvents.playerId, playerId),
-                        gt(matchEvents.createdAt, dedupWindowStart)
-                    )
-                )
-                .limit(1);
-            if (existingEvent) {
-                return NextResponse.json({
-                    success: true,
-                    message: 'Duplicate submission ignored — event already recorded',
-                    event: existingEvent,
-                }, { status: 200 });
-            }
-        }
+        // BUG-196 / dual-logger live test (2026-09-10): duplicate-submission guard.
+        // Originally found live during session 48's football Tier 0 sweep -- two
+        // concurrent identical POSTs (a double-tap, or a client retry after a slow/
+        // lost ack) each created a genuine, separate match_events row and, for a
+        // scoring type, each incremented the score independently. Player-attributed
+        // events only (playerId required): a repeat of the identical (match, type,
+        // minute, player) within a short window is treated as the same real-world
+        // event and the original is returned instead of inserting a second row.
+        // Player-less event types (corner, offside, etc.) are intentionally excluded
+        // -- those can legitimately repeat with identical fields moments apart and a
+        // false-positive dedup there would silently drop a real event.
+        //
+        // This check originally ran as a standalone SELECT *before* the
+        // db.transaction() below that does the insert + score update -- which meant
+        // it only protected against a double-tap from the SAME request path, not two
+        // genuinely concurrent requests. Live-tested with two real logger accounts
+        // firing the identical goal via Promise.all (true concurrency, not
+        // sequential): both passed this check (neither had committed yet when the
+        // other's SELECT ran) and both inserted, inflating the score by 2 instead of
+        // 1 -- reproducing exactly BUG-196's original symptom, just from two loggers
+        // instead of one double-tap. Fix: the dedup check now runs *inside* the same
+        // transaction as the insert, the same pattern already proven for the
+        // logger-assignment race (assign-logger/route.ts's check-then-insert,
+        // BUG-008) -- the whole check+insert+score-update is now one atomic unit, so
+        // a second concurrent request's check can no longer run against a
+        // not-yet-committed state.
+        let dedupHit: typeof matchEvents.$inferSelect | undefined;
 
         // Create event
         const eventId = nanoid();
@@ -295,7 +288,69 @@ export async function POST(
         // reverts a different amount than an insert credited.
 
         await db.transaction(async (tx) => {
-            await tx.insert(matchEvents).values(newEvent);
+            if (playerId) {
+                // BACKLOG-433: the previous version of this guard ran the
+                // dedup SELECT and the INSERT as two separate statements
+                // inside this same db.transaction(), on the assumption that
+                // Turso's transaction gives the same read-blocks-on-
+                // uncommitted-write isolation a local SQLite file connection
+                // would. Live-tested 4x with two genuinely concurrent
+                // requests (Promise.all): 3 of 4 runs reproduced BUG-196's
+                // original symptom exactly -- both requests' SELECT ran
+                // before either had committed, both saw "no existing row",
+                // both inserted, score double-counted. Turso's remote/HTTP
+                // transaction protocol does not appear to serialize
+                // concurrent transactions' reads against each other's
+                // uncommitted writes the way a single-process SQLite file
+                // connection does.
+                //
+                // Fixed by collapsing the check and the insert into ONE
+                // atomic statement (INSERT ... SELECT ... WHERE NOT EXISTS).
+                // A single SQL statement is atomic at the SQLite engine
+                // level regardless of the higher-level transaction/isolation
+                // semantics for multi-statement transactions over HTTP --
+                // there is no window between "check" and "act" left for a
+                // second concurrent request to land in, because they are
+                // the same database operation. created_at is stored as unix
+                // seconds (confirmed directly against real rows in staging,
+                // not assumed) -- matches.$inferInsert's own timestamp mode
+                // for this column, replicated by hand here since a raw sql
+                // fragment used as a literal SELECT source has no access to
+                // Drizzle's column-level encode/decode mapping.
+                const dedupWindowStart = new Date(Date.now() - 10_000);
+                const result: any = await tx.run(sql`
+                    INSERT INTO match_events
+                        (id, match_id, type, minute, second, period, team_id, player_id, related_player_id, detail, is_eye_point, value, logger_id, logger_name, created_at)
+                    SELECT ${newEvent.id}, ${newEvent.matchId}, ${newEvent.type}, ${newEvent.minute}, ${newEvent.second}, ${newEvent.period}, ${newEvent.teamId}, ${newEvent.playerId}, ${newEvent.relatedPlayerId}, ${newEvent.detail}, ${newEvent.isEyePoint ? 1 : 0}, ${newEvent.value}, ${newEvent.loggerId}, ${newEvent.loggerName}, ${Math.floor(newEvent.createdAt.getTime() / 1000)}
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM match_events
+                        WHERE match_id = ${matchId} AND type = ${type} AND minute = ${minute} AND player_id = ${playerId} AND created_at > ${Math.floor(dedupWindowStart.getTime() / 1000)}
+                    )
+                `);
+
+                if ((result.rowsAffected ?? 0) === 0) {
+                    // Deduped -- fetch whatever matching row already exists to
+                    // return in the response (best-effort, same as before).
+                    const [existingEvent] = await tx
+                        .select()
+                        .from(matchEvents)
+                        .where(
+                            and(
+                                eq(matchEvents.matchId, matchId),
+                                eq(matchEvents.type, type),
+                                eq(matchEvents.minute, minute),
+                                eq(matchEvents.playerId, playerId),
+                                gt(matchEvents.createdAt, dedupWindowStart)
+                            )
+                        )
+                        .orderBy(desc(matchEvents.createdAt))
+                        .limit(1);
+                    dedupHit = existingEvent;
+                    return;
+                }
+            } else {
+                await tx.insert(matchEvents).values(newEvent);
+            }
 
             if (isScoringEvent && !isPenaltyShootout) {
                 const points = SCORING_POINT_VALUES[upperType] ?? 1;
@@ -339,6 +394,14 @@ export async function POST(
                 newShootoutAwayScore = updated.shootoutAwayScore ?? 0;
             }
         });
+
+        if (dedupHit) {
+            return NextResponse.json({
+                success: true,
+                message: 'Duplicate submission ignored — event already recorded',
+                event: dedupHit,
+            }, { status: 200 });
+        }
 
         // BUG-108/BUG-116: broadcast to live viewers now that the DB write has actually
         // succeeded — previously nothing here ever broadcast at all; the only push a
@@ -389,9 +452,9 @@ export async function POST(
                         minute,
                         homeScore: newHomeScore ?? match.homeScore ?? undefined,
                         awayScore: newAwayScore ?? match.awayScore ?? undefined,
-                        // Not used for targeting yet -- see MatchEventNotification's own
-                        // comment (roadmap item 4). Carried through now so a future
-                        // followed-player audience query doesn't need this call site again.
+                        // BACKLOG-342: now used for targeting -- match-notification-service.ts's
+                        // playerFavorites query joins on these to notify anyone who has
+                        // starred this specific player (userFavorites, favoriteType: 'player').
                         playerId: notifyPlayerId || undefined,
                         relatedPlayerId: relatedPlayerId || undefined,
                         competitionId: match.competitionId,

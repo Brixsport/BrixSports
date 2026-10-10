@@ -5,9 +5,13 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { PlayerAvatar } from '@/lib/utils/player-avatar';
+import { useDebounce } from '@/hooks/useDebounce';
+import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import {
     ArrowLeft, Edit, Save, X, Star, User,
-    Building2, Shield, Activity, AlertCircle, Loader2, ArrowRightLeft
+    Building2, Shield, Activity, AlertCircle, Loader2, ArrowRightLeft,
+    Link2, Search,
 } from 'lucide-react';
 
 interface Player {
@@ -33,6 +37,25 @@ interface Player {
     team?: { id: string; name: string; shortName: string; sport: string; logo?: string | null } | null;
     memberships?: Membership[];
     organizationAffiliations?: OrgAffiliation[];
+    relatedProfiles?: RelatedProfile[];
+}
+
+interface RelatedProfile {
+    id: string;
+    name: string;
+    position: string | null;
+    teamName: string | null;
+    teamId: string | null;
+    sport: string | null;
+}
+
+interface PlayerSearchResult {
+    id: string;
+    name: string;
+    position: string | null;
+    number: number | null;
+    image: string | null;
+    team?: { name: string } | null;
 }
 
 interface Membership {
@@ -97,6 +120,16 @@ export default function PlayerDetailPage() {
     const [editMode, setEditMode] = useState(false);
     const [form, setForm] = useState<Partial<Player>>({});
     const [errorMsg, setErrorMsg] = useState('');
+
+    // BACKLOG-120: link-profile modal state
+    const [linkModalOpen, setLinkModalOpen] = useState(false);
+    const [linkQuery, setLinkQuery] = useState('');
+    const debouncedLinkQuery = useDebounce(linkQuery, 400);
+    const [linkResults, setLinkResults] = useState<PlayerSearchResult[]>([]);
+    const [linkSearching, setLinkSearching] = useState(false);
+    const [linkSelected, setLinkSelected] = useState<PlayerSearchResult | null>(null);
+    const [linking, setLinking] = useState(false);
+    const [linkError, setLinkError] = useState('');
 
     useEffect(() => {
         if (!authLoading) {
@@ -179,6 +212,65 @@ export default function PlayerDetailPage() {
         setErrorMsg('');
     };
 
+    useEffect(() => {
+        if (!linkModalOpen) return;
+        const q = debouncedLinkQuery.trim();
+        if (!q) {
+            setLinkResults([]);
+            return;
+        }
+        const run = async () => {
+            setLinkSearching(true);
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&category=players&limit=10&excludeId=${playerId}`);
+                const data = await res.json();
+                setLinkResults(data.results?.players || []);
+            } catch {
+                setLinkResults([]);
+            } finally {
+                setLinkSearching(false);
+            }
+        };
+        run();
+    }, [debouncedLinkQuery, linkModalOpen, playerId]);
+
+    const openLinkModal = () => {
+        setLinkQuery('');
+        setLinkResults([]);
+        setLinkSelected(null);
+        setLinkError('');
+        setLinkModalOpen(true);
+    };
+
+    const closeLinkModal = () => {
+        setLinkModalOpen(false);
+        setLinkSelected(null);
+    };
+
+    const confirmLink = async () => {
+        if (!linkSelected) return;
+        setLinking(true);
+        setLinkError('');
+        try {
+            const res = await fetch('/api/admin/players/link-profiles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playerId1: playerId, playerId2: linkSelected.id }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setLinkError(data.error || 'Failed to link profiles');
+                return;
+            }
+            await fetchPlayer();
+            closeLinkModal();
+        } catch {
+            setLinkError('Network error');
+        } finally {
+            setLinking(false);
+        }
+    };
+
     const toggleEventGroup = (key: string) => {
         setExpandedEventGroups(prev => {
             const next = new Set(prev);
@@ -259,15 +351,24 @@ export default function PlayerDetailPage() {
         <div className="min-h-screen bg-black text-white">
             {/* Header */}
             <div className="sticky top-0 z-30 bg-black/80 backdrop-blur-xl border-b border-white/5 py-4 px-4 md:px-8">
-                <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <Link href="/admin/players" className="p-2 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group">
+                {/* BACKLOG (admin responsive audit): this sticky header's title block (back button
+                    + crest + name/badges) and action-button block never shrank, pushing scrollWidth
+                    133px past a 375px viewport. Since it's sticky, stacking it (the usual card-header
+                    fix elsewhere in this audit) would permanently eat vertical space while scrolling
+                    the profile -- shrunk in place instead: icon-only buttons + tighter gaps/padding
+                    below lg:, name/badges capped and least-essential university badge hidden below
+                    lg:, full desktop layout (icon+label buttons, untruncated name) restored from lg:
+                    (1024px+) -- NOT sm:/md:, since md: is exactly 768px, the tablet test width, and
+                    an earlier pass using sm:/md: here left the header still broken at 768px. */}
+                <div className="max-w-5xl mx-auto flex items-center justify-between gap-2 lg:gap-4">
+                    <div className="flex items-center gap-2 lg:gap-4 min-w-0">
+                        <Link href="/admin/players" className="p-2 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group shrink-0">
                             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
                         </Link>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 lg:gap-3 min-w-0">
                             <TeamLogo logo={player.image} name={player.name} size="lg" />
-                            <div>
-                                <h1 className="text-xl font-display font-black uppercase italic tracking-tighter leading-none">{player.name}</h1>
+                            <div className="min-w-0">
+                                <h1 className="text-base lg:text-xl font-display font-black uppercase italic tracking-tighter leading-none truncate max-w-[110px] lg:max-w-none">{player.name}</h1>
                                 {player.jerseyName && (
                                     <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mt-0.5">{player.jerseyName}</p>
                                 )}
@@ -278,7 +379,7 @@ export default function PlayerDetailPage() {
                                         </span>
                                     )}
                                     {player.university && (
-                                        <span className="px-1.5 py-0.5 bg-white/10 text-white/60 text-[9px] font-bold rounded uppercase">
+                                        <span className="hidden lg:inline-flex px-1.5 py-0.5 bg-white/10 text-white/60 text-[9px] font-bold rounded uppercase">
                                             {player.university}
                                         </span>
                                     )}
@@ -286,40 +387,51 @@ export default function PlayerDetailPage() {
                             </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 lg:gap-2 shrink-0">
                         {!editMode ? (
                             <>
                                 <Link
                                     href={`/admin/roster-transfers?playerId=${playerId}`}
-                                    className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    className="flex items-center gap-2 p-2 lg:px-4 lg:py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    title="Transfer"
                                 >
                                     <ArrowRightLeft size={14} strokeWidth={3} />
-                                    Transfer
+                                    <span className="hidden lg:inline">Transfer</span>
                                 </Link>
                                 <button
+                                    onClick={openLinkModal}
+                                    className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                >
+                                    <Link2 size={14} strokeWidth={3} />
+                                    Link Profile
+                                </button>
+                                <button
                                     onClick={() => setEditMode(true)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                    className="flex items-center gap-2 p-2 lg:px-4 lg:py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                    title="Edit Profile"
                                 >
                                     <Edit size={14} strokeWidth={3} />
-                                    Edit Profile
+                                    <span className="hidden lg:inline">Edit Profile</span>
                                 </button>
                             </>
                         ) : (
                             <>
                                 <button
                                     onClick={handleCancel}
-                                    className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    className="flex items-center gap-2 p-2 lg:px-4 lg:py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    title="Cancel"
                                 >
                                     <X size={14} />
-                                    Cancel
+                                    <span className="hidden lg:inline">Cancel</span>
                                 </button>
                                 <button
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100"
+                                    className="flex items-center gap-2 p-2 lg:px-4 lg:py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100"
+                                    title={saving ? 'Saving…' : 'Save'}
                                 >
                                     {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                                    {saving ? 'Saving…' : 'Save'}
+                                    <span className="hidden lg:inline">{saving ? 'Saving…' : 'Save'}</span>
                                 </button>
                             </>
                         )}
@@ -361,6 +473,37 @@ export default function PlayerDetailPage() {
                             {field('Market Value', 'marketValue', 'number')}
                         </div>
                     </div>
+                </div>
+
+                {/* Section C.5 — Linked Profiles (multi-sport identity, BACKLOG-120) */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-6 flex items-center gap-2">
+                        <Link2 size={14} /> Linked Profiles
+                    </h2>
+                    {!player.relatedProfiles || player.relatedProfiles.length === 0 ? (
+                        <p className="text-white/30 text-sm font-bold">No linked profiles. Use "Link Profile" above to connect this player to their profile in another sport.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {player.relatedProfiles.map((rp) => (
+                                <Link
+                                    key={rp.id}
+                                    href={`/admin/players/${rp.id}`}
+                                    className="flex items-center gap-3 p-3 bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 rounded-xl transition-colors"
+                                >
+                                    <PlayerAvatar image={null} name={rp.name} size="sm" />
+                                    <div className="flex-1 min-w-0">
+                                        <span className="font-bold text-sm">{rp.name}</span>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            {rp.sport && (
+                                                <span className="px-1.5 py-0.5 bg-white/10 text-white/50 text-[9px] font-bold rounded uppercase">{rp.sport}</span>
+                                            )}
+                                            {rp.teamName && <span className="text-white/40 text-xs">{rp.teamName}</span>}
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Section D — Team Memberships */}
@@ -500,6 +643,79 @@ export default function PlayerDetailPage() {
                     )}
                 </div>
             </div>
+
+            {/* Link Profile search modal (BACKLOG-120) */}
+            {linkModalOpen && !linkSelected && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={closeLinkModal} />
+                    <div className="relative bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-md w-full max-h-[80vh] flex flex-col overflow-hidden">
+                        <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold">Link Player Profile</h3>
+                                <p className="text-xs text-white/50 mt-1">Search for {player.name}'s profile in another sport.</p>
+                            </div>
+                            <button onClick={closeLinkModal} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-6 pb-3">
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    placeholder="Search players by name..."
+                                    value={linkQuery}
+                                    onChange={(e) => setLinkQuery(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-primary transition-all text-sm"
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6 overflow-y-auto flex-1">
+                            {linkSearching && (
+                                <p className="text-center text-white/40 text-sm py-6">Searching…</p>
+                            )}
+                            {!linkSearching && linkQuery.trim() && linkResults.length === 0 && (
+                                <p className="text-center text-white/40 text-sm py-6">No players found.</p>
+                            )}
+                            <div className="space-y-2">
+                                {linkResults.map((r) => (
+                                    <button
+                                        key={r.id}
+                                        onClick={() => setLinkSelected(r)}
+                                        className="w-full flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-left"
+                                    >
+                                        <PlayerAvatar image={r.image} name={r.name} size="sm" />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-bold text-sm truncate">{r.name}</div>
+                                            <div className="text-xs text-white/50 truncate">
+                                                {r.position}{r.team?.name ? ` • ${r.team.name}` : ''}
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Link Profile confirm step */}
+            <ConfirmDialog
+                isOpen={linkModalOpen && !!linkSelected}
+                onClose={() => setLinkSelected(null)}
+                onConfirm={confirmLink}
+                title="Link Player Profile"
+                message={linkSelected ? `Link ${player.name} and ${linkSelected.name} as the same multi-sport athlete? Their profiles will be cross-referenced on both pages.` : ''}
+                confirmText="Link Profiles"
+                variant="info"
+                isLoading={linking}
+            />
+            {linkError && linkModalOpen && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm font-bold">
+                    {linkError}
+                </div>
+            )}
         </div>
     );
 }

@@ -1,15 +1,25 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, playerTeamAffiliations } from '@/db/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        // BACKLOG-395: was unbounded (`.all()` with no `.limit()`) -- the exact
+        // anti-pattern CLAUDE.md bans. Same configurable/capped shape as
+        // BACKLOG-283 (admin/users, admin/organizations). Historic BUG-014
+        // ("teams beyond .limit(200) silently missing") is why the default here
+        // is generous (500) rather than a tight page size -- this route has no
+        // pagination UI consumer, so a low default would silently drop teams.
+        const { searchParams } = new URL(request.url);
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '500', 10) || 500), 1000);
+
         // Fetch all football teams
         const footballTeams = await db
             .select()
             .from(teams)
             .where(eq(teams.sport, 'Football'))
+            .limit(limit)
             .all();
 
         const teamIds = footballTeams.map(t => t.id);

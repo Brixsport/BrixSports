@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Calendar, Trophy, User, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { NewFeatureBadge } from '@/components/ui/NewFeatureBadge';
 
 interface NavItem {
     id: string;
@@ -49,7 +50,7 @@ export function BottomNav() {
     };
 
     // Hide bottom nav on specific routes
-    const hiddenRoutes = ['/login', '/signup', '/admin', '/reset-password', '/forgot-password', '/lineups', '/logger'];
+    const hiddenRoutes = ['/login', '/signup', '/admin', '/reset-password', '/forgot-password', '/lineup-builder', '/logger'];
     if (hiddenRoutes.some(route => pathname.startsWith(route))) {
         return null;
     }
@@ -61,8 +62,12 @@ export function BottomNav() {
 
             {/* Bottom Navigation - Mobile Only */}
             <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background border-t border-border backdrop-blur-xl">
-                <div className="max-w-lg mx-auto px-2 py-2">
-                    <div className="flex items-center justify-around">
+                <div className="max-w-lg mx-auto px-1 py-2">
+                    {/* BACKLOG-388: grid-cols-3, not justify-around + fixed
+                        min-w -- kept the grid layout from the (reverted) 6-item
+                        version rather than restoring justify-around, since a
+                        grid is the safer default if item count changes again. */}
+                    <div className="grid grid-cols-3">
                         {navItems.map((item) => {
                             const Icon = item.icon;
                             const active = isActive(item.path);
@@ -71,7 +76,7 @@ export function BottomNav() {
                                 <button
                                     key={item.id}
                                     onClick={() => handleNavClick(item)}
-                                    className="relative flex flex-col items-center justify-center gap-1 px-4 py-2 min-w-[70px] transition-all"
+                                    className="relative flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all"
                                 >
                                     {/* Active Indicator */}
                                     {active && (
@@ -126,16 +131,16 @@ export function BottomNav() {
                                             <motion.div
                                                 initial={{ scale: 0 }}
                                                 animate={{ scale: 1 }}
-                                                className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[8px] font-black px-1.5 py-0.5 rounded-full"
+                                                className="absolute -top-2 -right-2"
                                             >
-                                                NEW
+                                                <NewFeatureBadge />
                                             </motion.div>
                                         )}
                                     </div>
 
                                     {/* Label */}
                                     <span
-                                        className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${active
+                                        className={`text-[10px] font-bold uppercase tracking-wider truncate max-w-full transition-colors ${active
                                             ? 'text-primary'
                                             : 'text-foreground/40'
                                             }`}

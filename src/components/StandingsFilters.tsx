@@ -130,14 +130,14 @@ export function StandingsFilters({
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={`flex items-center gap-2 px-6 py-3 rounded-2xl transition-all text-sm font-black uppercase tracking-widest ${hasActiveFilters || isOpen
-                        ? 'bg-primary text-black'
-                        : 'bg-white/5 border border-white/10 text-white/60 hover:bg-white/10'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted border border-border text-foreground/60 hover:bg-muted/70'
                     }`}
             >
                 <Filter size={14} />
                 Filters
                 {hasActiveFilters && (
-                    <span className="w-2 h-2 bg-black rounded-full"></span>
+                    <span className="w-2 h-2 bg-primary-foreground rounded-full"></span>
                 )}
             </button>
 
@@ -159,30 +159,30 @@ export function StandingsFilters({
                             initial={{ opacity: 0, y: -20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -20 }}
-                            className="absolute top-full right-0 mt-2 w-96 bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                            className="absolute top-full right-0 mt-2 w-96 bg-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden"
                         >
                             {/* Header */}
-                            <div className="flex items-center justify-between p-4 border-b border-white/10">
+                            <div className="flex items-center justify-between p-4 border-b border-border">
                                 <h3 className="text-sm font-black uppercase tracking-widest">
                                     Filters & Views
                                 </h3>
                                 <button
                                     onClick={() => setIsOpen(false)}
-                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/70 transition-colors"
                                 >
                                     <X size={16} />
                                 </button>
                             </div>
 
                             {/* Tabs */}
-                            <div className="flex border-b border-white/10">
+                            <div className="flex border-b border-border">
                                 {(['views', 'filters', 'sort'] as const).map((tab) => (
                                     <button
                                         key={tab}
                                         onClick={() => setActiveTab(tab)}
                                         className={`flex-1 px-4 py-3 text-xs font-black uppercase tracking-widest transition-colors ${activeTab === tab
-                                                ? 'bg-white/10 text-primary border-b-2 border-primary'
-                                                : 'text-white/40 hover:text-white/60'
+                                                ? 'bg-muted text-primary border-b-2 border-primary'
+                                                : 'text-foreground/40 hover:text-foreground/60'
                                             }`}
                                     >
                                         {tab}
@@ -209,16 +209,16 @@ export function StandingsFilters({
 
                             {/* Footer */}
                             {activeTab === 'filters' && (
-                                <div className="flex gap-2 p-4 border-t border-white/10">
+                                <div className="flex gap-2 p-4 border-t border-border">
                                     <button
                                         onClick={clearFilters}
-                                        className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-sm font-bold"
+                                        className="flex-1 px-4 py-2 bg-muted border border-border rounded-xl hover:bg-muted/70 transition-all text-sm font-bold"
                                     >
                                         Clear All
                                     </button>
                                     <button
                                         onClick={applyFilters}
-                                        className="flex-1 px-4 py-2 bg-primary text-black rounded-xl hover:scale-105 transition-all text-sm font-black uppercase"
+                                        className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:scale-105 transition-all text-sm font-black uppercase"
                                     >
                                         Apply
                                     </button>
@@ -239,14 +239,14 @@ function ViewsTab({ views, onSelectView }: { views: ViewOption[]; onSelectView: 
                 <button
                     key={view.id}
                     onClick={() => onSelectView(view)}
-                    className="w-full text-left p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all group"
+                    className="w-full text-left p-4 bg-muted border border-border rounded-xl hover:bg-muted/70 transition-all group"
                 >
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="text-sm font-black uppercase tracking-tight mb-1">{view.name}</p>
-                            <p className="text-xs text-white/60">{view.description}</p>
+                            <p className="text-xs text-foreground/60">{view.description}</p>
                         </div>
-                        <ChevronDown size={16} className="text-white/40 group-hover:text-primary transition-colors rotate-[-90deg]" />
+                        <ChevronDown size={16} className="text-foreground/40 group-hover:text-primary transition-colors rotate-[-90deg]" />
                     </div>
                 </button>
             ))}
@@ -267,7 +267,7 @@ function FiltersTab({
         <div className="p-4 space-y-4">
             {/* Position Range */}
             <div>
-                <label className="text-xs font-black uppercase tracking-widest text-white/60 mb-2 block">
+                <label className="text-xs font-black uppercase tracking-widest text-foreground/60 mb-2 block">
                     Position Range
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -281,7 +281,7 @@ function FiltersTab({
                                 position: { ...filters.position, min: parseInt(e.target.value) || undefined },
                             })
                         }
-                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
+                        className="px-3 py-2 bg-muted border border-border rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
                     />
                     <input
                         type="number"
@@ -293,14 +293,14 @@ function FiltersTab({
                                 position: { ...filters.position, max: parseInt(e.target.value) || undefined },
                             })
                         }
-                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
+                        className="px-3 py-2 bg-muted border border-border rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
                     />
                 </div>
             </div>
 
             {/* Points Range */}
             <div>
-                <label className="text-xs font-black uppercase tracking-widest text-white/60 mb-2 block">
+                <label className="text-xs font-black uppercase tracking-widest text-foreground/60 mb-2 block">
                     Points Range
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -314,7 +314,7 @@ function FiltersTab({
                                 points: { ...filters.points, min: parseInt(e.target.value) || undefined },
                             })
                         }
-                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
+                        className="px-3 py-2 bg-muted border border-border rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
                     />
                     <input
                         type="number"
@@ -326,14 +326,14 @@ function FiltersTab({
                                 points: { ...filters.points, max: parseInt(e.target.value) || undefined },
                             })
                         }
-                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
+                        className="px-3 py-2 bg-muted border border-border rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
                     />
                 </div>
             </div>
 
             {/* Form Filter */}
             <div>
-                <label className="text-xs font-black uppercase tracking-widest text-white/60 mb-2 block">
+                <label className="text-xs font-black uppercase tracking-widest text-foreground/60 mb-2 block">
                     Recent Form
                 </label>
                 <div className="flex gap-2">
@@ -353,7 +353,7 @@ function FiltersTab({
                                         : result === 'D'
                                             ? 'bg-yellow-500 text-black'
                                             : 'bg-red-500 text-white'
-                                    : 'bg-white/5 border border-white/10 text-white/60'
+                                    : 'bg-muted border border-border text-foreground/60'
                                 }`}
                         >
                             {result}
@@ -364,7 +364,7 @@ function FiltersTab({
 
             {/* Goal Difference */}
             <div>
-                <label className="text-xs font-black uppercase tracking-widest text-white/60 mb-2 block">
+                <label className="text-xs font-black uppercase tracking-widest text-foreground/60 mb-2 block">
                     Goal Difference
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -378,7 +378,7 @@ function FiltersTab({
                                 goalDifference: { ...filters.goalDifference, min: parseInt(e.target.value) || undefined },
                             })
                         }
-                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
+                        className="px-3 py-2 bg-muted border border-border rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
                     />
                     <input
                         type="number"
@@ -390,7 +390,7 @@ function FiltersTab({
                                 goalDifference: { ...filters.goalDifference, max: parseInt(e.target.value) || undefined },
                             })
                         }
-                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
+                        className="px-3 py-2 bg-muted border border-border rounded-xl text-sm font-bold outline-none focus:border-primary transition-all"
                     />
                 </div>
             </div>
@@ -398,12 +398,12 @@ function FiltersTab({
             {/* University Filter */}
             {universities.length > 0 && (
                 <div>
-                    <label className="text-xs font-black uppercase tracking-widest text-white/60 mb-2 block">
+                    <label className="text-xs font-black uppercase tracking-widest text-foreground/60 mb-2 block">
                         Universities
                     </label>
                     <div className="space-y-1 max-h-32 overflow-y-auto">
                         {universities.map((uni) => (
-                            <label key={uni} className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-lg cursor-pointer">
+                            <label key={uni} className="flex items-center gap-2 p-2 hover:bg-muted rounded-lg cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={filters.university?.includes(uni) || false}
@@ -416,7 +416,7 @@ function FiltersTab({
                                     }}
                                     className="w-4 h-4 accent-primary"
                                 />
-                                <span className="text-sm text-white/80">{uni}</span>
+                                <span className="text-sm text-foreground/80">{uni}</span>
                             </label>
                         ))}
                     </div>
@@ -440,14 +440,14 @@ function SortTab({ currentSort, onChange }: { currentSort: SortOption; onChange:
     return (
         <div className="p-4 space-y-2">
             {sortOptions.map((option) => (
-                <div key={option.field} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl">
+                <div key={option.field} className="flex items-center justify-between p-3 bg-muted border border-border rounded-xl">
                     <span className="text-sm font-bold">{option.label}</span>
                     <div className="flex gap-1">
                         <button
                             onClick={() => onChange({ field: option.field, direction: 'asc' })}
                             className={`p-2 rounded-lg transition-all ${currentSort.field === option.field && currentSort.direction === 'asc'
-                                    ? 'bg-primary text-black'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-foreground/60 hover:bg-muted/70'
                                 }`}
                         >
                             <TrendingUp size={14} />
@@ -455,8 +455,8 @@ function SortTab({ currentSort, onChange }: { currentSort: SortOption; onChange:
                         <button
                             onClick={() => onChange({ field: option.field, direction: 'desc' })}
                             className={`p-2 rounded-lg transition-all ${currentSort.field === option.field && currentSort.direction === 'desc'
-                                    ? 'bg-primary text-black'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-foreground/60 hover:bg-muted/70'
                                 }`}
                         >
                             <TrendingDown size={14} />

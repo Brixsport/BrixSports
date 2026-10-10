@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, matches, competitions, standings, teamRegistrations } from '@/db/schema';
-import { eq, or, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 /**
  * GET teams in a competition
@@ -26,12 +26,17 @@ export async function GET(
         // 2. Collect unique team IDs and their groups from multiple sources
         const teamGroupMap = new Map<string, string | null>();
 
+        // actualId is authoritative when present -- do NOT OR it with a name
+        // fallback (BACKLOG-335: two real competitions can share an exact
+        // name, and OR'ing in a name match even when a real id is known
+        // silently pulls in the other competition's teams too).
+
         // A. From Standings
         const competitionStandings = await db
             .select()
             .from(standings)
             .where(actualId
-                ? or(eq(standings.competitionId, actualId), eq(standings.competition, competitionName))
+                ? eq(standings.competitionId, actualId)
                 : eq(standings.competition, competitionName));
 
         competitionStandings.forEach(s => {
@@ -43,7 +48,7 @@ export async function GET(
             .select()
             .from(matches)
             .where(actualId
-                ? or(eq(matches.competitionId, actualId), eq(matches.competition, competitionName))
+                ? eq(matches.competitionId, actualId)
                 : eq(matches.competition, competitionName));
 
         competitionMatches.forEach(match => {

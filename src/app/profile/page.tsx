@@ -235,7 +235,7 @@ export default function ProfilePage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
         );
@@ -244,12 +244,12 @@ export default function ProfilePage() {
     if (!user) return null;
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8 lg:p-12 pb-24">
+        <div className="min-h-screen bg-background text-foreground p-4 md:p-8 lg:p-12 pb-24">
             <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header with Cover */}
                 <div className="relative">
                     {/* Cover Image */}
-                    <div className="h-48 md:h-64 bg-gradient-to-br from-primary/20 via-blue-900/20 to-purple-900/20 rounded-[40px] overflow-hidden relative border border-white/5">
+                    <div className="h-48 md:h-64 bg-gradient-to-br from-primary/20 via-blue-900/20 to-purple-900/20 rounded-[40px] overflow-hidden relative border border-border">
                         {user.coverImage ? (
                             <img src={user.coverImage} alt="Cover" className="w-full h-full object-cover" />
                         ) : (
@@ -265,7 +265,7 @@ export default function ProfilePage() {
                             />
                             <button
                                 onClick={() => coverInputRef.current?.click()}
-                                className="px-4 py-2 md:px-6 md:py-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl hover:bg-black/60 transition-all flex items-center gap-2 text-xs md:text-sm font-black uppercase tracking-widest"
+                                className="px-4 py-2 md:px-6 md:py-3 bg-black/40 backdrop-blur-md border border-border rounded-2xl hover:bg-black/60 transition-all flex items-center gap-2 text-xs md:text-sm font-black uppercase tracking-widest"
                             >
                                 <Camera size={16} />
                                 <span className="hidden md:inline">Change Cover</span>
@@ -287,12 +287,12 @@ export default function ProfilePage() {
                                 />
                                 <div
                                     onClick={() => avatarInputRef.current?.click()}
-                                    className="w-32 h-32 md:w-40 md:h-40 rounded-[32px] bg-gradient-to-br from-[#0A0A0A] to-[#1A1A1A] flex items-center justify-center text-4xl md:text-6xl font-display border-[6px] border-[#050505] relative overflow-hidden shadow-2xl cursor-pointer"
+                                    className="w-32 h-32 md:w-40 md:h-40 rounded-[32px] bg-gradient-to-br from-[#0A0A0A] to-[#1A1A1A] flex items-center justify-center text-4xl md:text-6xl font-display border-[6px] border-background relative overflow-hidden shadow-2xl cursor-pointer"
                                 >
                                     {user.avatar ? (
                                         <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                                     ) : (
-                                        <span className="text-white/20 font-black">{user.name.charAt(0)}</span>
+                                        <span className="text-foreground/20 font-black">{user.name.charAt(0)}</span>
                                     )}
                                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <Camera size={32} />
@@ -300,7 +300,7 @@ export default function ProfilePage() {
                                 </div>
                                 <button
                                     onClick={() => avatarInputRef.current?.click()}
-                                    className="absolute bottom-2 right-2 w-8 h-8 md:w-10 md:h-10 bg-primary text-black rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg shadow-primary/20"
+                                    className="absolute bottom-2 right-2 w-8 h-8 md:w-10 md:h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg shadow-primary/20"
                                 >
                                     <Edit2 size={14} className="md:w-4 md:h-4" />
                                 </button>
@@ -308,13 +308,13 @@ export default function ProfilePage() {
 
                             {/* User Info */}
                             <div className="flex-1 text-center md:text-left">
-                                <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-[32px] p-6 shadow-xl">
+                                <div className="bg-muted backdrop-blur-md border border-border rounded-[32px] p-6 shadow-xl">
                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                         <div>
-                                            <h1 className="text-3xl md:text-4xl font-display italic uppercase tracking-tight mb-2 text-white">
+                                            <h1 className="text-3xl md:text-4xl font-display italic uppercase tracking-tight mb-2 text-foreground">
                                                 {user.name}
                                             </h1>
-                                            <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-sm text-white/50 font-medium">
+                                            <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-sm text-foreground/50 font-medium">
                                                 <div className="flex items-center gap-2">
                                                     <Mail size={14} />
                                                     {user.email}
@@ -363,15 +363,15 @@ export default function ProfilePage() {
                     {/* Left Column - About & Favorite Team */}
                     <div className="space-y-6">
                         {/* About */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
-                            <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6 md:p-8">
+                            <h2 className="text-xs font-black uppercase tracking-widest text-foreground/40 mb-6 flex items-center gap-2">
                                 <User size={14} className="text-primary" />
                                 About
                             </h2>
                             {isEditing ? (
                                 <div className="space-y-4">
                                     <textarea
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm focus:outline-none focus:border-primary/50 transition-all min-h-[120px]"
+                                        className="w-full bg-muted border border-border rounded-2xl p-4 text-foreground text-sm focus:outline-none focus:border-primary/50 transition-all min-h-[120px]"
                                         value={user.bio || ""}
                                         onChange={(e) => setUser({ ...user, bio: e.target.value })}
                                         placeholder="Tell us about yourself..."
@@ -391,28 +391,28 @@ export default function ProfilePage() {
                                                 setIsEditing(false);
                                                 toast.success("Bio updated!");
                                             }}
-                                            className="px-4 py-2 bg-primary text-black rounded-lg text-[10px] font-black uppercase tracking-widest"
+                                            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-[10px] font-black uppercase tracking-widest"
                                         >
                                             Save
                                         </button>
                                         <button
                                             onClick={() => setIsEditing(false)}
-                                            className="px-4 py-2 bg-white/5 text-white rounded-lg text-[10px] font-black uppercase tracking-widest border border-white/10 hover:bg-white/10"
+                                            className="px-4 py-2 bg-muted text-foreground rounded-lg text-[10px] font-black uppercase tracking-widest border border-border hover:bg-muted/70"
                                         >
                                             Cancel
                                         </button>
                                     </div>
                                 </div>
                             ) : (
-                                <p className="text-white/80 leading-relaxed text-sm">
+                                <p className="text-foreground/80 leading-relaxed text-sm">
                                     {user.bio || "No bio yet. Click edit profile to add one!"}
                                 </p>
                             )}
                         </div>
 
                         {/* Favorite Team */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
-                            <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center justify-between">
+                        <div className="bg-muted border border-border rounded-[32px] p-6 md:p-8">
+                            <h2 className="text-xs font-black uppercase tracking-widest text-foreground/40 mb-6 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <Heart size={14} className="text-primary" />
                                     Favorite Team
@@ -433,15 +433,15 @@ export default function ProfilePage() {
                             {user.favoriteTeam ? (
                                 <div
                                     onClick={() => isEditing && setShowTeamModal(true)}
-                                    className={`bg-gradient-to-br from-white/5 to-white/10 border border-white/10 rounded-3xl p-6 relative overflow-hidden group hover:border-primary/30 transition-all ${isEditing ? 'cursor-pointer' : ''}`}
+                                    className={`bg-gradient-to-br from-white/5 to-white/10 border border-border rounded-3xl p-6 relative overflow-hidden group hover:border-primary/30 transition-all ${isEditing ? 'cursor-pointer' : ''}`}
                                 >
                                     <div className="flex items-center gap-6 relative z-10">
-                                        <div className="w-16 h-16 md:w-20 md:h-20 bg-white/5 rounded-2xl flex items-center justify-center p-2">
+                                        <div className="w-16 h-16 md:w-20 md:h-20 bg-muted rounded-2xl flex items-center justify-center p-2">
                                             <TeamLogo logo={user.favoriteTeam.logo} name={user.favoriteTeam.name} size="md" />
                                         </div>
                                         <div className="flex-1">
                                             <p className="text-xl md:text-2xl font-black uppercase tracking-tight leading-none mb-1 group-hover:text-primary transition-colors">{user.favoriteTeam.name}</p>
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{user.favoriteTeam.university}</p>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{user.favoriteTeam.university}</p>
                                         </div>
                                     </div>
                                     {/* Ambient Background */}
@@ -451,10 +451,10 @@ export default function ProfilePage() {
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 text-center">
-                                    <Heart size={32} className="mx-auto text-white/20 mb-4" />
-                                    <h3 className="text-lg font-bold text-white mb-2">No Favorite Team</h3>
-                                    <p className="text-white/40 text-sm mb-4">Select your favorite university team to support them!</p>
+                                <div className="bg-muted border border-border rounded-[32px] p-8 text-center">
+                                    <Heart size={32} className="mx-auto text-foreground/20 mb-4" />
+                                    <h3 className="text-lg font-bold text-foreground mb-2">No Favorite Team</h3>
+                                    <p className="text-foreground/40 text-sm mb-4">Select your favorite university team to support them!</p>
                                     <button
                                         onClick={() => {
                                             fetchTeams();
@@ -469,8 +469,8 @@ export default function ProfilePage() {
                         </div>
 
                         {/* Quick Actions */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
-                            <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6 md:p-8">
+                            <h2 className="text-xs font-black uppercase tracking-widest text-foreground/40 mb-6 flex items-center gap-2">
                                 <Settings size={14} className="text-primary" />
                                 Quick Actions
                             </h2>
@@ -486,8 +486,8 @@ export default function ProfilePage() {
 
                     {/* Middle Column - Stats */}
                     <div className="space-y-6">
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
-                            <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6 md:p-8">
+                            <h2 className="text-xs font-black uppercase tracking-widest text-foreground/40 mb-6 flex items-center gap-2">
                                 <TrendingUp size={14} className="text-primary" />
                                 Statistics
                             </h2>
@@ -515,12 +515,12 @@ export default function ProfilePage() {
                             </div>
 
                             {/* Prediction Accuracy */}
-                            <div className="mt-8 bg-black/20 border border-white/5 rounded-2xl p-6">
+                            <div className="mt-8 bg-card border border-border rounded-2xl p-6">
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Prediction Accuracy</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">Prediction Accuracy</span>
                                     <span className="text-2xl font-display italic text-primary">{user.stats?.accuracy || 0}%</span>
                                 </div>
-                                <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${user.stats?.accuracy || 0}%` }}
@@ -532,8 +532,8 @@ export default function ProfilePage() {
                         </div>
 
                         {/* Achievements */}
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
-                            <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6 md:p-8">
+                            <h2 className="text-xs font-black uppercase tracking-widest text-foreground/40 mb-6 flex items-center gap-2">
                                 <Award size={14} className="text-primary" />
                                 Achievements
                             </h2>
@@ -552,8 +552,8 @@ export default function ProfilePage() {
 
                     {/* Right Column - Recent Activity */}
                     <div className="space-y-6">
-                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
-                            <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center gap-2">
+                        <div className="bg-muted border border-border rounded-[32px] p-6 md:p-8">
+                            <h2 className="text-xs font-black uppercase tracking-widest text-foreground/40 mb-6 flex items-center gap-2">
                                 <Activity size={14} className="text-primary" />
                                 Recent Activity
                             </h2>
@@ -566,17 +566,17 @@ export default function ProfilePage() {
                                             initial={{ opacity: 0, x: -20 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: idx * 0.1 }}
-                                            className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all"
+                                            className="bg-muted border border-border rounded-xl p-4 hover:bg-muted/70 transition-all"
                                         >
                                             <div className="flex items-start gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-white/60">
+                                                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-foreground/60">
                                                     {activity.type === 'match' && <Activity size={14} />}
                                                     {activity.type === 'favorite' && <Heart size={14} />}
                                                     {activity.type === 'prediction' && <Trophy size={14} />}
                                                 </div>
                                                 <div className="flex-1">
-                                                    <p className="text-sm font-bold text-white">{activity.title}</p>
-                                                    <p className="text-[10px] text-white/40 mt-1 uppercase tracking-wider">{activity.date}</p>
+                                                    <p className="text-sm font-bold text-foreground">{activity.title}</p>
+                                                    <p className="text-[10px] text-foreground/40 mt-1 uppercase tracking-wider">{activity.date}</p>
                                                 </div>
                                             </div>
                                         </motion.div>
@@ -584,8 +584,8 @@ export default function ProfilePage() {
                                 </div>
                             ) : (
                                 <div className="py-12 text-center">
-                                    <p className="text-white/20 text-xs font-black uppercase tracking-widest mb-2">No Recent Activity</p>
-                                    <p className="text-white/40 text-xs">Start Interacting with matches to see your history here.</p>
+                                    <p className="text-foreground/20 text-xs font-black uppercase tracking-widest mb-2">No Recent Activity</p>
+                                    <p className="text-foreground/40 text-xs">Start Interacting with matches to see your history here.</p>
                                 </div>
                             )}
 
@@ -619,21 +619,21 @@ function TeamSelectorModal({ isOpen, onClose, teams, onSelect }: { isOpen: boole
             <motion.div
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="bg-[#0A0A0A] border border-white/10 rounded-[40px] w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+                className="bg-card border border-border rounded-[40px] w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl"
             >
-                <div className="p-8 border-b border-white/10 flex items-center justify-between">
+                <div className="p-8 border-b border-border flex items-center justify-between">
                     <div>
                         <h2 className="text-2xl font-display italic uppercase tracking-tighter">Support Your Team</h2>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Select your primary favorite university</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/40">Select your primary favorite university</p>
                     </div>
-                    <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-colors">
+                    <button onClick={onClose} className="p-3 hover:bg-muted/70 rounded-2xl transition-colors">
                         <X size={20} />
                     </button>
                 </div>
 
-                <div className="p-6 bg-white/5 flex items-center gap-4">
-                    <div className="flex-1 bg-black/40 rounded-2xl border border-white/10 px-6 py-3 flex items-center gap-3">
-                        <Activity size={18} className="text-white/20" />
+                <div className="p-6 bg-muted flex items-center gap-4">
+                    <div className="flex-1 bg-card rounded-2xl border border-border px-6 py-3 flex items-center gap-3">
+                        <Activity size={18} className="text-foreground/20" />
                         <input
                             type="text"
                             placeholder="Search by team or university..."
@@ -651,22 +651,22 @@ function TeamSelectorModal({ isOpen, onClose, teams, onSelect }: { isOpen: boole
                             <button
                                 key={team.id}
                                 onClick={() => onSelect(team)}
-                                className="w-full group bg-white/5 border border-white/5 rounded-3xl p-4 md:p-6 flex items-center gap-6 hover:bg-white/10 hover:border-primary/30 transition-all text-left"
+                                className="w-full group bg-muted border border-border rounded-3xl p-4 md:p-6 flex items-center gap-6 hover:bg-muted/70 hover:border-primary/30 transition-all text-left"
                             >
-                                <div className="w-12 h-12 md:w-16 md:h-16 bg-black/40 rounded-2xl flex items-center justify-center p-2 group-hover:scale-110 transition-transform">
+                                <div className="w-12 h-12 md:w-16 md:h-16 bg-card rounded-2xl flex items-center justify-center p-2 group-hover:scale-110 transition-transform">
                                     <TeamLogo logo={team.logo} name={team.name} size="md" />
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-lg md:text-xl font-black uppercase tracking-tight group-hover:text-primary transition-colors">{team.name}</p>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{team.university}</p>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{team.university}</p>
                                 </div>
-                                <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-all">
-                                    <Check size={16} className="text-white group-hover:text-black transition-colors" />
+                                <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-all">
+                                    <Check size={16} className="text-foreground group-hover:text-primary-foreground transition-colors" />
                                 </div>
                             </button>
                         ))
                     ) : (
-                        <div className="py-20 text-center opacity-40">
+                        <div className="py-20 text-center text-muted-foreground">
                             <Activity size={40} className="mx-auto mb-4" />
                             <p className="font-black uppercase tracking-widest text-xs">No teams found matching "{search}"</p>
                         </div>
@@ -679,14 +679,14 @@ function TeamSelectorModal({ isOpen, onClose, teams, onSelect }: { isOpen: boole
 
 function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
     return (
-        <div className="bg-white/5 border border-white/5 rounded-2xl p-5 hover:bg-white/10 transition-all group">
+        <div className="bg-muted border border-border rounded-2xl p-5 hover:bg-muted/70 transition-all group">
             <div className="flex items-center justify-between mb-3">
                 <div className="opacity-60 group-hover:opacity-100 transition-opacity grayscale group-hover:grayscale-0">
                     {icon}
                 </div>
-                <span className="text-xl font-display italic text-white">{value}</span>
+                <span className="text-xl font-display italic text-foreground">{value}</span>
             </div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-white/30 group-hover:text-white/50 transition-colors">{label}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/30 group-hover:text-foreground/50 transition-colors">{label}</p>
         </div>
     );
 }
@@ -695,7 +695,7 @@ function AchievementBadge({ emoji, label, unlocked = false }: { emoji: string; l
     return (
         <div className={`aspect-square rounded-2xl flex flex-col items-center justify-center p-2 transition-all cursor-help ${unlocked
             ? 'bg-gradient-to-br from-primary/20 to-purple-600/20 border-2 border-primary/50 hover:scale-105'
-            : 'bg-white/5 border border-white/5 opacity-30 grayscale hover:opacity-50 hover:grayscale-0'
+            : 'bg-muted/50 border border-border/50 text-muted-foreground grayscale hover:grayscale-0 hover:bg-muted'
             }`}>
             <span className="text-2xl mb-2 filter drop-shadow-lg">{emoji}</span>
             <p className="text-[7px] font-black uppercase tracking-widest text-center leading-tight truncate w-full">{label}</p>
@@ -707,12 +707,12 @@ function QuickActionButton({ icon, label, href }: { icon: React.ReactNode; label
     return (
         <a
             href={href}
-            className="flex items-center gap-4 px-5 py-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 hover:border-white/10 transition-all group"
+            className="flex items-center gap-4 px-5 py-4 bg-muted border border-border rounded-2xl hover:bg-muted/70 hover:border-border transition-all group"
         >
-            <div className="text-white/40 group-hover:text-primary transition-colors">
+            <div className="text-foreground/40 group-hover:text-primary transition-colors">
                 {icon}
             </div>
-            <span className="text-xs font-bold text-white/60 group-hover:text-white transition-colors uppercase tracking-wide">{label}</span>
+            <span className="text-xs font-bold text-foreground/60 group-hover:text-foreground transition-colors uppercase tracking-wide">{label}</span>
         </a>
     );
 }

@@ -772,9 +772,18 @@ function AdminCompetitionsPageContent() {
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-white/5 rounded-2xl p-6 border border-white/10 hover:border-primary/50 transition-all"
                             >
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
+                                {/* BACKLOG-344 (renumbered from BACKLOG-342 in the commit history --
+                                    that number collided with a concurrent session's match-detail
+                                    entry, BACKLOG-342 "Timeline All Tab: Restore Team-Side Mirroring"):
+                                    was `flex items-start justify-between` with no wrap --
+                                    on mobile the info block and the Manage Teams/Edit/Delete action
+                                    column competed for the same row and pushed scrollWidth to ~496px
+                                    against a 375px viewport. Stack on mobile, restore the side-by-side
+                                    row from sm: up (matches this codebase's existing flex-col sm:flex-row
+                                    card-header convention, e.g. admin/teams/[id], admin/roster-transfers). */}
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex flex-wrap items-center gap-3 mb-2">
                                             <h3 className="text-xl font-bold">{competition.name}</h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${competition.status === 'ongoing' ? 'bg-blue-500/20 text-blue-500' :
                                                 competition.status === 'upcoming' ? 'bg-blue-500/20 text-blue-500' :

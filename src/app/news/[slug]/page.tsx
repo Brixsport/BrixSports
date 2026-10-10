@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { news } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -7,9 +8,17 @@ import NewsDetailClient from './NewsDetailClient';
 // BACKLOG-189: same fix as matches/[id] -- was a 'use client' page with no
 // generateMetadata, so every article shared the generic site-wide title
 // instead of its own headline. Thin server wrapper, original UI unchanged.
+// BACKLOG-403: same crash-on-transient-DB-error fix as matches/[id] -- SEO
+// enhancement path only, NewsDetailClient does its own independent fetching.
 async function getArticle(slug: string) {
-    const [article] = await db.select().from(news).where(eq(news.slug, slug)).limit(1);
-    return article ?? null;
+    try {
+        const [article] = await db.select().from(news).where(eq(news.slug, slug)).limit(1);
+        return article ?? null;
+    } catch (error) {
+        console.error('getArticle: DB error, falling back to generic metadata', error);
+        Sentry.captureException(error, { tags: { area: 'news-seo-fallback' }, extra: { slug } });
+        return null;
+    }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {

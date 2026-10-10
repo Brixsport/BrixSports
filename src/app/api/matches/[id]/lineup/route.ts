@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // GET /api/matches/[id]/lineup - Get lineup for a match
 export async function GET(
@@ -30,11 +31,21 @@ export async function GET(
 
         // BUG-221: unpublished drafts are only visible to admin/logger. Public
         // viewers (and any unauthenticated caller) only ever see published lineups.
+        // BACKLOG-323: this route filtered out unpublished drafts correctly but
+        // never stripped publishedByName/unlockedByName from the ones it does
+        // return -- both can be an admin's email (publish/route.ts and
+        // lineup/unlock/route.ts both fall back to authUser.name || authUser.email).
+        // Same fix as the sibling GET /api/matches/[id] route.
         const authUser = await getAuthUser(request).catch(() => null);
         const canViewDrafts = authUser?.role === 'admin' || authUser?.role === 'logger';
         if (lineups && !canViewDrafts) {
             lineups = Object.fromEntries(
-                Object.entries(lineups).filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
+                Object.entries(lineups)
+                    .filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
+                    .map(([side, teamLineup]) => {
+                        const { publishedBy, publishedByName, publishedByRole, unlockedBy, unlockedByName, ...rest } = teamLineup as any;
+                        return [side, rest];
+                    })
             );
         }
 
@@ -116,9 +127,12 @@ export async function POST(
                 .all();
 
             if (competition.length > 0 && competition[0].requireSquad) {
-                // Get all player IDs from the lineup
+                // Get all player IDs from the lineup. Was reading
+                // `lineup.startingXI`, a field this route's payload has never
+                // actually had (the real field is `starters`) -- squad
+                // validation was silently only ever checking substitutes.
                 const lineupPlayerIds = [
-                    ...(lineup.startingXI || []),
+                    ...(lineup.starters || []),
                     ...(lineup.substitutes || []),
                 ].map((p: any) => p.playerId).filter(Boolean);
 
@@ -173,13 +187,14 @@ export async function POST(
             updatedAt: new Date().toISOString()
         };
 
-        // Save back to database
-        await db.update(matches)
-            .set({
-                lineups: JSON.stringify(existingLineups),
-                updatedAt: new Date()
-            })
-            .where(eq(matches.id, matchId));
+        // Save back to database -- BACKLOG-220: compare-and-swap against the
+        // exact raw value read above, so a concurrent write to the OTHER
+        // team's lineup (or anything else touching this column) in between
+        // can't be silently clobbered by this overwrite.
+        const writeResult = await writeMatchLineupsAtomic(matchId, match[0].lineups as string | null, existingLineups);
+        if (!writeResult.ok) {
+            return NextResponse.json(CONCURRENT_MODIFICATION_RESPONSE, { status: 409 });
+        }
 
         return NextResponse.json({
             success: true,
@@ -239,13 +254,11 @@ export async function DELETE(
         // Delete the specific team's lineup
         delete existingLineups[team];
 
-        // Save back to database
-        await db.update(matches)
-            .set({
-                lineups: JSON.stringify(existingLineups),
-                updatedAt: new Date()
-            })
-            .where(eq(matches.id, matchId));
+        // Save back to database -- BACKLOG-220: same compare-and-swap guard as POST above.
+        const writeResult = await writeMatchLineupsAtomic(matchId, match[0].lineups as string | null, existingLineups);
+        if (!writeResult.ok) {
+            return NextResponse.json(CONCURRENT_MODIFICATION_RESPONSE, { status: 409 });
+        }
 
         return NextResponse.json({
             success: true,

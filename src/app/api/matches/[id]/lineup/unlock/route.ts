@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // POST /api/matches/[id]/lineup/unlock - Unlock published lineup (Admin only)
 export async function POST(
@@ -69,13 +70,11 @@ export async function POST(
             updatedAt: new Date().toISOString()
         };
 
-        // Save back to database
-        await db.update(matches)
-            .set({
-                lineups: JSON.stringify(existingLineups),
-                updatedAt: new Date()
-            })
-            .where(eq(matches.id, matchId));
+        // Save back to database -- BACKLOG-220: same compare-and-swap guard.
+        const writeResult = await writeMatchLineupsAtomic(matchId, match[0].lineups as string | null, existingLineups);
+        if (!writeResult.ok) {
+            return NextResponse.json(CONCURRENT_MODIFICATION_RESPONSE, { status: 409 });
+        }
 
         return NextResponse.json({
             success: true,
