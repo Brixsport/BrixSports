@@ -345,6 +345,18 @@ export async function POST(
                 // for this column, replicated by hand here since a raw sql
                 // fragment used as a literal SELECT source has no access to
                 // Drizzle's column-level encode/decode mapping.
+                //
+                // BACKLOG-466 item 5: the key now also includes `value` via a
+                // NULL-safe `IS` comparison (same statement structure, one extra
+                // predicate). value = JSON of the points for a scoring/basketball
+                // event (0 for a miss), so a miss followed by a make by one player
+                // in the same minute within 10s is no longer collapsed into one.
+                // Deliberately NOT keyed on `detail`: two loggers recording the same
+                // real event can word it differently, and widening on it would
+                // reopen the BACKLOG-151/433 dual-logger double count. Residual: two
+                // makes of identical value by one player in the same minute within
+                // 10s still collapse (the heuristic cannot tell them from a second
+                // logger's copy of the same event).
                 const dedupWindowStart = new Date(Date.now() - 10_000);
                 const result: any = await tx.run(sql`
                     INSERT INTO match_events
@@ -352,7 +364,7 @@ export async function POST(
                     SELECT ${newEvent.id}, ${newEvent.matchId}, ${newEvent.type}, ${newEvent.minute}, ${newEvent.second}, ${newEvent.period}, ${newEvent.teamId}, ${newEvent.playerId}, ${newEvent.relatedPlayerId}, ${newEvent.detail}, ${newEvent.isEyePoint ? 1 : 0}, ${newEvent.value}, ${newEvent.loggerId}, ${newEvent.loggerName}, ${Math.floor(newEvent.createdAt.getTime() / 1000)}
                     WHERE NOT EXISTS (
                         SELECT 1 FROM match_events
-                        WHERE match_id = ${matchId} AND type = ${type} AND minute = ${minute} AND player_id = ${playerId} AND created_at > ${Math.floor(dedupWindowStart.getTime() / 1000)}
+                        WHERE match_id = ${matchId} AND type = ${type} AND minute = ${minute} AND player_id = ${playerId} AND value IS ${newEvent.value} AND created_at > ${Math.floor(dedupWindowStart.getTime() / 1000)}
                     )
                 `);
 
@@ -368,6 +380,7 @@ export async function POST(
                                 eq(matchEvents.type, type),
                                 eq(matchEvents.minute, minute),
                                 eq(matchEvents.playerId, playerId),
+                                newEvent.value === null ? isNull(matchEvents.value) : eq(matchEvents.value, newEvent.value),
                                 gt(matchEvents.createdAt, dedupWindowStart)
                             )
                         )
