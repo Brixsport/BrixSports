@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
 import { eq, and, or } from 'drizzle-orm';
+import { toPublicMatchRow } from '@/lib/public-match';
 
 export async function GET(request: Request) {
     try {
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
 
         // Transform the results
         const transformedMatches = basketballMatches.map((match) => ({
-            ...match,
+            ...toPublicMatchRow(match),
             homeTeam: teamMap.get(match.homeTeamId),
             awayTeam: teamMap.get(match.awayTeamId),
         }));
