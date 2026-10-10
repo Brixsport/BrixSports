@@ -47,6 +47,26 @@ export function toPublicPlayer<T extends { email?: unknown; profileId?: unknown;
     return pub as T;
 }
 
+// Shaped DTO for the unauthenticated eligible-players endpoints. Strips the same
+// banned fields as toPublicPlayer() and replaces the nested memberships relation
+// (affiliation rows + full team rows) with a flat `teamIds` list -- the only part
+// of it the logger roster filters actually read. `team` (primary team) is kept.
+export type EligiblePlayerDto = Omit<EnrichedPlayer, 'email' | 'profileId' | 'memberships' | 'organizationAffiliations'> & {
+    teamIds: string[];
+};
+
+export function toEligiblePlayerDto(player: EnrichedPlayer): EligiblePlayerDto {
+    const teamIds = Array.from(new Set((player.memberships ?? []).map((membership) => membership.team.id)));
+    const {
+        email: _email,
+        profileId: _profileId,
+        memberships: _memberships,
+        organizationAffiliations: _organizationAffiliations,
+        ...pub
+    } = player;
+    return { ...pub, teamIds };
+}
+
 function slugifyOrganizationName(value: string): string {
     return value
         .trim()

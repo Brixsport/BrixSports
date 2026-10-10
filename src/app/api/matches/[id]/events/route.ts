@@ -55,9 +55,12 @@ export async function GET(
             .limit(200);
 
         // Strip logger identity fields from unauthenticated (public) responses — NDPR compliance.
-        // Authenticated callers (logger seeding local state, multi-logger conflict detection) receive full rows.
+        // Only privileged callers (admin, or a logger seeding local state / multi-logger conflict
+        // detection) receive full rows. Any other session -- including a self-registered fan --
+        // gets the stripped shape, same as an anonymous viewer.
         const authUser = await getAuthUser(request).catch(() => null);
-        const responseEvents = authUser
+        const canSeeLoggerIdentity = authUser?.role === 'admin' || authUser?.role === 'logger';
+        const responseEvents = canSeeLoggerIdentity
             ? events
             : events.map(({ loggerId, loggerName, ...rest }) => rest);
 

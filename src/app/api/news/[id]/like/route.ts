@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { newsLikes } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 // POST /api/news/[id]/like - Toggle like on news article
 export async function POST(
@@ -9,16 +10,17 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params;
-        const body = await request.json();
-        const { userId } = body;
-
-        if (!userId) {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
-                { error: 'User ID is required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
+        // Session identity only -- any userId in the body is ignored.
+        const userId = await resolveEffectiveUserId(authUser);
+
+        const { id } = await params;
 
         // Check if user already liked this article
         const existingLike = await db
@@ -73,14 +75,14 @@ export async function POST(
 }
 
 // GET /api/news/[id]/like - Get like status and count
+// The like count is public; `isLiked` is only resolved for an authenticated
+// session (anonymous readers always get isLiked: false). No userId param is read.
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const { id } = await params;
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
 
         // Get total like count
         const likeCount = await db
@@ -90,9 +92,11 @@ export async function GET(
 
         const count = likeCount[0]?.count || 0;
 
-        // Check if current user liked
+        // Check if current (session) user liked
         let isLiked = false;
-        if (userId) {
+        const authUser = await getAuthUser(request);
+        if (authUser) {
+            const userId = await resolveEffectiveUserId(authUser);
             const userLike = await db
                 .select()
                 .from(newsLikes)

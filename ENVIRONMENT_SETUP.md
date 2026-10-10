@@ -26,8 +26,8 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3000
 NEXT_PUBLIC_WS_URL=http://localhost:3000
 
 # Push Notifications (VAPID Keys) ✅ CONFIGURED
-NEXT_PUBLIC_VAPID_PUBLIC_KEY=BDYyajLbF8Op4vstjSIzBPKRd_qLxvQpYRJBj9VLBoe6TZF-dJVQOWtwxCGvMyas1qp7NImmBUgenK4Eu7krPcA
-VAPID_PRIVATE_KEY=tNgRs7W4-tDhaqLot8FTt2GUkV50jSBI0ltcqkEW_Jw
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=<REDACTED:NEXT_PUBLIC_VAPID_PUBLIC_KEY>
+VAPID_PRIVATE_KEY=<REDACTED:VAPID_PRIVATE_KEY>
 VAPID_SUBJECT=mailto:admin@brixsport.com
 
 # Google OAuth (Optional - leave empty if not using)
@@ -57,8 +57,8 @@ NODE_ENV=development
 
 Your push notification VAPID keys have been generated and are ready to use:
 
-- **Public Key:** `BDYyajLbF8Op4vstjSIzBPKRd_qLxvQpYRJBj9VLBoe6TZF-dJVQOWtwxCGvMyas1qp7NImmBUgenK4Eu7krPcA`
-- **Private Key:** `tNgRs7W4-tDhaqLot8FTt2GUkV50jSBI0ltcqkEW_Jw`
+- **Public Key:** `<REDACTED:NEXT_PUBLIC_VAPID_PUBLIC_KEY>`
+- **Private Key:** `<REDACTED:VAPID_PRIVATE_KEY>`
 - **Subject:** `mailto:admin@brixsport.com`
 
 ⚠️ **IMPORTANT:** These keys are for **DEVELOPMENT ONLY**. Generate new keys for production!
