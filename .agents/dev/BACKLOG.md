@@ -13373,6 +13373,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 **Update 2026-10-10 (fix/logger-queue-integrity, items 2 + 6) — SHIPPED (code committed, NOT live-tested):** `public/sw-admin.js` match-event drain now handles every response class (`classifySyncResponse`, unit-tested from the shipped file): 2xx deletes the row; 408/429/5xx/network keeps it for retry (and rejects so Background Sync reschedules); any other 4xx (401/403/404/409/422) marks the row `failed` with `failStatus` (kept in IndexedDB, never retried, no-token rows likewise). A module-level single-flight guard (`syncMatchEvents`, with one coalesced re-run) stops concurrent drains. After the pass the SW re-reads the store and posts `SYNC_COMPLETE` only when it is empty, else a new `SYNC_PARTIAL {remaining, failed}`; `syncAdminChanges` got the same SYNC_COMPLETE-only-when-empty rule. `FootballLogger.tsx`/`BasketballLogger.tsx` handlers set pending/failed from the message (`parseMatchEventSyncMessage`) instead of zeroing; a red "Not Saved" chip (tap clears the failed rows via `clearFailedQueuedEvents`) was added to both, and Basketball gained its first persistent queued-count chip. Not covered: failed-row retry UI (re-log by hand), item 8 (frozen JWT in queued rows).
 **Update 2026-10-10 (fix/logger-queue-integrity, item 3) — SHIPPED (code committed, NOT live-tested):** both loggers now call `triggerDrain()` once on mount and initialise `queuedOfflineCount`/`failedQueuedCount` from the IndexedDB `pendingMatchEvents` store (`getQueuedEventCounts` in `src/lib/admin-offline-queue.ts`), so a reopened tab/PWA shows the pending badge and drains without waiting for an `online`/`visibilitychange` event.
 **Update 2026-10-10 (fix/logger-queue-integrity, items 4 + 7) — SHIPPED (code committed, NOT live-tested):** live event POST handling in both loggers now follows `classifyEventPostStatus` (`src/lib/event-post-outcome.ts`, unit-tested): 5xx/408/429 are queued like a network failure; a 401 triggers one `POST /api/auth/refresh` (re-storing `localStorage.authToken`) then one retry, else the event is queued and a "session expired" message shown; other 4xx (403/409/422) show a persistent "NOT saved" banner. `FootballLogger.tsx` blocking `alert()` calls for event/shootout-kick save failures were replaced by its existing dismissible `eventSaveError` banner; a failure of `queueOfflineEvent` itself now surfaces in that banner instead of `console.error` only; the 8px Offline/Queued/Pending chips are now 10px. Not done: no local rollback of a permanently rejected event (the state manager has no id-based removal; the on-screen score can stay ahead of the saved score until reconciled — surfaced in the banner text only), and item 8 (token frozen into the queued row) untouched.
+**Update 2026-10-10 (PR #47 browser test) — UI-CONFIRMED on the PR preview (disposable staging match, since deleted):** with a logger session, an event saved server-side whose response was lost (simulated) was queued, then replayed by the SW drain with the same id and produced NO duplicate (event count unchanged, all ids unique); 5xx was queued with an honest message; 422 showed "NOT saved (error 422)" and was not queued; a 401 triggered /api/auth/refresh and a successful retry; a queued row survived a reload and the badge re-hydrated. Found while testing: with Background Sync disabled (sync present, register() rejected) neither the online event nor the mount drain ran -- only a manual DRAIN_MATCH_EVENTS message drained. Fixed in both loggers (register() rejection now posts the drain message) -- code committed, NOT re-tested in a Background-Sync-disabled browser after the fix. The "Not Saved - Tap" chip was not seen on the 422 (banner only) -- unverified. Not tested: basketball UI, two loggers, 120-minute session, iOS.
 
 ---
 
@@ -13515,3 +13516,25 @@ consent screen (Richard: "the google auth worked, i have logged it").
 7. Auth model is an accumulation of special cases (see 464 item 10).
 8. Priority scores: `any`/ignoreBuildErrors (468) 32; logger-component consolidation 9 (largest item; wait until after promotion).
 9. `src/lib/auth.ts` costs 1-3 DB hits per token resolution (loggers/users guessing); `lib/socket.ts` hardcodes `APP_URLS` in `ws-server`.
+
+### BACKLOG-475 — OPEN: Football Logger Logs A "No Card" Foul Twice
+
+**Status:** OPEN — found 2026-10-10 in the PR #47 browser test (UI-confirmed on the preview). Existing behaviour: PR #47 does not touch the handler (code-read). Not fixed.
+**Priority:** MEDIUM — double-counts fouls in match stats on every foul logged with "No card".
+
+**Problem (every finding, own line):**
+1. In the foul-outcome modal, choosing "No card" calls `confirmEvent('Foul', ...)` and then opens the reason modal (`FootballLogger.tsx` ~2467-2477); confirming or skipping the reason logs a second Foul with a new client id. Observed: one foul + "Skip / Standard" produced two Foul events for the same player and minute in the DB, with different ids.
+2. The id-based replay protection and the heuristic dedup cannot collapse them (different ids; Foul is not in the player-less dedup path), so the duplicate is permanent.
+3. The yellow/red path logs the foul and then the card with the reason; only the "No card" path attaches a reason to a second Foul instead of the first.
+**Fix direction:** log the foul once, after the reason is chosen or skipped, or attach the reason to the already-saved foul. Needs a test.
+**Related:** 466, 433/436.
+
+### BACKLOG-476 — OPEN: Logger Match Id Is Not Restored After A Hard Refresh
+
+**Status:** OPEN — found 2026-10-10 (code-read in `src/app/logger/page.tsx` while testing PR #47; the symptom was seen once in the browser: `brix_logger_matchId` was gone after load). Not fixed.
+**Priority:** LOW-MEDIUM — a logger who refreshes mid-match lands on the match list instead of the match.
+
+**Problem (every finding, own line):**
+1. The persist effect (`logger/page.tsx` ~77-82) runs on mount with `selectedMatchId` null and calls `localStorage.removeItem('brix_logger_matchId')` before the rehydrate effect (~87-93) reads it, so the saved id is always gone and the rehydrate branch never fires.
+2. Fix direction: read the saved id into state first (lazy initial state) or skip the removal until the first rehydrate pass has run.
+**Related:** 466 (offline queue survives the refresh; the match view does not).
