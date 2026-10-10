@@ -13462,6 +13462,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 4. No WAT timezone is set anywhere (device tz everywhere); time format is inconsistent: 12h `en-US` on the homepage and `MatchOverlay`, 24h `HH:mm` in `MatchCard`, locale default elsewhere — the same match can read "02:00 PM" and "14:00".
 5. Fix: hoist one shared `safeFormat(value, pattern, fallback)` (`TeamDetailClient.tsx:17-22` and `MatchCard.tsx:17` already have copies) and apply at all sites above; add a NaN guard to the sort at `competitions/[id]:552`; standardise time format and timezone.
 **Related:** 417, 455, 458, 126 (malformed date class), BUG-213.
+**Update 2026-10-10 (branch fix/viewer-robustness):** SHIPPED (code committed, NOT live-tested) -- item 5 shared helper: `src/lib/safe-date.ts` (`safeFormat`, `safeToLocale`, `parseSafeDate`; parses `"1788963960000.0"` as epoch ms instead of failing) + `tests/unit/safe-date.test.ts`. The older per-file copies (`TeamDetailClient.tsx`, `ui/MatchCard.tsx`) were left in place -- they show TBD for the float-string value where the shared helper shows the real date.
 
 ---
 
