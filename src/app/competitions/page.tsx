@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trophy, Star, ChevronDown, ChevronUp, Loader2, Activity, ArrowLeft } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useResilientFetch } from '@/hooks/useResilientFetch';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
+import { parseSafeDate, safeToLocale } from '@/lib/safe-date';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Other';
 
@@ -38,32 +41,29 @@ interface NearestMatch {
   status: string;
 }
 
+interface CompetitionsResponse {
+  groups: CompetitionGroup[];
+}
+
+const isCompetitionsResponse = (body: unknown): body is CompetitionsResponse =>
+  typeof body === 'object' && body !== null && Array.isArray((body as { groups?: unknown }).groups);
+
 export default function CompetitionsDirectoryPage() {
   const router = useRouter();
   const { isFavoriteCompetition, toggleCompetition } = useFavorites();
 
-  const [groups, setGroups] = useState<CompetitionGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  // BACKLOG-471: a failed fetch must show a retry state, never "No competitions found".
+  const { data, isLoading: loading, loadError, retry } = useResilientFetch<CompetitionsResponse>(
+    '/api/competitions',
+    { validate: isCompetitionsResponse }
+  );
+  const groups = data?.groups ?? [];
+  const loadFailed = loadError !== null && data === null;
   const [sportFilter, setSportFilter] = useState<SportType>('All');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [nearestMatches, setNearestMatches] = useState<Record<string, NearestMatch[]>>({});
   const [matchesLoading, setMatchesLoading] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/competitions');
-        const data = await res.json();
-        setGroups(data.groups || []);
-      } catch (err) {
-        console.error('Error fetching competitions:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchGroups();
-  }, []);
+  const [previewFailed, setPreviewFailed] = useState<Record<string, boolean>>({});
 
   const filteredGroups = groups.filter((g) => {
     if (sportFilter === 'All') return true;
@@ -74,30 +74,40 @@ export default function CompetitionsDirectoryPage() {
   // BACKLOG-289: the inline match preview is fetched only for the row the user
   // actually expands, on demand -- never eagerly for the whole list, to avoid
   // N+1 requests across the directory.
+  const loadPreview = async (group: CompetitionGroup) => {
+    if (nearestMatches[group.groupKey] || !group.sport) return;
+
+    try {
+      setMatchesLoading(group.groupKey);
+      setPreviewFailed((prev) => ({ ...prev, [group.groupKey]: false }));
+      const res = await fetch(`/api/${group.sport.toLowerCase()}/matches?competitionId=${group.latest.id}&competition=${encodeURIComponent(group.latest.name)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const all: NearestMatch[] = body.success && body.matches ? body.matches : [];
+      const now = Date.now();
+      // Unparseable startTime sorts last instead of poisoning the comparator with NaN.
+      const distance = (m: NearestMatch) => {
+        const d = parseSafeDate(m.startTime);
+        return d ? Math.abs(d.getTime() - now) : Number.MAX_SAFE_INTEGER;
+      };
+      const nearest = [...all].sort((a, b) => distance(a) - distance(b)).slice(0, 3);
+      setNearestMatches((prev) => ({ ...prev, [group.groupKey]: nearest }));
+    } catch (err) {
+      // Not cached: a failure is not "no nearby matches", and collapse/expand or the retry button re-fetches.
+      console.error('Error fetching nearest matches:', err);
+      setPreviewFailed((prev) => ({ ...prev, [group.groupKey]: true }));
+    } finally {
+      setMatchesLoading(null);
+    }
+  };
+
   const handleExpand = async (group: CompetitionGroup) => {
     if (expandedKey === group.groupKey) {
       setExpandedKey(null);
       return;
     }
     setExpandedKey(group.groupKey);
-    if (nearestMatches[group.groupKey] || !group.sport) return;
-
-    try {
-      setMatchesLoading(group.groupKey);
-      const res = await fetch(`/api/${group.sport.toLowerCase()}/matches?competitionId=${group.latest.id}&competition=${encodeURIComponent(group.latest.name)}`);
-      const data = await res.json();
-      const all: NearestMatch[] = data.success && data.matches ? data.matches : [];
-      const now = Date.now();
-      const nearest = [...all]
-        .sort((a, b) => Math.abs(new Date(a.startTime).getTime() - now) - Math.abs(new Date(b.startTime).getTime() - now))
-        .slice(0, 3);
-      setNearestMatches((prev) => ({ ...prev, [group.groupKey]: nearest }));
-    } catch (err) {
-      console.error('Error fetching nearest matches:', err);
-      setNearestMatches((prev) => ({ ...prev, [group.groupKey]: [] }));
-    } finally {
-      setMatchesLoading(null);
-    }
+    await loadPreview(group);
   };
 
   return (
@@ -134,6 +144,8 @@ export default function CompetitionsDirectoryPage() {
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-10 h-10 text-primary animate-spin" />
           </div>
+        ) : loadFailed ? (
+          <LoadFailedState title="Couldn't load competitions" onRetry={retry} />
         ) : filteredGroups.length === 0 ? (
           <div className="p-16 text-center bg-muted border border-border rounded-[32px]">
             <Trophy className="w-10 h-10 text-foreground/10 mx-auto mb-4" />
@@ -188,13 +200,24 @@ export default function CompetitionsDirectoryPage() {
                         <div className="py-4 flex justify-center">
                           <Loader2 className="w-5 h-5 text-primary animate-spin" />
                         </div>
+                      ) : previewFailed[group.groupKey] ? (
+                        <div className="py-4 text-center" role="alert">
+                          <p className="text-[10px] text-foreground/40 font-black uppercase tracking-widest mb-2">Couldn&apos;t load matches</p>
+                          <button
+                            type="button"
+                            onClick={() => loadPreview(group)}
+                            className="text-[10px] font-black uppercase tracking-widest text-primary underline"
+                          >
+                            Try again
+                          </button>
+                        </div>
                       ) : !preview || preview.length === 0 ? (
                         <p className="text-[10px] text-foreground/20 font-black uppercase tracking-widest text-center py-4">No nearby matches</p>
                       ) : (
                         preview.map((match) => (
                           <div key={match.id} className="flex items-center justify-between py-2 text-xs">
                             <span className="text-foreground/40 font-bold uppercase tracking-widest text-[10px] w-16 shrink-0">
-                              {new Date(match.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              {safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric' }, 'TBD')}
                             </span>
                             <div className="flex-1 flex items-center gap-2 min-w-0">
                               <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />

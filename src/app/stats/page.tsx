@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Trophy, Target, Zap, Home, Plane, Shield, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { BackButton } from '@/components/ui/BackButton';
+import { useResilientFetch } from '@/hooks/useResilientFetch';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 
 interface TeamStats {
     team: {
@@ -55,27 +57,18 @@ interface TeamStats {
     };
 }
 
+const isTeamStatsList = (body: unknown): body is TeamStats[] => Array.isArray(body);
+
 export default function StatsPage() {
     const [selectedSport, setSelectedSport] = useState<'Football' | 'Basketball'>('Football');
-    const [teamStats, setTeamStats] = useState<TeamStats[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        async function fetchStats() {
-            setLoading(true);
-            try {
-                const response = await fetch(`/api/teams/stats?sport=${selectedSport}`);
-                const data = await response.json();
-                setTeamStats(data);
-            } catch (error) {
-                console.error('Error fetching stats:', error);
-            } finally {
-                setLoading(false);
-            }
-        }
-
-        fetchStats();
-    }, [selectedSport]);
+    // BACKLOG-471: a failed fetch must show a retry state, never "No team statistics found".
+    // The error body used to be stored as data; the hook checks res.ok and the array shape.
+    const { data, isLoading: loading, loadError, retry } = useResilientFetch<TeamStats[]>(
+        `/api/teams/stats?sport=${selectedSport}`,
+        { validate: isTeamStatsList }
+    );
+    const teamStats = data ?? [];
+    const loadFailed = loadError !== null && data === null;
 
     if (loading) {
         return (
@@ -121,7 +114,9 @@ export default function StatsPage() {
                 </header>
 
                 {/* Stats Grid */}
-                {teamStats.length > 0 ? (
+                {loadFailed ? (
+                    <LoadFailedState title="Couldn't load team statistics" onRetry={retry} />
+                ) : teamStats.length > 0 ? (
                     <div className="space-y-6">
                         {teamStats.map((stats, index) => (
                             <motion.div

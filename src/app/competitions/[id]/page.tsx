@@ -143,6 +143,10 @@ function CompetitionHubContent() {
   const [notFound, setNotFound] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // BACKLOG-471: per-section failure flags so a failed detail fetch shows a retry
+  // instead of "No standings data available" / "No matches scheduled".
+  const [detailsFailed, setDetailsFailed] = useState({ standings: false, matches: false, brackets: false, stats: false });
+  const [detailsKey, setDetailsKey] = useState(0);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // 1. Fetch all competitions on mount, select the one this route was opened for
@@ -193,6 +197,7 @@ function CompetitionHubContent() {
     const fetchDetails = async () => {
       try {
         setLoading(true);
+        setDetailsFailed({ standings: false, matches: false, brackets: false, stats: false });
 
         // BACKLOG-287: the selected SPORT TAB (All/Football/Basketball/Track) is
         // a filter, not necessarily a real sport with its own /api/<sport>/* route
@@ -209,23 +214,41 @@ function CompetitionHubContent() {
           return;
         }
 
-        const standingsRes = await fetch(`/api/${fetchSport.toLowerCase()}/standings?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
-        const sData = await standingsRes.json();
-        if (sData.success) setStandings(sData.standings || []);
-        else setStandings([]);
+        const fetchJson = async (url: string) => {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        };
+        const failed = { standings: false, matches: false, brackets: false, stats: false };
 
-        const matchesRes = await fetch(`/api/${fetchSport.toLowerCase()}/matches?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
-        const mData = await matchesRes.json();
-        if (mData.success && mData.matches) {
-          setMatches(mData.matches);
-        } else {
+        try {
+          const sData = await fetchJson(`/api/${fetchSport.toLowerCase()}/standings?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
+          if (!sData.success) throw new Error('standings success=false');
+          setStandings(sData.standings || []);
+        } catch (err) {
+          console.error('Error fetching standings:', err);
+          failed.standings = true;
+          setStandings([]);
+        }
+
+        try {
+          const mData = await fetchJson(`/api/${fetchSport.toLowerCase()}/matches?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
+          if (!mData.success) throw new Error('matches success=false');
+          setMatches(mData.matches || []);
+        } catch (err) {
+          console.error('Error fetching matches:', err);
+          failed.matches = true;
           setMatches([]);
         }
 
-        const bracketRes = await fetch(`/api/brackets?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}`);
-        const bData = await bracketRes.json();
-        if (bData.rounds) setBrackets(bData.rounds);
-        else setBrackets([]);
+        try {
+          const bData = await fetchJson(`/api/brackets?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}`);
+          setBrackets(bData.rounds || []);
+        } catch (err) {
+          console.error('Error fetching brackets:', err);
+          failed.brackets = true;
+          setBrackets([]);
+        }
 
         // Stats tab leaderboards -- competition-scoped from the start (the
         // endpoint already supports competitionId; the global-fetch bug
@@ -234,9 +257,12 @@ function CompetitionHubContent() {
         const categories = STAT_CATEGORIES[fetchSport] || [];
         const statsResults = await Promise.all(
           categories.map((cat) =>
-            fetch(`/api/players/stats/leaders?type=${cat.type}&competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}&limit=5`)
-              .then((r) => r.json())
-              .catch(() => ({ leaders: [] }))
+            fetchJson(`/api/players/stats/leaders?type=${cat.type}&competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}&limit=5`)
+              .catch((err) => {
+                console.error('Error fetching stat leaders:', err);
+                failed.stats = true;
+                return { leaders: [] };
+              })
           )
         );
         const nextStats: Record<string, StatLeader[]> = {};
@@ -244,16 +270,18 @@ function CompetitionHubContent() {
           nextStats[cat.type] = statsResults[i]?.leaders || [];
         });
         setStatsLeaders(nextStats);
+        setDetailsFailed(failed);
 
       } catch (err) {
         console.error('Error fetching details:', err);
+        setDetailsFailed({ standings: true, matches: true, brackets: true, stats: true });
       } finally {
         setLoading(false);
       }
     };
 
     fetchDetails();
-  }, [selectedComp]);
+  }, [selectedComp, detailsKey]);
 
   const selectedGroup = selectedComp
     ? groups.find(g => g.seasons.some(s => s.id === selectedComp.id))
@@ -486,7 +514,9 @@ function CompetitionHubContent() {
               exit={{ opacity: 0, y: -20 }}
               className={standingsGroups.length > 1 ? 'space-y-8' : 'bg-muted border border-border rounded-[40px] overflow-hidden'}
             >
-              {standings.length > 0 ? (
+              {detailsFailed.standings && standings.length === 0 ? (
+                <LoadFailedState title="Couldn't load standings" onRetry={() => setDetailsKey((k) => k + 1)} />
+              ) : standings.length > 0 ? (
                 standingsGroups.length > 1 ? (
                   standingsGroups.map(({ groupName, rows }) => (
                     <div key={groupName} className="space-y-3">
@@ -537,7 +567,9 @@ function CompetitionHubContent() {
                 </p>
               )}
 
-              {matches.length > 0 ? (
+              {detailsFailed.matches && matches.length === 0 ? (
+                <LoadFailedState title="Couldn't load fixtures" onRetry={() => setDetailsKey((k) => k + 1)} />
+              ) : matches.length > 0 ? (
                 (() => {
                   // Figma groups matches under a round/stage header ("BUSA LEAGUE
                   // FOOTBALL - SEMI FINALS") rather than a flat grid. `round` is
@@ -622,7 +654,9 @@ function CompetitionHubContent() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              {brackets.length > 0 ? (
+              {detailsFailed.brackets && brackets.length === 0 ? (
+                <LoadFailedState title="Couldn't load the bracket" onRetry={() => setDetailsKey((k) => k + 1)} />
+              ) : brackets.length > 0 ? (
                 <div className="relative overflow-x-auto pb-8">
                   <div className="min-w-[1000px] relative p-8">
                     <div className="flex justify-around items-start gap-12">
@@ -683,7 +717,10 @@ function CompetitionHubContent() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-6"
             >
-              {(STAT_CATEGORIES[selectedComp?.sport || ''] || []).map((cat) => {
+              {detailsFailed.stats && Object.values(statsLeaders).every((l) => l.length === 0) && (
+                <LoadFailedState title="Couldn't load stats" onRetry={() => setDetailsKey((k) => k + 1)} />
+              )}
+              {!(detailsFailed.stats && Object.values(statsLeaders).every((l) => l.length === 0)) && (STAT_CATEGORIES[selectedComp?.sport || ''] || []).map((cat) => {
                 const leaders = statsLeaders[cat.type] || [];
                 return (
                   <div key={cat.type} className="bg-muted border border-border rounded-[32px] overflow-hidden">

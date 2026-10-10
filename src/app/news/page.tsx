@@ -17,6 +17,8 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { BackButton } from '@/components/ui/BackButton';
+import { useResilientFetch } from '@/hooks/useResilientFetch';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 
 interface NewsArticle {
     id: string;
@@ -44,47 +46,57 @@ const CATEGORIES = [
     { id: 'general', label: 'General', icon: Newspaper },
 ];
 
+interface NewsResponse {
+    news: NewsArticle[];
+}
+
+const isNewsResponse = (body: unknown): body is NewsResponse =>
+    typeof body === 'object' && body !== null && Array.isArray((body as { news?: unknown }).news);
+
 export default function NewsPage() {
-    const [news, setNews] = useState<NewsArticle[]>([]);
-    const [loading, setLoading] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [featuredNews, setFeaturedNews] = useState<NewsArticle[]>([]);
 
-    useEffect(() => {
-        fetchNews();
-    }, [selectedCategory, searchQuery]);
-
-    const fetchNews = async () => {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams();
-            if (selectedCategory === 'breaking') {
-                params.append('breaking', 'true');
-            } else if (selectedCategory !== 'all') {
-                params.append('category', selectedCategory);
-            }
-            if (searchQuery) {
-                params.append('search', searchQuery);
-            }
-            params.append('limit', '20');
-
-            const response = await fetch(`/api/news?${params.toString()}`);
-            const data = await response.json();
-            setNews(data.news || []);
-
-            // Fetch featured news separately
-            if (selectedCategory === 'all' && !searchQuery) {
-                const featuredResponse = await fetch('/api/news?featured=true&limit=3');
-                const featuredData = await featuredResponse.json();
-                setFeaturedNews(featuredData.news || []);
-            }
-        } catch (error) {
-            console.error('Error fetching news:', error);
-        } finally {
-            setLoading(false);
+    const listUrl = (() => {
+        const params = new URLSearchParams();
+        if (selectedCategory === 'breaking') {
+            params.append('breaking', 'true');
+        } else if (selectedCategory !== 'all') {
+            params.append('category', selectedCategory);
         }
-    };
+        if (searchQuery) {
+            params.append('search', searchQuery);
+        }
+        params.append('limit', '20');
+        return `/api/news?${params.toString()}`;
+    })();
+
+    // BACKLOG-471: a failed fetch must show a retry state, never "No news found".
+    const { data, isLoading: loading, loadError, retry } = useResilientFetch<NewsResponse>(
+        listUrl,
+        { validate: isNewsResponse }
+    );
+    const news = data?.news ?? [];
+    const loadFailed = loadError !== null && data === null;
+
+    // Featured strip is decorative: on failure it simply does not render (no
+    // empty-state claim is made about it), so it needs no retry UI of its own.
+    useEffect(() => {
+        if (selectedCategory !== 'all' || searchQuery) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const featuredResponse = await fetch('/api/news?featured=true&limit=3');
+                if (!featuredResponse.ok) throw new Error(`HTTP ${featuredResponse.status}`);
+                const featuredData = await featuredResponse.json();
+                if (!cancelled && Array.isArray(featuredData.news)) setFeaturedNews(featuredData.news);
+            } catch (error) {
+                console.error('Error fetching featured news:', error);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [selectedCategory, searchQuery]);
 
     const getCategoryColor = (category: string) => {
         const colors: Record<string, string> = {
@@ -202,6 +214,8 @@ export default function NewsPage() {
                             </div>
                         ))}
                     </div>
+                ) : loadFailed ? (
+                    <LoadFailedState title="Couldn't load news" onRetry={retry} />
                 ) : news.length === 0 ? (
                     <motion.div
                         initial={{ opacity: 0 }}
