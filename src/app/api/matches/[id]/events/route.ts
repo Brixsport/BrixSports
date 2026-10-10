@@ -10,6 +10,7 @@ import { SCORING_POINT_VALUES } from '@/lib/scoring';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
 import { getCurrentSeason } from '@/lib/rosterService';
+import { isValidClientEventId } from '@/lib/event-id';
 
 // Notification-reliability fix: this trigger used to fire from the logger's own
 // browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
@@ -110,6 +111,7 @@ export async function POST(
 
         const body = await request.json();
         const {
+            id: clientEventIdRaw,
             type,
             minute,
             second,
@@ -144,6 +146,32 @@ export async function POST(
                 { error: 'Match not found' },
                 { status: 404 }
             );
+        }
+
+        // BACKLOG-466 item 1: optional client-generated event id used as an
+        // idempotency key (match_events.id is the text PRIMARY KEY, so no schema
+        // change). A replay (offline-queue drain after a lost response, double
+        // submit) carrying an id that already exists for THIS match returns that
+        // row with 200 -- no insert, no score change, no side effects -- and is
+        // checked BEFORE the FINISHED lock so a replay of an already-saved event
+        // is never reported as a failure. An id that exists for a DIFFERENT match
+        // (or any invalid id) is ignored and the server generates its own.
+        const clientEventId = isValidClientEventId(clientEventIdRaw) ? clientEventIdRaw : null;
+        let adoptClientEventId = false;
+        if (clientEventId) {
+            const [existingById] = await db
+                .select()
+                .from(matchEvents)
+                .where(eq(matchEvents.id, clientEventId))
+                .limit(1);
+            if (existingById && existingById.matchId === matchId) {
+                return NextResponse.json({
+                    success: true,
+                    message: 'Duplicate submission ignored — event already recorded',
+                    event: existingById,
+                }, { status: 200 });
+            }
+            adoptClientEventId = !existingById;
         }
 
         // BACKLOG-153 item 3: no server-side write-lock existed on FINISHED matches --
@@ -187,7 +215,7 @@ export async function POST(
         let dedupHit: typeof matchEvents.$inferSelect | undefined;
 
         // Create event
-        const eventId = nanoid();
+        const eventId = adoptClientEventId && clientEventId ? clientEventId : nanoid();
         const newEvent = {
             id: eventId,
             matchId,
@@ -393,6 +421,28 @@ export async function POST(
                 newShootoutHomeScore = updated.shootoutHomeScore ?? 0;
                 newShootoutAwayScore = updated.shootoutAwayScore ?? 0;
             }
+        }).catch(async (txError) => {
+            // BACKLOG-466 item 1/6: two concurrent requests carrying the SAME client
+            // id both passed the pre-check above; the loser hits the PRIMARY KEY
+            // constraint, the whole transaction rolls back (no score change). If the
+            // winner's row now exists for this match, that is an idempotent replay,
+            // not a failure. Anything else is a real error and propagates.
+            if (adoptClientEventId && clientEventId) {
+                const [winner] = await db
+                    .select()
+                    .from(matchEvents)
+                    .where(eq(matchEvents.id, clientEventId))
+                    .limit(1);
+                if (winner && winner.matchId === matchId) {
+                    dedupHit = winner;
+                    newHomeScore = undefined;
+                    newAwayScore = undefined;
+                    newShootoutHomeScore = undefined;
+                    newShootoutAwayScore = undefined;
+                    return;
+                }
+            }
+            throw txError;
         });
 
         if (dedupHit) {

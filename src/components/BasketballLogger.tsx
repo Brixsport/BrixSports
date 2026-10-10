@@ -7,6 +7,7 @@ import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Setti
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
+import { generateClientEventId } from '@/lib/event-id';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -885,7 +886,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const made = isShotType ? (points ?? 0) > 0 : undefined;
 
         const newEvent = {
-            id: `e${events.length + 1}`,
+            // BACKLOG-466 item 1: was `e${events.length + 1}` (not unique across the
+            // match, and too short to be an idempotency key). Now also sent as the
+            // POST body `id` so the server adopts it and a queued replay is a no-op.
+            id: generateClientEventId('bk'),
             type,
             minute: getElapsedMinute(),
             second: getElapsedSecondsInPeriod(),
@@ -944,6 +948,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         // this project's own rule that logging errors must never appear to succeed
         // silently.
         const eventPayload = {
+            id: newEvent.id,
             type,
             minute: newEvent.minute,
             second: newEvent.second,

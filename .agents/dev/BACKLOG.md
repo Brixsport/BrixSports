@@ -13368,6 +13368,7 @@ consent screen (Richard: "the google auth worked, i have logged it").
 11. Two loggers on one match: atomic dedup holds (`route.ts:321-329`); the ws-server single-writer rule covers the clock only (`ws-server/index.js:222`).
 **Found sound:** FootballLogger periodic sync only adds external events and dedups; the persist catch refuses to queue near token expiry and surfaces it; token-expiry 401 on a logger POST alerts rather than silently dropping; `event:log` over the socket is ack-only server-side (viewers see events only after the DB write).
 **Related:** 107, 151, 433/436, 442, 468 (no tests for `queue-manager.ts`/`sync-manager.ts`).
+**Update 2026-10-10 (fix/logger-queue-integrity, item 1) — SHIPPED (code committed, NOT live-tested):** client temp event id is now the idempotency key. `FootballLogger.tsx` sends `id: event.id` (the `temp_*` id) and `BasketballLogger.tsx` sends a new unique `bk_*` id (was `e${n}`, not unique) in the POST body and queue payload; `events/route.ts` adopts a body `id` only if it matches `/^[A-Za-z0-9_-]{8,64}$/` (`src/lib/event-id.ts`, unit-tested), returns the existing row with 200 (no insert, no score change, no side effects, checked before the FINISHED lock) when that id already exists for this match, ignores it when it exists for another match, and treats a PRIMARY KEY loser of a concurrent same-id race as the same replay. The legacy atomic `INSERT ... SELECT ... WHERE NOT EXISTS` dedup (433/436) is untouched. Closes finding 1 and the player-less half of finding 6 server-side. No schema change.
 
 ---
 

@@ -794,6 +794,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             // 2. Persist to API
             // Hoisted so catch block can queue the same payload on network failure.
             const payload = {
+                // BACKLOG-466 item 1: the client temp id doubles as the idempotency
+                // key -- the server adopts it as match_events.id and answers a replay
+                // (queued retry after a lost response) with the existing row.
+                id: event.id,
                 type: event.type,
                 minute: event.absoluteMinute,
                 second: event.second,
