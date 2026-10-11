@@ -28,10 +28,10 @@ const PUBLIC_MATCH_FIELDS = {
 };
 
 // BACKLOG-465: fully public, identity-independent response -- safe to cache at
-// the edge. 5s fresh + 10s stale-while-revalidate keeps live scores within the
+// the edge. 2s fresh + 3s stale-while-revalidate keeps live scores within the
 // <=5s Flow C target's spirit while collapsing a burst of identical polls into
-// ~1 origin hit per 5s per distinct query string. Errors are never cached.
-const PUBLIC_CACHE_HEADERS = { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' };
+// ~1 origin hit per 2s per distinct query string. Errors are never cached.
+const PUBLIC_CACHE_HEADERS = { 'Cache-Control': 'public, s-maxage=2, stale-while-revalidate=3' };
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 // Generous on purpose: campus users share NAT egress IPs (many viewers, one IP).
 const RATE_LIMIT_MAX_PER_MINUTE = 600;
