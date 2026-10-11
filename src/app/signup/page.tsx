@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { OnboardingModal } from "@/components/OnboardingModal";
 import { getClientErrorMessage } from "@/lib/client-error";
 import { BackButton } from "@/components/ui/BackButton";
+import { BrandMark } from "@/components/BrandMark";
 
 const STRENGTH_LABELS = {
     0: "Enter Password",
@@ -187,9 +188,7 @@ export default function SignupPage() {
 
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center font-display text-3xl -skew-x-12 text-primary-foreground mx-auto mb-4 shadow-lg shadow-primary/20">
-                            B
-                        </div>
+                        <BrandMark variant="viewer" size={64} className="mx-auto mb-4 rounded-2xl shadow-lg shadow-primary/20" />
                         <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-foreground">
                             Join Brix Sport
                         </h2>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Activity, Lock, User, CheckCircle2, AlertCircle, ChevronRight, Globe, WifiOff } from 'lucide-react';
 import { MatchLoggerUI } from '@/components/MatchLoggerUI';
+import { BrandMark } from '@/components/BrandMark';
 import { BasketballLogger } from '@/components/BasketballLogger';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { FootballLogger } from '@/components/FootballLogger';
@@ -152,7 +153,7 @@ export default function LoggerPage() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[80px] -z-10"></div>
 
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-black font-display text-2xl -skew-x-12">B</div>
+            <BrandMark variant="logger" size={40} />
             <h1 className="font-display text-2xl tracking-tighter italic uppercase">Logger Access</h1>
           </div>
 
