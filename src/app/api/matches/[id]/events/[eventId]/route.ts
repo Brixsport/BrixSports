@@ -313,6 +313,15 @@ export async function DELETE(
             .where(eq(matches.id, matchId))
             .get();
 
+        // Write-lock: a logger cannot delete events of a FINISHED match (a delete reverts the score
+        // and player stats, which would defeat the lock the events POST route enforces). Admins can.
+        if (authUser.role === 'logger' && match?.status === 'FINISHED') {
+            return NextResponse.json(
+                { error: 'Match is finished and locked; only an admin can delete its events', code: 'MATCH_FINISHED_LOCKED' },
+                { status: 409 }
+            );
+        }
+
         // BUG-130: this check only ever recognized football's GOAL/PENALTY/OWN_GOAL —
         // deleting a basketball Field Goal/Three Pointer/Free Throw event removed the
         // event row but never touched matches.homeScore/awayScore, leaving a ghost
