@@ -10,6 +10,14 @@ require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const { MAX_BODY_BYTES, isAuthorizedApiKey, readBodyLimited } = require('./http-guard');
+
+// /broadcast and /infrastructure/endpoint authenticate with WS_API_KEY and FAIL CLOSED: with the variable
+// unset or empty every request is rejected (it used to be accepted: undefined !== undefined is false).
+// The socket server itself keeps running; only the Vercel -> WS HTTP calls stop until the key is set.
+if (!process.env.WS_API_KEY) {
+    console.error('[WS] WS_API_KEY is not set: POST /broadcast and POST /infrastructure/endpoint will reject every request until it is configured');
+}
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
@@ -61,16 +69,13 @@ const httpServer = http.createServer((req, res) => {
     // POST /broadcast - Allows Vercel API routes to trigger WebSocket broadcasts
     if (req.method === 'POST' && req.url === '/broadcast') {
         // Verify API key
-        const apiKey = req.headers['x-api-key'];
-        if (apiKey !== process.env.WS_API_KEY) {
+        if (!isAuthorizedApiKey(req.headers['x-api-key'], process.env.WS_API_KEY)) {
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Unauthorized' }));
             return;
         }
 
-        let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', () => {
+        readBodyLimited(req, res, MAX_BODY_BYTES, (body) => {
             try {
                 const { room, event, data, env } = JSON.parse(body);
                 // BUG-074: this endpoint is the one entry point into this shared
@@ -687,16 +692,13 @@ function handleInfrastructureEndpointUpdate(req, res) {
     }
 
     // Verify API key
-    const apiKey = req.headers['x-api-key'];
-    if (apiKey !== process.env.WS_API_KEY) {
+    if (!isAuthorizedApiKey(req.headers['x-api-key'], process.env.WS_API_KEY)) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized' }));
         return;
     }
 
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    readBodyLimited(req, res, MAX_BODY_BYTES, (body) => {
         try {
             const { path, status, responseTime, error } = JSON.parse(body);
             
