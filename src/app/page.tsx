@@ -54,7 +54,7 @@ export default function Home() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [isStale, setIsStale] = useState(false);
   const hasLoaded = useRef(false);
-  // Drives the poll cadence: 5s while any match is live, 15s otherwise.
+  // Drives the poll cadence: 3s while any match is live, 15s otherwise.
   const hasLiveRef = useRef(false);
 
   // Date Filter
@@ -236,12 +236,12 @@ export default function Home() {
       fetchAllMatches(true);
     }
 
-    // Poll every 5s while any match is live and 15s otherwise (the sport routes are edge-cached for 2s, so
+    // Poll every 3s while any match is live and 15s otherwise (the sport routes are edge-cached for 2s, so
     // this stays cheap), paused while the tab is hidden and jittered so viewers do not tick in lockstep.
     // Stopgap until a real WS subscription is wired to the homepage (BUG-020/BUG-149, BACKLOG-480).
     const stopPolling = startVisiblePolling(
       () => { fetchAllMatches(false); },
-      () => (hasLiveRef.current ? 5000 : 15000)
+      () => (hasLiveRef.current ? 3000 : 15000)
     );
     return () => stopPolling();
   }, [fetchAllMatches]);
