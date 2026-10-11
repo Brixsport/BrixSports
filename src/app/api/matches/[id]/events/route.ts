@@ -11,6 +11,7 @@ import { sendMatchEventNotification } from '@/lib/notifications/match-notificati
 import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
 import { getCurrentSeason } from '@/lib/rosterService';
 import { isValidClientEventId } from '@/lib/event-id';
+import { validateEventInput } from '@/lib/event-input';
 
 // Notification-reliability fix: this trigger used to fire from the logger's own
 // browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
@@ -112,7 +113,15 @@ export async function POST(
             }
         }
 
-        const body = await request.json();
+        let body: any;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 });
+        }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+            return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 });
+        }
         const {
             id: clientEventIdRaw,
             type,
@@ -187,6 +196,12 @@ export async function POST(
                 { error: 'Cannot log events against a finished match' },
                 { status: 409 }
             );
+        }
+
+        // Input validation (422): bad input is rejected, never stored or credited (src/lib/event-input.ts).
+        const inputError = validateEventInput({ type, minute, second, detail, teamId, made }, match);
+        if (inputError) {
+            return NextResponse.json({ error: inputError }, { status: 422 });
         }
 
         // BUG-196 / dual-logger live test (2026-09-10): duplicate-submission guard.
