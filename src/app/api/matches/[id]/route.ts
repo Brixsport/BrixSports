@@ -13,6 +13,7 @@ import { getAuthUser } from '@/lib/auth';
 import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
+import { toPublicMatchUpdate } from '@/lib/ws-public-payload';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
@@ -824,7 +825,8 @@ export async function PATCH(
         // handles both cases correctly (local global.io, or HTTP /broadcast on Railway).
         // after() rather than a bare fire-and-forget call — see events/route.ts's POST
         // handler for why (traced root cause of BUG-108/116's multi-second broadcast delay).
-        after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }));
+        // Allow-list, not a spread: updateData can carry admin-only fields (approvedBy, managerNotes, loggerId, ...).
+        after(() => broadcastToMatch(matchId, 'match:updated', toPublicMatchUpdate(matchId, updateData)));
 
         // BACKLOG-097: standings/team-record recalculation, wired into the FINISHED
         // transition — see standingsService.ts for why this is safe to call more than

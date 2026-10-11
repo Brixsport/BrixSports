@@ -12,6 +12,7 @@ import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
 import { getCurrentSeason } from '@/lib/rosterService';
 import { isValidClientEventId } from '@/lib/event-id';
 import { validateEventInput } from '@/lib/event-input';
+import { toPublicMatchEvent } from '@/lib/ws-public-payload';
 
 // Notification-reliability fix: this trigger used to fire from the logger's own
 // browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
@@ -498,7 +499,8 @@ export async function POST(
         // alive until the broadcast settles, without delaying the response itself.
         // broadcast()'s own try/catch already swallows failures, so this can't fail
         // event creation.
-        after(() => broadcastMatchEvent(matchId, newEvent));
+        // Public room: broadcast without logger identity (same rule as the REST GET; src/lib/ws-public-payload.ts).
+        after(() => broadcastMatchEvent(matchId, toPublicMatchEvent(newEvent)));
 
         if (newHomeScore !== undefined && newAwayScore !== undefined) {
             after(() => broadcastScoreUpdate(matchId, newHomeScore!, newAwayScore!));
