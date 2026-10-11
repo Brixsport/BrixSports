@@ -20,7 +20,7 @@ import { isFeatureEnabled } from "@/lib/featureFlags";
 
 export const metadata: Metadata = {
   // Without this, Next.js resolves relative OG/Twitter image URLs (the root
-  // layout's own "/assets/Logos/BRIX-SPORT-LOGO.png" included) against
+  // layout's own "/assests/Logos/BRIX-SPORT-LOGO.png" included) against
   // "http://localhost:3000" instead of the real domain -- harmless in dev,
   // but wrong for any shared link once deployed (BACKLOG-189, surfaced by a
   // build warning while wiring the new per-page matches/teams/players/news metadata).
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
     description: "Real-time scoring and sports management for Nigerian universities. Follow NUGA, NPUGA, BUSA LEAGUE, BUCS, and campus sports competitions.",
     images: [
       {
-        url: "/assets/Logos/BRIX-SPORT-LOGO.png",
+        url: "/assests/Logos/BRIX-SPORT-LOGO.png",
         width: 1200,
         height: 630,
         alt: "BRIXSPORTS - Nigerian University Sports",
@@ -81,7 +81,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "BRIXSPORTS | Nigerian University Sports Live",
     description: "Real-time scoring and sports management for Nigerian universities.",
-    images: ["/assets/Logos/BRIX-SPORT-LOGO.png"],
+    images: ["/assests/Logos/BRIX-SPORT-LOGO.png"],
     creator: "@brixsports",
   },
   alternates: {
@@ -155,7 +155,7 @@ export default async function RootLayout({
                   "url": "https://brixsports.com",
                   "logo": {
                     "@type": "ImageObject",
-                    "url": "https://brixsports.com/assets/Logos/BRIX-SPORT-LOGO.png",
+                    "url": "https://brixsports.com/assests/Logos/BRIX-SPORT-LOGO.png",
                     "width": 512,
                     "height": 512
                   },
