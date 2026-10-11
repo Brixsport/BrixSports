@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Mail, Lock, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { BackButton } from "@/components/ui/BackButton";
+import { safeCallbackPath } from "@/lib/safe-redirect";
 
 const formSchema = z.object({
     email: z.string().email({
@@ -101,7 +102,9 @@ function LoginPageContent() {
             });
 
             // Redirect to callbackUrl, home or previous page
-            const callbackUrl = searchParams.get("callbackUrl") || "/";
+            // Same-origin paths only: a `javascript:` or absolute/protocol-relative URL here would run
+            // in-origin (the JWT is in localStorage) or redirect off-site.
+            const callbackUrl = safeCallbackPath(searchParams.get("callbackUrl"));
             setTimeout(() => {
                 window.location.href = callbackUrl;
             }, 1000);
