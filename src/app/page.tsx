@@ -18,6 +18,8 @@ import LiveMatchStatus from '@/components/LiveMatchStatus';
 import AdBanner from '@/components/ads/AdBanner';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { startVisiblePolling } from '@/lib/visible-poll';
+import { mergeLiveScores } from '@/lib/live-overlay';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
@@ -53,6 +55,10 @@ export default function Home() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [isStale, setIsStale] = useState(false);
   const hasLoaded = useRef(false);
+  // True while any match in state is LIVE: gates the 3s live-score overlay poll.
+  const hasLiveRef = useRef(false);
+  // Mirror of `matches` for the overlay poll, which merges into the latest list without re-subscribing.
+  const matchesRef = useRef<Match[]>([]);
 
   // Date Filter
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -200,6 +206,8 @@ export default function Home() {
       }
 
       setMatches(allMatches);
+      matchesRef.current = allMatches;
+      hasLiveRef.current = allMatches.some((m: any) => m.status === 'LIVE');
       hasLoaded.current = true;
       setLoadFailed(false);
       setIsStale(false);
@@ -215,6 +223,29 @@ export default function Home() {
     }
   }, []);
 
+  // BACKLOG-480: while a match is live, patch its score/status from the tiny, edge-cacheable
+  // /api/live-matches every ~3s. The full lists above come from the heavy sport routes, whose edge
+  // cache revalidates slowly (measured median 7.0s from a logger's POST to the card changing, vs 4.2s for
+  // /live which reads the small endpoint). A match that finished or a new live match triggers an immediate
+  // full reload; the 15s full poll stays the source of truth.
+  const refreshLiveOverlay = useCallback(async () => {
+    if (!hasLiveRef.current) return;
+    try {
+      const res = await fetch('/api/live-matches');
+      if (!res.ok) return;
+      const live = await res.json();
+      if (!Array.isArray(live)) return;
+      const { next, changed, needsFullRefresh } = mergeLiveScores(matchesRef.current as any[], live);
+      if (changed) {
+        matchesRef.current = next as Match[];
+        setMatches(next as Match[]);
+      }
+      if (needsFullRefresh) fetchAllMatches(false);
+    } catch {
+      // The 15s full poll is the source of truth; an overlay failure must never surface as an error.
+    }
+  }, [fetchAllMatches]);
+
   useEffect(() => {
     // BACKLOG-387: serve a fresh-enough cache immediately (no skeleton) on
     // remount, then silently revalidate in the background -- covers the
@@ -224,6 +255,8 @@ export default function Home() {
     const isFresh = matchesCache && (Date.now() - matchesCache.timestamp) < MATCHES_CACHE_TTL_MS;
     if (isFresh) {
       setMatches(matchesCache!.matches);
+      matchesRef.current = matchesCache!.matches;
+      hasLiveRef.current = matchesCache!.matches.some((m: any) => m.status === 'LIVE');
       hasLoaded.current = true;
       setLoading(false);
       fetchAllMatches(false);
@@ -231,11 +264,13 @@ export default function Home() {
       fetchAllMatches(true);
     }
 
-    // Poll every 15s -- stopgap until a real WS subscription is wired to the
-    // homepage, matching /live/page.tsx's existing pattern (BUG-020/BUG-149).
-    const interval = setInterval(() => fetchAllMatches(false), 15000);
-    return () => clearInterval(interval);
-  }, [fetchAllMatches]);
+    // Full lists every 15s, and the live-score overlay every 3s while a match is live. Both pause while the
+    // tab is hidden and are jittered so viewers do not tick in lockstep. Stopgap until a real WS
+    // subscription is wired to the homepage (BUG-020/BUG-149, BACKLOG-480).
+    const stopFullPoll = startVisiblePolling(() => { fetchAllMatches(false); }, 15000);
+    const stopOverlayPoll = startVisiblePolling(() => { refreshLiveOverlay(); }, 3000);
+    return () => { stopFullPoll(); stopOverlayPoll(); };
+  }, [fetchAllMatches, refreshLiveOverlay]);
 
   // Same-tab fast-path: a logger on this same device gets an instant refresh
   // (plus a notification) without waiting for the next poll tick. Remote

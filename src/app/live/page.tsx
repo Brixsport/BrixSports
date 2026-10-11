@@ -25,10 +25,13 @@ interface Match {
 const isMatchList = (body: unknown): body is Match[] => Array.isArray(body);
 
 export default function LiveCenter() {
-    // Poll every 15s — stopgap until WebSocket subscription is wired to the public viewer (BUG-020)
+    // Poll every 3s (paused while the tab is hidden) from the edge-cacheable /api/live-matches, which returns
+    // the LIVE matches only -- was 15s against the uncached, session-dependent /api/matches (BACKLOG-480).
+    // Measured on a preview with a warm cache: a 5s cadence gave a 5.7s median and 8.3s worst case from the
+    // logger's POST to the score changing on screen; the poll interval is the dominant term.
     const { data, isLoading: loading, isStale, loadError, retry } = useResilientFetch<Match[]>(
-        '/api/matches?status=LIVE',
-        { validate: isMatchList, pollMs: 15000 }
+        '/api/live-matches',
+        { validate: isMatchList, pollMs: 3000 }
     );
     const liveMatches = data ?? [];
     const loadFailed = loadError !== null && data === null;

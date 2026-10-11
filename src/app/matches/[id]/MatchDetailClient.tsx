@@ -5,6 +5,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigat
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWebSocket, useMatchEvents, useMatchTimer } from '@/hooks/useWebSocket';
 import { useToast } from '@/hooks/useToast';
+import { startVisiblePolling } from '@/lib/visible-poll';
 import { ToastContainer } from '@/components/admin/Toast';
 import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
@@ -320,8 +321,8 @@ export default function MatchDetailClient() {
         const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (isConnected || !isLiveStatus) return;
 
-        const interval = setInterval(() => fetchMatchData(true), 10000);
-        return () => clearInterval(interval);
+        // Paused while the tab is hidden, jittered, and an immediate refetch when it becomes visible again.
+        return startVisiblePolling(() => { fetchMatchData(true); }, 10000);
     }, [isConnected, matchData?.match?.status]);
 
     // BUG-108: low-frequency reconciliation poll, runs even while WS IS connected —
@@ -336,8 +337,7 @@ export default function MatchDetailClient() {
         const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (!isConnected || !isLiveStatus) return;
 
-        const interval = setInterval(() => fetchMatchData(true), 25000);
-        return () => clearInterval(interval);
+        return startVisiblePolling(() => { fetchMatchData(true); }, 25000);
     }, [isConnected, matchData?.match?.status]);
 
     // On WS reconnect: silently sync missed events from DB once.

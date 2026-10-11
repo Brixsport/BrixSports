@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { startVisiblePolling } from '@/lib/visible-poll';
 
 export type ResilientLoadError = 'not-found' | 'load-failed';
 
@@ -68,13 +69,14 @@ export function useResilientFetch<T>(url: string, options: UseResilientFetchOpti
         setIsLoading(true);
 
         load();
-        const interval = pollMs ? setInterval(load, pollMs) : undefined;
+        // Jittered, paused while the tab is hidden, immediate refetch when it becomes visible again.
+        const stopPolling = pollMs ? startVisiblePolling(load, pollMs) : undefined;
         const onOnline = () => { load(); };
         window.addEventListener('online', onOnline);
 
         return () => {
             requestId.current++;
-            if (interval) clearInterval(interval);
+            if (stopPolling) stopPolling();
             window.removeEventListener('online', onOnline);
         };
     }, [load, pollMs]);

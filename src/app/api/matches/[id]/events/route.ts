@@ -571,14 +571,17 @@ export async function POST(
             });
         }
 
-        // Update player stats for competitive matches only — friendlies and shootout events do not count
+        // Update player stats for competitive matches only — friendlies and shootout events do not count.
+        // Runs AFTER the response (after()): the stats upsert is 2-3 sequential Turso round trips and used to
+        // delay both the logger's ack and the viewers' broadcast, which also only starts once the response is
+        // sent (BACKLOG-480 item 4). updatePlayerStats already swallows errors and reports them to Sentry.
         if (playerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
-            await updatePlayerStats(match.sport, playerId, type, match.competitionId, value, made);
+            after(() => updatePlayerStats(match.sport, playerId, type, match.competitionId, value, made));
         }
 
         // Penalty Saved: credit the keeper's saves stat via relatedPlayerId (null-check — keeper is optional)
         if (upperType === 'PENALTY_SAVED' && relatedPlayerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
-            await updatePlayerStats(match.sport, relatedPlayerId, 'Save', match.competitionId, value);
+            after(() => updatePlayerStats(match.sport, relatedPlayerId, 'Save', match.competitionId, value));
         }
 
         // BACKLOG-255: no longer auto-calculating ratings on every single live event.
