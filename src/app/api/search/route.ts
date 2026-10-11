@@ -15,7 +15,8 @@ import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 function playerMatchesQuery(
     player: Awaited<ReturnType<typeof enrichPlayersWithAffiliations>>[number],
-    query: string
+    query: string,
+    includeEmail = false
 ) {
     const normalizedQuery = query.toLowerCase();
     const primaryTeam = getPrimaryTeam(player);
@@ -23,7 +24,9 @@ function playerMatchesQuery(
     const searchTerms = [
         player.name,
         player.jerseyName,
-        player.email,
+        // Email is matched for admins only: matching it for anonymous callers confirms whether a
+        // given address belongs to a player (email oracle) even though the response strips it.
+        ...(includeEmail ? [player.email] : []),
         institutionalData.university,
         institutionalData.college,
         institutionalData.department,
@@ -120,7 +123,7 @@ export async function GET(request: NextRequest) {
                 like(players.university, searchPattern),
                 like(players.college, searchPattern),
                 like(players.department, searchPattern),
-                like(players.email, searchPattern),
+                ...(isAdmin ? [like(players.email, searchPattern)] : []),
             );
 
             const candidatePlayers = await db
@@ -141,7 +144,7 @@ export async function GET(request: NextRequest) {
                     // Matched against email/memberships/etc. before the public strip
                     // below — search must still work over fields a non-admin caller
                     // never sees in the response (BACKLOG-167).
-                    return playerMatchesQuery(player, query);
+                    return playerMatchesQuery(player, query, isAdmin);
                 })
                 .slice(0, limit);
 
