@@ -4,6 +4,7 @@ import { staffComms, users } from '@/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 
 export async function GET(request: NextRequest) {
     try {
@@ -19,6 +20,12 @@ export async function GET(request: NextRequest) {
 
         if (!matchId) {
             return NextResponse.json({ error: 'Match ID is required' }, { status: 400 });
+        }
+
+        // Staff comms are for staff only: admins, and loggers assigned to this match. A valid
+        // session alone (e.g. a self-registered fan account) is not enough.
+        if (authUser.role !== 'admin' && !(authUser.role === 'logger' && (await isLoggerAssigned(matchId, authUser.id)))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const comms = await db
@@ -68,6 +75,10 @@ export async function POST(request: NextRequest) {
 
         if (!matchId || !content) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
+        if (authUser.role !== 'admin' && !(authUser.role === 'logger' && (await isLoggerAssigned(matchId, authUser.id)))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const newComm = {
