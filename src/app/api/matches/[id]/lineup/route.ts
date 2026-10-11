@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // GET /api/matches/[id]/lineup - Get lineup for a match
@@ -77,6 +78,9 @@ export async function POST(
 
         const params = await props.params;
         const matchId = params.id;
+        if (authUser.role === 'logger' && !(await isLoggerAssigned(matchId, authUser.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
         const body = await request.json();
         const { team, lineup } = body; // team: 'home' | 'away'
 
@@ -223,6 +227,9 @@ export async function DELETE(
 
         const params = await props.params;
         const matchId = params.id;
+        if (authUser.role === 'logger' && !(await isLoggerAssigned(matchId, authUser.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
         const { searchParams } = new URL(request.url);
         const team = searchParams.get('team'); // 'home' | 'away'
 

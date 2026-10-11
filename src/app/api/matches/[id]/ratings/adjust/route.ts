@@ -4,6 +4,7 @@ import { playerRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
@@ -308,6 +309,9 @@ export async function POST(
         }
 
         const { id: matchId } = await params;
+        if (user.role === 'logger' && !(await isLoggerAssigned(matchId, user.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
         const body = await request.json();
         const { ratings: adjustedRatings } = body;
 

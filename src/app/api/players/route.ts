@@ -18,7 +18,7 @@ async function withAverageRating<T extends { id: string }>(list: T[]): Promise<(
     return list.map((p) => ({ ...p, averageRating: summaries.get(p.id)?.averageRating ?? null }));
 }
 
-function playerMatchesSearch(player: EnrichedPlayer, query: string) {
+function playerMatchesSearch(player: EnrichedPlayer, query: string, includeEmail = false) {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) {
         return true;
@@ -30,7 +30,8 @@ function playerMatchesSearch(player: EnrichedPlayer, query: string) {
         player.name,
         player.jerseyName,
         player.id,
-        player.email,
+        // Admin-only match field (email oracle otherwise); see /api/search.
+        ...(includeEmail ? [player.email] : []),
         institutionalData.university,
         institutionalData.college,
         institutionalData.department,
@@ -153,7 +154,7 @@ export async function GET(request: Request) {
             // Matched against email/memberships/etc. BEFORE the public strip below —
             // search must still work over fields a non-admin caller never sees in the
             // response (BACKLOG-167). Stripping happens only at the return boundary.
-            enrichedPlayers = enrichedPlayers.filter((player) => playerMatchesSearch(player, search));
+            enrichedPlayers = enrichedPlayers.filter((player) => playerMatchesSearch(player, search, isAdmin));
         }
 
         const total = enrichedPlayers.length;

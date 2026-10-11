@@ -625,6 +625,17 @@ export async function PATCH(
             if (authUser.role === 'logger' && !LOGGER_ALLOWED_STATUSES.includes(body.status)) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
             }
+            // A logger cannot re-open a finished match (write-lock): only an admin can move a
+            // FINISHED match back to LIVE. Re-sending FINISHED (a retried finish) stays allowed.
+            if (authUser.role === 'logger' && body.status !== 'FINISHED') {
+                const [current] = await db.select({ status: matches.status }).from(matches).where(eq(matches.id, matchId)).limit(1);
+                if (current?.status === 'FINISHED') {
+                    return NextResponse.json(
+                        { error: 'Match is finished and locked; only an admin can re-open it', code: 'MATCH_FINISHED_LOCKED' },
+                        { status: 409 }
+                    );
+                }
+            }
         }
 
         // If assigning a logger, validate that the match isn't already assigned to another logger
@@ -733,20 +744,25 @@ export async function PATCH(
         // admin-attribution field.
         if (body.loggerId !== undefined && authUser.role === 'admin') updateData.loggerId = body.loggerId;
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
-        if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
 
-        // Additional fields for match details editing
-        if (body.sport) updateData.sport = body.sport;
-        if (body.homeTeamId) updateData.homeTeamId = body.homeTeamId;
-        if (body.awayTeamId) updateData.awayTeamId = body.awayTeamId;
-        if (body.startTime) updateData.startTime = new Date(body.startTime);
-        if (body.venue) updateData.venue = body.venue;
-        if (body.competition) updateData.competition = body.competition;
-        if (body.competitionId) updateData.competitionId = body.competitionId;
-        if (body.competitionLevel) updateData.competitionLevel = body.competitionLevel;
-        if (body.matchType) updateData.matchType = body.matchType;
-        if (body.friendlyType) updateData.friendlyType = body.friendlyType;
-        if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
+        // Structural match fields (teams, sport, competition, match type, lineups, start time,
+        // venue) are admin-only. An assigned logger's PATCH is limited to live state
+        // (status, currentPeriod, minute, extraTime) and `stats` (sent with the FINISH action);
+        // the loggers never send the fields below.
+        if (authUser.role === 'admin') {
+            if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
+            if (body.sport) updateData.sport = body.sport;
+            if (body.homeTeamId) updateData.homeTeamId = body.homeTeamId;
+            if (body.awayTeamId) updateData.awayTeamId = body.awayTeamId;
+            if (body.startTime) updateData.startTime = new Date(body.startTime);
+            if (body.venue) updateData.venue = body.venue;
+            if (body.competition) updateData.competition = body.competition;
+            if (body.competitionId) updateData.competitionId = body.competitionId;
+            if (body.competitionLevel) updateData.competitionLevel = body.competitionLevel;
+            if (body.matchType) updateData.matchType = body.matchType;
+            if (body.friendlyType) updateData.friendlyType = body.friendlyType;
+            if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
+        }
         // Approval fields are admin-only — loggers must not write these
         if (authUser.role === 'admin') {
             if (body.approvalStatus) {

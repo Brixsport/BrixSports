@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getMatchConfig } from '@/lib/matchConfig';
 import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
@@ -26,6 +27,9 @@ export async function POST(
 
         const params = await props.params;
         const matchId = params.id;
+        if (authUser.role === 'logger' && !(await isLoggerAssigned(matchId, authUser.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
         const body = await request.json();
         const { team } = body; // 'home' | 'away'
 

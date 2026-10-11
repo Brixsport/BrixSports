@@ -194,18 +194,30 @@ export async function PATCH(
         const body = await request.json();
         const { type, minute, second, teamId, playerId, relatedPlayerId, detail, period } = body;
 
-        // Verify event exists
+        // Verify event exists AND belongs to the match in the URL (the assignment check above is
+        // against the URL match, so an event of another match must not be reachable through it).
         const event = await db
             .select()
             .from(matchEvents)
             .where(eq(matchEvents.id, eventId))
             .get();
 
-        if (!event) {
+        if (!event || event.matchId !== matchId) {
             return NextResponse.json(
                 { error: 'Event not found' },
                 { status: 404 }
             );
+        }
+
+        // Write-lock: a logger cannot edit events of a FINISHED match (admins can).
+        if (authUser.role === 'logger') {
+            const [owner] = await db.select({ status: matches.status }).from(matches).where(eq(matches.id, matchId)).limit(1);
+            if (owner?.status === 'FINISHED') {
+                return NextResponse.json(
+                    { error: 'Match is finished and locked; only an admin can edit its events', code: 'MATCH_FINISHED_LOCKED' },
+                    { status: 409 }
+                );
+            }
         }
 
         // Update event — explicit allowlist only. matchId, loggerId, createdAt, isEyePoint, id are immutable.
@@ -221,7 +233,7 @@ export async function PATCH(
                 ...(detail !== undefined && { detail }),
                 ...(period !== undefined && { period }),
             })
-            .where(eq(matchEvents.id, eventId));
+            .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)));
 
         // Get updated event
         const updatedEvent = await db

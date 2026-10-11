@@ -4,6 +4,7 @@ import { playerRatings } from '@/db/schema-ratings';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 
 /**
  * POST /api/matches/[id]/ratings/initialize
@@ -23,6 +24,9 @@ export async function POST(
         }
 
         const { id: matchId } = await params;
+        if (user.role === 'logger' && !(await isLoggerAssigned(matchId, user.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
 
         // Get match details
         const match = await db
