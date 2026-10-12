@@ -28,11 +28,21 @@ import { useNotifications } from '@/components/Notifications';
 import { getPushService } from '@/lib/notifications/push-service';
 import { getDeviceId } from '@/lib/notifications/device-id';
 import { displayMinute } from '@/lib/eventMinute';
+import { TeamLogo, isValidLogo } from '@/lib/utils/team-logo';
 
 // BACKLOG-150: which matchIds this device has an active anonymous "notify me"
 // subscription for. localStorage is the right store here -- device-scoped by
 // definition, no account to persist server-side preferences against.
 const NOTIFY_STORAGE_KEY = 'brixsports_notify_matches';
+// Team logo for the match header: the plain image when there is a usable logo, otherwise the
+// shared initials tile, so an empty logo never renders a broken <img src="">.
+function HeaderTeamLogo({ logo, name, compact, className }: { logo?: string | null; name: string; compact: boolean; className: string }) {
+    if (isValidLogo(logo)) {
+        return <img src={logo!} alt={name} className={className} />;
+    }
+    return <TeamLogo logo={null} name={name} size={compact ? 'sm' : 'lg'} />;
+}
+
 function getNotifiedMatchIds(): Set<string> {
     try {
         return new Set(JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY) || '[]'));
@@ -761,9 +771,10 @@ export default function MatchDetailClient() {
                     <div className="flex items-center justify-between gap-4">
                         {/* Home Team */}
                         <div className="flex items-center gap-3 flex-1">
-                            <img
-                                src={match.homeTeam.logo}
-                                alt={match.homeTeam.name}
+                            <HeaderTeamLogo
+                                logo={match.homeTeam.logo}
+                                name={match.homeTeam.name}
+                                compact={isCompact}
                                 className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                             {/* Star sits outside the sm:block name wrapper below -- it's an
@@ -862,9 +873,10 @@ export default function MatchDetailClient() {
                             >
                                 <Star className={`w-4 h-4 ${isFavoriteTeam(match.awayTeam.id) ? 'fill-current' : ''}`} />
                             </button>
-                            <img
-                                src={match.awayTeam.logo}
-                                alt={match.awayTeam.name}
+                            <HeaderTeamLogo
+                                logo={match.awayTeam.logo}
+                                name={match.awayTeam.name}
+                                compact={isCompact}
                                 className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                         </div>
