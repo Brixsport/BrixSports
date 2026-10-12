@@ -15,10 +15,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchReminders, matches, teams, pushSubscriptions, users, notificationSendLog } from '@/db/schema';
-import { eq, and, lte, inArray } from 'drizzle-orm';
+import { eq, and, lte, inArray, asc } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import webpush from 'web-push';
 import { logNotificationSend, sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+import { collectAcrossPages, isStartWithinWindow } from '@/lib/notifications/reminder-window';
 
 // Item 9: lineup-not-published reminder -- matches kicking off within this
 // window with either team's lineup still not marked `status: 'published'`
@@ -159,22 +160,37 @@ async function runReminderCheck() {
     };
 }
 
+// startTime is a plain text column, not a comparable timestamp -- the window is
+// applied in JS after parsing. A single limited query would only ever see the
+// first N upcoming rows, so imminent matches beyond that were silently missed:
+// page through every UPCOMING match instead (bounded by MAX_UPCOMING_PAGES).
+const UPCOMING_PAGE_SIZE = 500;
+const MAX_UPCOMING_PAGES = 20;
+
+async function findUpcomingMatchesInWindow(now: Date, windowMs: number) {
+    const { rows, truncated } = await collectAcrossPages(
+        (offset, pageSize) =>
+            db
+                .select()
+                .from(matches)
+                .where(eq(matches.status, 'UPCOMING'))
+                .orderBy(asc(matches.id))
+                .limit(pageSize)
+                .offset(offset),
+        (m) => isStartWithinWindow(m.startTime, now, windowMs),
+        UPCOMING_PAGE_SIZE,
+        MAX_UPCOMING_PAGES,
+    );
+    if (truncated) {
+        console.error(`[Reminder Checker] More than ${UPCOMING_PAGE_SIZE * MAX_UPCOMING_PAGES} UPCOMING matches; some were not checked`);
+    }
+    return rows;
+}
+
 async function checkLineupNotPublished() {
     const now = new Date();
-    const windowEnd = new Date(now.getTime() + LINEUP_WARNING_WINDOW_MS);
 
-    const upcomingMatches = await db
-        .select()
-        .from(matches)
-        .where(eq(matches.status, 'UPCOMING'))
-        .limit(MAX_REMINDERS_PER_RUN);
-
-    // startTime is a plain text column, not a comparable timestamp -- filter
-    // in JS after parsing rather than relying on lexical SQL comparison.
-    const dueSoon = upcomingMatches.filter((m) => {
-        const start = new Date(m.startTime);
-        return !isNaN(start.getTime()) && start >= now && start <= windowEnd;
-    });
+    const dueSoon = await findUpcomingMatchesInWindow(now, LINEUP_WARNING_WINDOW_MS);
 
     let notified = 0;
     for (const match of dueSoon) {
@@ -248,18 +264,8 @@ async function checkLineupNotPublished() {
 
 async function checkMatchStartingSoon() {
     const now = new Date();
-    const windowEnd = new Date(now.getTime() + STARTING_SOON_WINDOW_MS);
 
-    const upcomingMatches = await db
-        .select()
-        .from(matches)
-        .where(eq(matches.status, 'UPCOMING'))
-        .limit(MAX_REMINDERS_PER_RUN);
-
-    const dueSoon = upcomingMatches.filter((m) => {
-        const start = new Date(m.startTime);
-        return !isNaN(start.getTime()) && start >= now && start <= windowEnd;
-    });
+    const dueSoon = await findUpcomingMatchesInWindow(now, STARTING_SOON_WINDOW_MS);
 
     let notified = 0;
     for (const match of dueSoon) {
