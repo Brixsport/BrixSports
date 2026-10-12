@@ -11,7 +11,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { MAX_BODY_BYTES, isAuthorizedApiKey, readBodyLimited } = require('./http-guard');
-const { isValidId, asObject, getMatchId, guarded, canJoinRoom } = require('./payload-guard');
+const { isValidId, asObject, getMatchId, guarded, canJoinRoom, finishedMatchId } = require('./payload-guard');
 
 // One bad packet or stray rejection must not take down every connected viewer and logger (and wipe
 // the in-memory clock state with them): log it and keep serving.
@@ -97,7 +97,18 @@ const httpServer = http.createServer((req, res) => {
                 if (room && event) {
                     const scopedRoom = `${scopedEnv}:${room}`;
                     io.to(scopedRoom).emit(event, { ...data, timestamp: Date.now() });
-                    console.log(`[Broadcast API] ${event} → ${scopedRoom}`);                } else if (event) {
+                    console.log(`[Broadcast API] ${event} → ${scopedRoom}`);
+
+                    // A finished match no longer needs its cached clock or clock owner. Left in
+                    // place they are replayed to every new subscriber (a FINISHED match flashes
+                    // LIVE again) and are never freed. matchTimes is keyed by the env-scoped id
+                    // (room(matchId) in the connection handler), clockAuthority by the bare id.
+                    const doneMatchId = finishedMatchId(room, event, data);
+                    if (doneMatchId) {
+                        matchTimes.delete(`${scopedEnv}:${doneMatchId}`);
+                        clockAuthority.delete(doneMatchId);
+                    }
+                } else if (event) {
                     // Global broadcast — scoped to the caller's environment, not truly global
                     io.to(scopedEnv).emit(event, { ...data, timestamp: Date.now() });
                     console.log(`[Broadcast API] ${event} → ${scopedEnv} (global)`);

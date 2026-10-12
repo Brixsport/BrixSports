@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { MAX_ID_LENGTH, MAX_ROOMS_PER_SOCKET, isValidId, asObject, getMatchId, guarded, canJoinRoom } =
+const { MAX_ID_LENGTH, MAX_ROOMS_PER_SOCKET, isValidId, asObject, getMatchId, guarded, canJoinRoom, finishedMatchId } =
     require('../../ws-server/payload-guard.js');
 
 describe('isValidId', () => {
@@ -84,5 +84,25 @@ describe('canJoinRoom', () => {
     it('always allows re-joining a room the socket is already in', () => {
         const rooms = new Set<string>(Array.from({ length: MAX_ROOMS_PER_SOCKET }, (_, i) => `r${i}`));
         expect(canJoinRoom(rooms, 'r3')).toBe(true);
+    });
+});
+
+describe('finishedMatchId', () => {
+    it('returns the match id for a FINISHED match:updated or match:status:changed', () => {
+        expect(finishedMatchId('match:m1', 'match:updated', { matchId: 'm1', status: 'FINISHED' })).toBe('m1');
+        expect(finishedMatchId('match:m1', 'match:status:changed', { matchId: 'm1', status: 'FINISHED' })).toBe('m1');
+    });
+
+    it('falls back to the room name when the payload has no matchId', () => {
+        expect(finishedMatchId('match:m2', 'match:updated', { status: 'FINISHED' })).toBe('m2');
+    });
+
+    it('returns null for any other status, event, or malformed input', () => {
+        expect(finishedMatchId('match:m1', 'match:updated', { matchId: 'm1', status: 'LIVE' })).toBeNull();
+        expect(finishedMatchId('match:m1', 'event:new', { matchId: 'm1', status: 'FINISHED' })).toBeNull();
+        expect(finishedMatchId('match:m1', 'match:updated', undefined)).toBeNull();
+        expect(finishedMatchId('match:m1', 'match:updated', null)).toBeNull();
+        expect(finishedMatchId(null, 'match:updated', { status: 'FINISHED' })).toBeNull();
+        expect(finishedMatchId('competition:c1', 'match:updated', { status: 'FINISHED' })).toBeNull();
     });
 });

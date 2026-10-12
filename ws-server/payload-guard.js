@@ -55,6 +55,21 @@ function canJoinRoom(rooms, roomName, max = MAX_ROOMS_PER_SOCKET) {
     return rooms.has(roomName) || rooms.size < max;
 }
 
+/**
+ * For /broadcast: the match id whose cached clock state should be dropped, or null.
+ * A FINISHED status arrives either as a `match:updated` or a `match:status:changed` broadcast.
+ */
+function finishedMatchId(room, event, data) {
+    if (event !== 'match:updated' && event !== 'match:status:changed') return null;
+    if (!isPlainObject(data) || data.status !== 'FINISHED') return null;
+    if (isValidId(data.matchId)) return data.matchId;
+    if (typeof room === 'string' && room.startsWith('match:')) {
+        const id = room.slice('match:'.length);
+        if (isValidId(id)) return id;
+    }
+    return null;
+}
+
 module.exports = {
     MAX_ID_LENGTH,
     MAX_ROOMS_PER_SOCKET,
@@ -63,4 +78,5 @@ module.exports = {
     getMatchId,
     guarded,
     canJoinRoom,
+    finishedMatchId,
 };
