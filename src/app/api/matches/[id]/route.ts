@@ -21,6 +21,7 @@ import { advanceBracketForMatch } from '@/lib/bracketService';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { isFinishedLockViolation } from '@/lib/match-finished-lock';
 import { safeParseEventValue } from '@/lib/eventValue';
 
 export async function GET(
@@ -626,16 +627,22 @@ export async function PATCH(
             if (authUser.role === 'logger' && !LOGGER_ALLOWED_STATUSES.includes(body.status)) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
             }
-            // A logger cannot re-open a finished match (write-lock): only an admin can move a
-            // FINISHED match back to LIVE. Re-sending FINISHED (a retried finish) stays allowed.
-            if (authUser.role === 'logger' && body.status !== 'FINISHED') {
-                const [current] = await db.select({ status: matches.status }).from(matches).where(eq(matches.id, matchId)).limit(1);
-                if (current?.status === 'FINISHED') {
-                    return NextResponse.json(
-                        { error: 'Match is finished and locked; only an admin can re-open it', code: 'MATCH_FINISHED_LOCKED' },
-                        { status: 409 }
-                    );
-                }
+        }
+
+        // A logger cannot re-open a finished match (write-lock): only an admin can move a
+        // FINISHED match back to LIVE or change its period/clock. Re-sending FINISHED (a
+        // retried finish) stays allowed. See isFinishedLockViolation for the exact rules.
+        if (
+            authUser.role === 'logger' &&
+            (body.status !== undefined || body.currentPeriod !== undefined ||
+                body.minute !== undefined || body.extraTime !== undefined)
+        ) {
+            const [current] = await db.select({ status: matches.status }).from(matches).where(eq(matches.id, matchId)).limit(1);
+            if (isFinishedLockViolation({ role: authUser.role, currentStatus: current?.status, body })) {
+                return NextResponse.json(
+                    { error: 'Match is finished and locked; only an admin can re-open it', code: 'MATCH_FINISHED_LOCKED' },
+                    { status: 409 }
+                );
             }
         }
 
