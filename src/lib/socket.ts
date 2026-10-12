@@ -8,6 +8,7 @@
 import { Server as SocketIOServer } from 'socket.io';
 import * as Sentry from '@sentry/nextjs';
 import { env as appEnv } from './env';
+import { createScoreVersionClock } from './score-version';
 
 // Extend global namespace to include io
 declare global {
@@ -137,6 +138,13 @@ export function broadcastMatchEvent(matchId: string, event: any): Promise<void> 
     });
 }
 
+const scoreVersionClock = createScoreVersionClock();
+
+/** Next score broadcast version (server time in ms, strictly increasing within this process). */
+export function nextScoreVersion(): number {
+    return scoreVersionClock();
+}
+
 /**
  * Broadcast a score update
  */
@@ -147,12 +155,17 @@ export function broadcastScoreUpdate(
     // BACKLOG-105: optional shootout score, backward compatible -- existing
     // listeners that don't know about these fields simply ignore them.
     shootoutHomeScore?: number,
-    shootoutAwayScore?: number
+    shootoutAwayScore?: number,
+    // Orders broadcasts of the same match: viewers drop a score whose version is older than the
+    // one they already applied. Defaults to a fresh version at call time; a caller that has just
+    // committed the score may take one earlier with nextScoreVersion() and pass it in.
+    version: number = nextScoreVersion()
 ): Promise<void> {
     return broadcastToMatch(matchId, 'match:score:updated', {
         matchId,
         homeScore,
         awayScore,
+        version,
         ...(shootoutHomeScore !== undefined ? { shootoutHomeScore } : {}),
         ...(shootoutAwayScore !== undefined ? { shootoutAwayScore } : {}),
     });
