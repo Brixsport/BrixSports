@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
 import { notInArray, eq, and, inArray, desc } from 'drizzle-orm';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { parseListPaging } from '@/lib/list-paging';
 
 // Public DTO -- must never include CLAUDE.md's banned fields (loggerId,
 // approvalStatus, managerNotes, approvedBy, approvedAt) or anything else not
@@ -51,6 +52,8 @@ export async function GET(request: Request) {
         const competitionId = searchParams.get('competitionId');
         const competition = searchParams.get('competition');
         const status = searchParams.get('status');
+        // Default stays 100 (the old fixed cap); callers that need more pages ask with limit/offset.
+        const { limit, offset } = parseListPaging(searchParams, { defaultLimit: 100, maxLimit: 200 });
 
         // Filter out Football and Basketball
         const sportsToExclude = ['Football', 'Basketball'];
@@ -66,8 +69,9 @@ export async function GET(request: Request) {
 
         const otherMatches = await db.select(PUBLIC_MATCH_FIELDS).from(matches)
             .where(and(...conditions))
-            .orderBy(desc(matches.createdAt))
-            .limit(100)
+            .orderBy(desc(matches.createdAt), desc(matches.id))
+            .limit(limit)
+            .offset(offset)
             .all();
 
         // Get team details -- only the teams actually referenced.
@@ -100,7 +104,7 @@ export async function GET(request: Request) {
             success: true,
             matches: transformed,
             count: transformed.length
-        }, { headers: PUBLIC_CACHE_HEADERS });
+        }, { headers: { ...PUBLIC_CACHE_HEADERS, 'X-Limit': String(limit), 'X-Offset': String(offset) } });
     } catch (error) {
         console.error('Error fetching other matches:', error);
         return NextResponse.json({ success: false, error: 'Failed to fetch matches' }, { status: 500, headers: NO_STORE_HEADERS });
