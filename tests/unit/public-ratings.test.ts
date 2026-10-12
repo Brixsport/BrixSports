@@ -35,3 +35,20 @@ describe('public match rating shaping', () => {
         expect(dto).toMatchObject({ playerId: 'p1', teamId: 't1', autoRating: 6.5, finalRating: 7, isMotM: true, name: 'A' });
     });
 });
+
+import { toRatingsMatchDto } from '@/lib/public-ratings';
+
+describe('ratings adjustment match header', () => {
+    it('drops staff-only match columns and trims team rows', () => {
+        const dto = toRatingsMatchDto({
+            id: 'm1', homeTeamId: 'a', awayTeamId: 'b', homeScore: 1, awayScore: 0, status: 'FINISHED', startTime: 1, competition: 'League',
+            loggerId: 'l1', approvalStatus: 'APPROVED', approvedBy: 'u', managerNotes: 'n', lineups: '{}', stats: '{}',
+            homeTeam: { id: 'a', name: 'A', shortName: 'A', logo: 'l', color: '#fff', ownerOrganizationId: 'o', points: 3 },
+            awayTeam: null,
+        });
+        for (const k of ['loggerId', 'approvalStatus', 'approvedBy', 'managerNotes', 'lineups', 'stats']) expect(dto).not.toHaveProperty(k);
+        expect(dto.homeTeam).not.toHaveProperty('ownerOrganizationId');
+        expect(dto.awayTeam).toBeNull();
+        expect(dto).toMatchObject({ id: 'm1', homeScore: 1, awayScore: 0, competition: 'League' });
+    });
+});

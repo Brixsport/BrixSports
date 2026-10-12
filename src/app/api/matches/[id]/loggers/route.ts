@@ -10,6 +10,7 @@ import { loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getSessionStore } from '@/lib/sessionStore';
 import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 
 /**
  * GET /api/matches/[id]/loggers
@@ -29,6 +30,9 @@ export async function GET(
         }
 
         const { id: matchId } = await params;
+        if (authUser.role === 'logger' && !(await isLoggerAssigned(matchId, authUser.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
         const sessionStore = getSessionStore();
 
         // Get all sessions for this match

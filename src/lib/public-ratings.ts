@@ -45,3 +45,22 @@ export function toPublicMatchRating(r: Row) {
         isMotM: r.isMotM,
     };
 }
+
+// Match header for the rating-adjustment screen: scores and team identity only, without the
+// raw match row (approval state, manager notes, logger id, lineups, stats).
+export function toRatingsMatchDto(m: Row & { homeTeam?: Row | null; awayTeam?: Row | null }) {
+    const team = (t: Row | null | undefined) =>
+        t ? { id: t.id, name: t.name, shortName: t.shortName, logo: t.logo, color: t.color } : null;
+    return {
+        id: m.id,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        homeScore: m.homeScore,
+        awayScore: m.awayScore,
+        status: m.status,
+        startTime: m.startTime,
+        competition: m.competition,
+        homeTeam: team(m.homeTeam),
+        awayTeam: team(m.awayTeam),
+    };
+}
