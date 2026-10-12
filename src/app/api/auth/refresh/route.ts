@@ -4,6 +4,7 @@ import { users, loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from '@/lib/env';
+import { setAuthCookie } from '@/lib/auth-cookie';
 
 if (!env.jwtSecret) {
     throw new Error('JWT_SECRET is not configured');
@@ -83,13 +84,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Set new token in cookie
-        response.cookies.set('authToken', newToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
-            path: '/',
-        });
+        setAuthCookie(response, request, newToken);
 
         return response;
     } catch (error) {

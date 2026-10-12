@@ -16,6 +16,10 @@
 export const env = {
     // Auth
     jwtSecret: process.env.JWT_SECRET ?? '',
+    // Session cookie domain (apex of the production site). Only applied when
+    // NODE_ENV is production; empty means host-only cookies.
+    cookieDomain: process.env.COOKIE_DOMAIN ?? '',
+    isProdBuild: process.env.NODE_ENV === 'production',
 
     // Database
     tursoUrl: process.env.TURSO_CONNECTION_URL ?? '',

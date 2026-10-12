@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clearAuthCookie } from '@/lib/auth-cookie';
 
 // POST /api/auth/logout - Logout user
 // Note: With JWT, logout is primarily handled client-side by removing the token
@@ -20,8 +21,9 @@ export async function POST(request: NextRequest) {
             message: 'Logged out successfully',
         });
 
-        // Clear the auth cookie
-        response.cookies.delete('authToken');
+        // Clear the auth cookie with the same attributes it was set with (including
+        // Domain), plus the host-only variant.
+        clearAuthCookie(response, request);
 
         return response;
     } catch (error) {
