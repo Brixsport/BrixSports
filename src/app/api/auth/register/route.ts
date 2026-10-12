@@ -8,12 +8,15 @@ import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
 import { sendWelcomeEmail } from '@/lib/email';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { setAuthCookie } from '@/lib/auth-cookie';
 
 // POST /api/auth/register - Register new user
 export async function POST(request: NextRequest) {
     try {
-        // BACKLOG-080: prevents bulk/scripted account-creation spam.
-        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000, distributed: true });
+        // Prevents bulk/scripted account-creation spam. Every attempt counts (the
+        // point is to cap sign-ups per IP), but the budget leaves room for many
+        // students signing up behind one campus NAT address.
+        const rl = await checkRateLimit(request, { max: 20, windowMs: 15 * 60 * 1000, distributed: true });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many attempts. Please try again shortly.', code: 'AUTH_RATE_LIMITED' },
@@ -127,25 +130,7 @@ export async function POST(request: NextRequest) {
             token,
         }, { status: 201 });
 
-        // Set auth token in cookie (same as login)
-        const isSecure = request.headers.get('x-forwarded-proto') === 'https' || 
-                         request.url.startsWith('https://') || 
-                         process.env.NODE_ENV === 'production';
-        
-        const cookieOptions: any = {
-            httpOnly: true,
-            secure: isSecure,
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
-            path: '/',
-        };
-
-        // In production, explicitly set domain for brixsports.com
-        if (process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN) {
-            cookieOptions.domain = process.env.COOKIE_DOMAIN;
-        }
-
-        response.cookies.set('authToken', token, cookieOptions);
+        setAuthCookie(response, request, token);
 
         return response;
     } catch (error) {
