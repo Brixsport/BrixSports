@@ -28,6 +28,34 @@ function reSubscribePushForHandoff(userId: string) {
         });
 }
 
+const OAUTH_HANDOFF_COOKIE = 'oauth_handoff';
+
+// Reads the handoff cookie and expires it. The server may have scoped it to a
+// parent domain that script cannot see, so every plausible Domain is expired,
+// plus the host-only variant.
+function readAndClearHandoffCookie(): string | null {
+    const match = document.cookie.match(/(?:^|;\s*)oauth_handoff=([^;]*)/);
+    if (!match) return null;
+
+    let value: string | null = null;
+    try {
+        value = decodeURIComponent(match[1]) || null;
+    } catch {
+        value = null;
+    }
+
+    const expire = (domain?: string) => {
+        document.cookie =
+            `${OAUTH_HANDOFF_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax` + (domain ? `; Domain=${domain}` : '');
+    };
+    expire();
+    const labels = window.location.hostname.split('.');
+    for (let i = 0; i <= labels.length - 2; i++) {
+        expire(labels.slice(i).join('.'));
+    }
+    return value;
+}
+
 interface User {
     id: string;
     name: string;
@@ -120,24 +148,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Initial auth check
     useEffect(() => {
-        // BACKLOG-371: pick up the one-time token handoff from the Google OAuth
-        // callback (src/app/api/auth/callback/google/route.ts) -- a server
-        // redirect can set the httpOnly cookie but can't touch localStorage,
-        // and several client paths (FavoritesContext, push-service) read
-        // localStorage directly and never even attempt a request without it.
-        // Stripped from the URL immediately so it doesn't linger in history.
+        // Pick up the one-time token handoff from the Google OAuth callback
+        // (src/app/api/auth/callback/google/route.ts): a server redirect can set
+        // the httpOnly cookie but can't touch localStorage, and several client
+        // paths (FavoritesContext, push-service) read localStorage directly and
+        // never even attempt a request without it. The handoff is a 60 second
+        // cookie set by that callback; it is read once and deleted. A token in the
+        // URL is never accepted, so a crafted link cannot sign anyone in.
         if (typeof window !== 'undefined') {
-            const params = new URLSearchParams(window.location.search);
-            const oauthToken = params.get('oauth_token');
-            if (oauthToken) {
-                localStorage.setItem('authToken', oauthToken);
-                params.delete('oauth_token');
-                const newSearch = params.toString();
-                window.history.replaceState(
-                    {},
-                    '',
-                    window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash
-                );
+            const handoff = readAndClearHandoffCookie();
+            if (handoff) {
+                localStorage.setItem('authToken', handoff);
             }
         }
         checkAuth();

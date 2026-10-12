@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users } from '@/db/schema';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { env } from '@/lib/env';
-import { getGoogleRedirectUri } from '@/lib/google-oauth';
+import {
+    getGoogleRedirectUri,
+    oauthStatesMatch,
+    shouldDropPasswordOnGoogleMerge,
+    OAUTH_STATE_COOKIE,
+    OAUTH_HANDOFF_COOKIE,
+    OAUTH_HANDOFF_MAX_AGE_SECONDS,
+} from '@/lib/google-oauth';
+import { serializeCookie, setAuthCookie, isSecureRequest, getCookieDomain } from '@/lib/auth-cookie';
 
 // GET /api/auth/callback/google
 //
@@ -22,6 +30,19 @@ import { getGoogleRedirectUri } from '@/lib/google-oauth';
 export async function GET(request: NextRequest) {
     const loginUrl = new URL('/login', env.appUrl || request.nextUrl.origin);
 
+    // The state cookie is single use: every exit from this handler expires it.
+    const done = (response: NextResponse): NextResponse => {
+        response.headers.append(
+            'Set-Cookie',
+            serializeCookie(OAUTH_STATE_COOKIE, '', {
+                maxAge: 0,
+                secure: isSecureRequest(request),
+                domain: getCookieDomain(),
+            })
+        );
+        return response;
+    };
+
     try {
         const code = request.nextUrl.searchParams.get('code');
         const oauthError = request.nextUrl.searchParams.get('error');
@@ -30,18 +51,28 @@ export async function GET(request: NextRequest) {
             // User declined consent, or Google itself returned an error --
             // not a bug, a normal outcome, no need to log it as one.
             loginUrl.searchParams.set('error', 'google_auth_denied');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
         }
 
         if (!code) {
             loginUrl.searchParams.set('error', 'google_auth_failed');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
+        }
+
+        // The state Google echoes back must equal the one this browser was given
+        // when the flow started; otherwise this callback was not started here.
+        const stateFromQuery = request.nextUrl.searchParams.get('state');
+        const stateFromCookie = request.cookies.get(OAUTH_STATE_COOKIE)?.value;
+        if (!oauthStatesMatch(stateFromQuery, stateFromCookie)) {
+            console.error('[Google OAuth Callback] OAuth state missing or mismatched; refusing sign-in');
+            loginUrl.searchParams.set('error', 'google_auth_failed');
+            return done(NextResponse.redirect(loginUrl));
         }
 
         if (!env.googleClientId || !env.googleClientSecret) {
             console.error('[Google OAuth Callback] Missing Google OAuth credentials');
             loginUrl.searchParams.set('error', 'google_config_missing');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
         }
 
         // Must exactly match the redirect_uri sent in the initiate step and
@@ -64,7 +95,7 @@ export async function GET(request: NextRequest) {
         if (!tokenResponse.ok) {
             console.error('[Google OAuth Callback] Token exchange failed:', await tokenResponse.text());
             loginUrl.searchParams.set('error', 'google_auth_failed');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
         }
 
         const tokenData = await tokenResponse.json();
@@ -73,7 +104,7 @@ export async function GET(request: NextRequest) {
         if (!accessToken) {
             console.error('[Google OAuth Callback] No access_token in Google response');
             loginUrl.searchParams.set('error', 'google_auth_failed');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
         }
 
         const profileResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -83,7 +114,7 @@ export async function GET(request: NextRequest) {
         if (!profileResponse.ok) {
             console.error('[Google OAuth Callback] Failed to fetch Google profile');
             loginUrl.searchParams.set('error', 'google_auth_failed');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
         }
 
         const profile = await profileResponse.json();
@@ -93,7 +124,7 @@ export async function GET(request: NextRequest) {
         if (!email) {
             console.error('[Google OAuth Callback] Google profile had no email');
             loginUrl.searchParams.set('error', 'google_auth_failed');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
         }
 
         // BACKLOG-464 item 7: /oauth2/v2/userinfo reports `verified_email`. Reject only
@@ -103,7 +134,7 @@ export async function GET(request: NextRequest) {
         if (profile.verified_email === false) {
             console.error('[Google OAuth Callback] Google email is not verified; refusing sign-in');
             loginUrl.searchParams.set('error', 'google_auth_failed');
-            return NextResponse.redirect(loginUrl);
+            return done(NextResponse.redirect(loginUrl));
         }
 
         // Find-or-create by email -- same account-matching rule the rest of
@@ -124,6 +155,17 @@ export async function GET(request: NextRequest) {
         if (existing[0]) {
             userId = existing[0].id;
             role = normalizeUserRole(existing[0].role);
+            // Registration does not verify email ownership, but this Google sign-in
+            // does. Cut off any password set on the account before merging onto it,
+            // so whoever pre-registered this address can no longer sign in with it.
+            // The real owner uses Google, or resets the password by email.
+            if (shouldDropPasswordOnGoogleMerge(existing[0])) {
+                await db
+                    .update(users)
+                    .set({ password: null, updatedAt: new Date() })
+                    .where(eq(users.id, userId));
+                console.warn(`[Google OAuth Callback] Password removed from existing account ${userId} on Google merge`);
+            }
         } else {
             userId = nanoid();
             role = normalizeUserRole('user');
@@ -141,45 +183,30 @@ export async function GET(request: NextRequest) {
 
         const token = generateToken(userId, email.toLowerCase(), role);
 
-        // BACKLOG-371: a server-side redirect can set the httpOnly cookie fine,
-        // but has no way to write to localStorage -- and a lot of this app's
-        // client code (FavoritesContext, push-service, etc.) reads
-        // localStorage.getItem('authToken') directly and treats its absence as
-        // "logged out," never even attempting a cookie-based request. Without
-        // this, both a Google sign-in to an existing account and a brand-new
-        // Google signup leave those paths silently acting like a guest even
-        // though the cookie session is real. One-time handoff via a query
-        // param, picked up and stripped by AuthContext on the next mount.
+        // A server-side redirect can set the httpOnly session cookie but cannot write
+        // localStorage, and several client paths read localStorage.getItem('authToken')
+        // directly and treat its absence as logged out. So the token is also handed
+        // over in a 60 second cookie that AuthContext reads once and deletes. It is
+        // never put in the URL, and AuthContext accepts it from nowhere else.
         const destination = new URL('/', env.appUrl || request.nextUrl.origin);
-        destination.searchParams.set('oauth_token', token);
         const response = NextResponse.redirect(destination);
-        // BACKLOG-464 items 6/7: the destination URL carries the session JWT in
-        // ?oauth_token= until AuthContext strips it -- keep it out of Referer headers.
-        response.headers.set('Referrer-Policy', 'no-referrer');
+        response.headers.set('Cache-Control', 'no-store');
 
-        // Same cookie pattern as /api/auth/register and /api/auth/login.
-        const isSecure = request.headers.get('x-forwarded-proto') === 'https' ||
-            request.url.startsWith('https://') ||
-            process.env.NODE_ENV === 'production';
+        setAuthCookie(response, request, token);
+        response.headers.append(
+            'Set-Cookie',
+            serializeCookie(OAUTH_HANDOFF_COOKIE, token, {
+                maxAge: OAUTH_HANDOFF_MAX_AGE_SECONDS,
+                secure: isSecureRequest(request),
+                httpOnly: false,
+                domain: getCookieDomain(),
+            })
+        );
 
-        const cookieOptions: any = {
-            httpOnly: true,
-            secure: isSecure,
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
-            path: '/',
-        };
-
-        if (process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN) {
-            cookieOptions.domain = process.env.COOKIE_DOMAIN;
-        }
-
-        response.cookies.set('authToken', token, cookieOptions);
-
-        return response;
+        return done(response);
     } catch (error) {
         console.error('[Google OAuth Callback] Unexpected error:', error);
         loginUrl.searchParams.set('error', 'google_auth_failed');
-        return NextResponse.redirect(loginUrl);
+        return done(NextResponse.redirect(loginUrl));
     }
 }
