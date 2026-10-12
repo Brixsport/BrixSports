@@ -7,6 +7,7 @@ import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share
 import { Team, Player, Match, MatchEvent } from '@/types';
 import { useFavorites } from '@/hooks/useFavorites';
 import { safeToLocale } from '@/lib/safe-date';
+import { startVisiblePolling } from '@/lib/visible-poll';
 import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
 import { useNotifications } from './Notifications';
 import LiveMatchStatus from './LiveMatchStatus';
@@ -454,6 +455,14 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       console.error('Error refetching match data:', error);
     }
   };
+
+  // Fallback while the live channel is down: the overlay otherwise only refreshes when the socket
+  // is connected, so a dropped connection would leave the score frozen. Poll the same refetch every
+  // ~10s (paused while the tab is hidden) until the socket is back or the match is over.
+  useEffect(() => {
+    if (isConnected || match.status === 'FINISHED') return;
+    return startVisiblePolling(() => { refetchMatchData(); }, 10000);
+  }, [isConnected, match.status, match.id]);
 
   // Fetch complete match data on mount if events, stats, or lineups are missing
   useEffect(() => {
