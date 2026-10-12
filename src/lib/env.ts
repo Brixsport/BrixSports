@@ -80,6 +80,12 @@ export function validateEnv(): void {
             'Check .env.example for the full list of required vars.'
         );
     }
+
+    // Warn only: changing a live secret invalidates every session, so this must
+    // never stop a cold start.
+    if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+        console.warn('[env] JWT_SECRET is shorter than 32 characters; use a random value of at least 32 (openssl rand -hex 32).');
+    }
 }
 
 type EnvVars = Record<string, string | undefined>;
