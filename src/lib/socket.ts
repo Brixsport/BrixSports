@@ -28,6 +28,10 @@ export function getIO(): SocketIOServer | null {
 // every broadcast (this runs inside after() for every logged event).
 let wsConfigMissingReported = false;
 
+// Sentry reports of "WS server rejected the broadcast" are limited to one per minute per process.
+const REJECTED_REPORT_INTERVAL_MS = 60 * 1000;
+let lastRejectedReportAt = 0;
+
 /**
  * Broadcast an event via the WS server.
  * - Local dev: uses global.io directly
@@ -89,12 +93,21 @@ async function broadcast(room: string | null, event: string, data: any): Promise
             signal: AbortSignal.timeout(3000),
         });
         if (!res.ok) {
-            console.error(`[Socket] Broadcast rejected by WS server: HTTP ${res.status} (event=${event}, room=${room ?? 'global'})`);
-            Sentry.captureMessage(`WS broadcast rejected: HTTP ${res.status}`, {
-                level: 'error',
-                tags: { area: 'ws-broadcast' },
-                extra: { status: res.status, event, room },
-            });
+            // Every event of a match goes through here, so an outage would otherwise send one
+            // Sentry event per broadcast (hundreds per match): report at most one a minute per
+            // process and leave the rest as console warnings.
+            const now = Date.now();
+            if (now - lastRejectedReportAt >= REJECTED_REPORT_INTERVAL_MS) {
+                lastRejectedReportAt = now;
+                console.error(`[Socket] Broadcast rejected by WS server: HTTP ${res.status} (event=${event}, room=${room ?? 'global'})`);
+                Sentry.captureMessage(`WS broadcast rejected: HTTP ${res.status}`, {
+                    level: 'error',
+                    tags: { area: 'ws-broadcast' },
+                    extra: { status: res.status, event, room },
+                });
+            } else {
+                console.warn(`[Socket] Broadcast rejected by WS server: HTTP ${res.status} (event=${event}, room=${room ?? 'global'})`);
+            }
         }
     } catch (error) {
         // Don't crash API routes if WS broadcast fails (includes the 3s timeout abort)
