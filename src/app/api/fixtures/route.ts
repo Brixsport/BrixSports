@@ -8,6 +8,8 @@ import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
 import { eq, and, gte, lte, or, desc, asc, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { PUBLIC_FIXTURE_MATCH_FIELDS } from '@/lib/public-match-fields';
+import { toPublicH2HTeam } from '@/lib/public-h2h';
 
 export async function GET(request: NextRequest) {
     try {
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
         const filters = [];
 
         if (sport) filters.push(eq(matches.sport, sport));
-        if (competitionId) filters.push(eq(matches.competition, competitionId));
+        if (competitionId) filters.push(eq(matches.competitionId, competitionId));
         if (status) filters.push(eq(matches.status, status));
 
         // Team filter (home or away)
@@ -96,7 +98,7 @@ export async function GET(request: NextRequest) {
         // Fetch matches with teams
         const fixturesData = await db
             .select({
-                match: matches,
+                match: PUBLIC_FIXTURE_MATCH_FIELDS,
                 homeTeam: teams,
             })
             .from(matches)
@@ -117,8 +119,8 @@ export async function GET(request: NextRequest) {
 
                 return {
                     ...row.match,
-                    homeTeam: row.homeTeam,
-                    awayTeam,
+                    homeTeam: toPublicH2HTeam(row.homeTeam ?? undefined) ?? null,
+                    awayTeam: toPublicH2HTeam(awayTeam) ?? null,
                 };
             })
         );
