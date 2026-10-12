@@ -1320,7 +1320,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 throw new Error(body?.error || `Server returned ${res.status}`);
             }
             // PATCH confirmed — transition local state to FINISHED
-            stateManager.current?.transitionStatus('FINISHED');
+            // (skipped when the final whistle already moved local state to FINISHED)
+            if (stateManager.current && stateManager.current.getState().clock.period !== 'FINISHED') {
+                stateManager.current.transitionStatus('FINISHED');
+            }
 
             // Sync status via socket immediately
             if (isSocketConnected) {
