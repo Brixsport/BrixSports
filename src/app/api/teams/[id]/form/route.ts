@@ -8,6 +8,8 @@ import { db } from '@/db';
 import { teamForm, matches, teams } from '@/db/schema';
 import { eq, desc, and, lt } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { PUBLIC_FIXTURE_MATCH_FIELDS } from '@/lib/public-match-fields';
+import { toPublicH2HTeam } from '@/lib/public-h2h';
 
 /**
  * GET team form
@@ -27,7 +29,7 @@ export async function GET(
         let query = db
             .select({
                 form: teamForm,
-                match: matches,
+                match: PUBLIC_FIXTURE_MATCH_FIELDS,
             })
             .from(teamForm)
             .leftJoin(matches, eq(teamForm.matchId, matches.id))
@@ -39,7 +41,7 @@ export async function GET(
             query = db
                 .select({
                     form: teamForm,
-                    match: matches,
+                    match: PUBLIC_FIXTURE_MATCH_FIELDS,
                 })
                 .from(teamForm)
                 .leftJoin(matches, eq(teamForm.matchId, matches.id))
@@ -68,7 +70,7 @@ export async function GET(
         };
 
         return NextResponse.json({
-            team,
+            team: toPublicH2HTeam(team),
             form: formData.map((f) => ({
                 ...f.form,
                 match: f.match,
