@@ -16,6 +16,9 @@ on:
   pull_request:
     branches: [dev, main]
 
+permissions:
+  contents: read
+
 jobs:
   smoke-test:
     name: Three Critical Flows (staging)
@@ -23,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -33,8 +38,14 @@ jobs:
       # npm setting), so it has no `webpack` entry for @sentry/webpack-plugin's required
       # peer. A plain `npm ci` on the runner resolves peers and rejects the lock ("Missing:
       # webpack ... from lock file"). Install the same way the lock was made.
+      #
+      # --ignore-scripts: this job runs the PR's own code next to staging secrets, so
+      # dependency install scripts must not run. The smoke test needs none of them
+      # (esbuild ships its binary as a platform package, @sentry/cli's download is for
+      # builds only). The install step carries no secrets; they are set on the single
+      # step below.
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci --legacy-peer-deps --ignore-scripts
 
       - name: Run critical-flows smoke test
         env:
