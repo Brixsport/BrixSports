@@ -455,6 +455,8 @@ export default function MatchDetailClient() {
         };
     }, [matchId, on, off]);
 
+    const h2hFetchedKey = useRef<string | null>(null);
+
     const fetchMatchData = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
@@ -503,16 +505,24 @@ export default function MatchDetailClient() {
                 setMatchData(data);
             }
 
-            // Fetch head-to-head data
+            // Fetch head-to-head data once per team pairing, not on every poll cycle:
+            // it is static for the life of the match.
             if (data.match?.homeTeam && data.match?.awayTeam) {
-                try {
-                    const h2hRes = await fetch(
-                        `/api/head-to-head?team1=${data.match.homeTeam.id}&team2=${data.match.awayTeam.id}&competition=${data.match.competition}`
-                    );
-                    const h2hData = await h2hRes.json();
-                    setH2hData(h2hData);
-                } catch (h2hError) {
-                    console.error('Error fetching H2H data:', h2hError);
+                const h2hKey = `${data.match.homeTeam.id}:${data.match.awayTeam.id}:${data.match.competition}`;
+                if (h2hFetchedKey.current !== h2hKey) {
+                    h2hFetchedKey.current = h2hKey;
+                    try {
+                        const h2hRes = await fetch(
+                            `/api/head-to-head?team1=${data.match.homeTeam.id}&team2=${data.match.awayTeam.id}&competition=${data.match.competition}`
+                        );
+                        const h2hData = await h2hRes.json();
+                        if (!h2hRes.ok) h2hFetchedKey.current = null;
+                        setH2hData(h2hData);
+                    } catch (h2hError) {
+                        // Allow the next fetch cycle to retry.
+                        h2hFetchedKey.current = null;
+                        console.error('Error fetching H2H data:', h2hError);
+                    }
                 }
             }
         } catch (error) {
