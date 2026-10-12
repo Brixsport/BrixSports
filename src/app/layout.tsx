@@ -5,7 +5,6 @@ import Script from "next/script";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
-import SessionProvider from "@/components/providers/SessionProvider";
 import { NotificationProvider } from "@/components/Notifications";
 import { GlobalNotificationListener } from "@/components/GlobalNotificationListener";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -261,22 +260,20 @@ export default async function RootLayout({
         <ErrorReporter />
         <ThemeProvider>
           <PWAProvider swPath="/sw-user.js">
-            <SessionProvider>
-              <AuthProvider>
-                <FavoritesProvider>
-                  <NotificationProvider>
-                    <SocketProvider>
-                      <GlobalNotificationListener />
-                      {adsEnabled && <AdBanner position="top" />}
-                      {children}
-                      {adsEnabled && <AdBanner position="bottom" />}
-                      <BottomNav />
-                      <AuthModal />
-                    </SocketProvider>
-                  </NotificationProvider>
-                </FavoritesProvider>
-              </AuthProvider>
-            </SessionProvider>
+            <AuthProvider>
+              <FavoritesProvider>
+                <NotificationProvider>
+                  <SocketProvider>
+                    <GlobalNotificationListener />
+                    {adsEnabled && <AdBanner position="top" />}
+                    {children}
+                    {adsEnabled && <AdBanner position="bottom" />}
+                    <BottomNav />
+                    <AuthModal />
+                  </SocketProvider>
+                </NotificationProvider>
+              </FavoritesProvider>
+            </AuthProvider>
           </PWAProvider>
         </ThemeProvider>
         {/* Vercel Analytics (pageviews/engagement) + Speed Insights (real-user Core
