@@ -5,6 +5,7 @@ import { teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { generateSportsTeamSchema } from '@/lib/utils/aeo';
 import TeamDetailClient from './TeamDetailClient';
+import { serializeJsonLd } from '@/lib/json-ld';
 
 // BACKLOG-189: same fix as matches/[id] -- thin server wrapper for real
 // per-team metadata, original UI unchanged.
@@ -68,7 +69,7 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
             {schema && (
                 <script
                     type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+                    dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema) }}
                 />
             )}
             <TeamDetailClient />

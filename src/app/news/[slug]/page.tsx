@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { news } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
 import NewsDetailClient from './NewsDetailClient';
+import { serializeJsonLd } from '@/lib/json-ld';
 
 // BACKLOG-189: same fix as matches/[id] -- was a 'use client' page with no
 // generateMetadata, so every article shared the generic site-wide title
@@ -72,7 +73,7 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
             {schema && (
                 <script
                     type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+                    dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema) }}
                 />
             )}
             <NewsDetailClient />
