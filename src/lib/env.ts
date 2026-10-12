@@ -26,6 +26,8 @@ export const env = {
         'development' | 'staging' | 'production',
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? '',
     wsUrl: process.env.NEXT_PUBLIC_WS_URL ?? '',
+    // Shared secret between this app and the standalone ws-server (server-side only).
+    wsApiKey: process.env.WS_API_KEY ?? '',
 
     // Monitoring
     sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? '',

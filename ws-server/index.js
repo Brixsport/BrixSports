@@ -251,32 +251,75 @@ const matchTimes = new Map();
 //     already looks the same today -- fixing that was a separate,
 //     bigger feature, not needed for this specific flicker problem).
 const clockAuthority = new Map(); // matchId -> socketId
-const assignmentCache = new Map(); // `${socketId}:${matchId}` -> boolean
+const assignmentCache = new Map(); // `${socketId}:${matchId}` -> { assigned: boolean, expires: number }
+const assignmentInFlight = new Map(); // `${socketId}:${matchId}` -> Promise<boolean>
 
 const APP_URLS = {
     staging: 'https://brixsports-staging.vercel.app',
     prod: 'https://brixsports.com',
 };
 
-async function isAssignedLogger(socket, matchId) {
-    const cacheKey = `${socket.id}:${matchId}`;
-    if (assignmentCache.has(cacheKey)) return assignmentCache.get(cacheKey);
+// Only a definitive answer from the app is cached, never a failure: a timeout, a non-2xx or a
+// malformed body says nothing about assignment, and remembering it as "not assigned" locked a
+// logger out of the clock for the life of the socket. A positive answer is trusted for a minute; a
+// definitive "no" is remembered briefly so a non-assigned client cannot trigger a request per tick,
+// yet a logger assigned a moment later is picked up quickly.
+const ASSIGNMENT_TTL_MS = 60 * 1000;
+const ASSIGNMENT_NEGATIVE_TTL_MS = 10 * 1000;
+const ASSIGNMENT_CHECK_TIMEOUT_MS = 4000;
 
+async function fetchAssignment(socket, matchId) {
     const env = getEnvFromOrigin(socket);
     const appUrl = APP_URLS[env];
     try {
         const res = await fetch(
             `${appUrl}/api/internal/logger-assignment-check?matchId=${encodeURIComponent(matchId)}&loggerId=${encodeURIComponent(socket.data.loggerId)}`,
-            { headers: { 'x-api-key': process.env.WS_API_KEY } }
+            {
+                headers: { 'x-api-key': process.env.WS_API_KEY },
+                signal: AbortSignal.timeout(ASSIGNMENT_CHECK_TIMEOUT_MS),
+            }
         );
+        if (!res.ok) {
+            console.warn(`[Single-Writer] Assignment check for logger ${socket.data.loggerId} on match ${matchId} returned HTTP ${res.status}`);
+            return null;
+        }
         const data = await res.json();
-        assignmentCache.set(cacheKey, !!data.assigned);
-        return !!data.assigned;
+        if (typeof data?.assigned !== 'boolean') return null;
+        return data.assigned;
     } catch (err) {
         console.warn(`[Single-Writer] Assignment check failed for logger ${socket.data.loggerId} on match ${matchId}: ${err.message}`);
-        assignmentCache.set(cacheKey, false);
-        return false;
+        return null;
     }
+}
+
+async function isAssignedLogger(socket, matchId) {
+    const cacheKey = `${socket.id}:${matchId}`;
+    const cached = assignmentCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) return cached.assigned;
+
+    // One request per (socket, match) at a time, however many clock ticks arrive meanwhile.
+    const pending = assignmentInFlight.get(cacheKey);
+    if (pending) return pending;
+
+    const request = (async () => {
+        try {
+            const assigned = await fetchAssignment(socket, matchId);
+            if (assigned === null) return false; // unknown: deny this tick, ask again on the next one
+            // A socket that disconnected while the request was out has already had its cache
+            // entries cleared; do not add one back.
+            if (socket.connected) {
+                assignmentCache.set(cacheKey, {
+                    assigned,
+                    expires: Date.now() + (assigned ? ASSIGNMENT_TTL_MS : ASSIGNMENT_NEGATIVE_TTL_MS),
+                });
+            }
+            return assigned;
+        } finally {
+            assignmentInFlight.delete(cacheKey);
+        }
+    })();
+    assignmentInFlight.set(cacheKey, request);
+    return request;
 }
 
 // ─── Socket.IO Event Handlers ──────────────────────────────────
