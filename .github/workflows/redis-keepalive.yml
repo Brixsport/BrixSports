@@ -1,0 +1,65 @@
+name: Redis keep-alive
+
+# Upstash archives a free database that sees no commands for a while. A daily PING keeps the
+# inactivity timer reset (the limit is far longer than the gap between runs, and a skipped or
+# delayed scheduled run does not matter). Scheduled workflows only run from the default branch.
+#
+# Repository secrets used (set them under Settings > Secrets and variables > Actions):
+#   UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN                   (production database)
+#   UPSTASH_REDIS_REST_URL_STAGING / UPSTASH_REDIS_REST_TOKEN_STAGING   (optional, a separate staging database)
+# A pair that is not configured is skipped. The job fails if no pair is configured, or if any
+# configured database does not answer PONG, so a missing secret or an archived database shows up
+# as a failed run (GitHub emails the repository watchers about failed scheduled runs).
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: Ping Upstash Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REDIS_URL_PROD: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      REDIS_TOKEN_PROD: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      REDIS_URL_STAGING: ${{ secrets.UPSTASH_REDIS_REST_URL_STAGING }}
+      REDIS_TOKEN_STAGING: ${{ secrets.UPSTASH_REDIS_REST_TOKEN_STAGING }}
+    steps:
+      - name: PING each configured database
+        shell: bash
+        run: |
+          set +x
+          configured=0
+          failed=0
+          ping_db() {
+            local label="$1" url="$2" token="$3" body
+            if [ -z "$url" ] || [ -z "$token" ]; then
+              echo "$label: not configured, skipped"
+              return 0
+            fi
+            configured=$((configured + 1))
+            body=$(curl --silent --show-error --fail --max-time 20 --retry 3 --retry-delay 5 \
+              -H "Authorization: Bearer ${token}" "${url%/}/ping") || {
+              echo "::error::$label: request failed"
+              failed=$((failed + 1))
+              return 0
+            }
+            if echo "$body" | grep -q '"PONG"'; then
+              echo "$label: PONG"
+            else
+              echo "::error::$label: unexpected response"
+              failed=$((failed + 1))
+            fi
+          }
+          ping_db "production" "$REDIS_URL_PROD" "$REDIS_TOKEN_PROD"
+          ping_db "staging" "$REDIS_URL_STAGING" "$REDIS_TOKEN_STAGING"
+          if [ "$configured" -eq 0 ]; then
+            echo "::error::No Upstash secret pair is configured"
+            exit 1
+          fi
+          [ "$failed" -eq 0 ]
