@@ -52,12 +52,7 @@ const httpServer = http.createServer((req, res) => {
     // Health check
     if (req.method === 'GET' && req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            status: 'ok',
-            service: 'BrixSports WebSocket Server',
-            uptime: process.uptime(),
-            connections: io.engine?.clientsCount || 0,
-        }));
+        res.end(JSON.stringify({ status: 'ok' }));
         return;
     }
 
