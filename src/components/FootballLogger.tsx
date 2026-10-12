@@ -1320,7 +1320,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 throw new Error(body?.error || `Server returned ${res.status}`);
             }
             // PATCH confirmed — transition local state to FINISHED
-            stateManager.current?.transitionStatus('FINISHED');
+            // (skipped when the final whistle already moved local state to FINISHED)
+            if (stateManager.current && stateManager.current.getState().clock.period !== 'FINISHED') {
+                stateManager.current.transitionStatus('FINISHED');
+            }
 
             // Sync status via socket immediately
             if (isSocketConnected) {
@@ -2476,8 +2479,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     <FoulOutcomeModal
                         onSelect={(outcome) => {
                             if (outcome === 'None') {
-                                confirmEvent('Foul', pendingFoulPlayerId, null);
-                                // Then maybe ask reason for foul?
+                                // No card: the reason modal records the single Foul event
+                                // (on select or on close), so do not confirm it here too.
                                 setPendingReasonEvent({ type: 'Foul', playerId: pendingFoulPlayerId });
                                 setShowReasonModal(true);
                             } else {
@@ -2987,6 +2990,13 @@ function PlayerSelectionModal({
     subbedOnPlayerIds,
     emptyMessage = 'No player found',
 }: any) {
+    // Ignore taps that land right after the modal mounts: a double-tap on the
+    // button that opened this modal would otherwise select the first row under it.
+    const mountedAt = useRef(Date.now());
+    const handleSelect = (id: string) => {
+        if (Date.now() - mountedAt.current < 400) return;
+        onSelect(id);
+    };
     // BUG-201: no guard here meant an absent lineup (starters/players both empty)
     // made starterIds an empty Set, and filterStartersOnly's `!starterIds.has(p.id)`
     // was then true for every player -- the whole roster got filtered out, showing
@@ -3050,7 +3060,7 @@ function PlayerSelectionModal({
                                 return (
                                     <button
                                         key={p.id}
-                                        onClick={() => onSelect(p.id)}
+                                        onClick={() => handleSelect(p.id)}
                                         className="p-3 text-left hover:bg-white/5 rounded-lg flex items-center gap-3 group relative overflow-hidden"
                                     >
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isBench ? 'bg-white/5 text-white/40' : 'bg-primary/20 text-primary border border-primary/20'}`}>

@@ -28,11 +28,21 @@ import { useNotifications } from '@/components/Notifications';
 import { getPushService } from '@/lib/notifications/push-service';
 import { getDeviceId } from '@/lib/notifications/device-id';
 import { displayMinute } from '@/lib/eventMinute';
+import { TeamLogo, isValidLogo } from '@/lib/utils/team-logo';
 
 // BACKLOG-150: which matchIds this device has an active anonymous "notify me"
 // subscription for. localStorage is the right store here -- device-scoped by
 // definition, no account to persist server-side preferences against.
 const NOTIFY_STORAGE_KEY = 'brixsports_notify_matches';
+// Team logo for the match header: the plain image when there is a usable logo, otherwise the
+// shared initials tile, so an empty logo never renders a broken <img src="">.
+function HeaderTeamLogo({ logo, name, compact, className }: { logo?: string | null; name: string; compact: boolean; className: string }) {
+    if (isValidLogo(logo)) {
+        return <img src={logo!} alt={name} className={className} />;
+    }
+    return <TeamLogo logo={null} name={name} size={compact ? 'sm' : 'lg'} />;
+}
+
 function getNotifiedMatchIds(): Set<string> {
     try {
         return new Set(JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY) || '[]'));
@@ -455,6 +465,8 @@ export default function MatchDetailClient() {
         };
     }, [matchId, on, off]);
 
+    const h2hFetchedKey = useRef<string | null>(null);
+
     const fetchMatchData = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
@@ -503,16 +515,24 @@ export default function MatchDetailClient() {
                 setMatchData(data);
             }
 
-            // Fetch head-to-head data
+            // Fetch head-to-head data once per team pairing, not on every poll cycle:
+            // it is static for the life of the match.
             if (data.match?.homeTeam && data.match?.awayTeam) {
-                try {
-                    const h2hRes = await fetch(
-                        `/api/head-to-head?team1=${data.match.homeTeam.id}&team2=${data.match.awayTeam.id}&competition=${data.match.competition}`
-                    );
-                    const h2hData = await h2hRes.json();
-                    setH2hData(h2hData);
-                } catch (h2hError) {
-                    console.error('Error fetching H2H data:', h2hError);
+                const h2hKey = `${data.match.homeTeam.id}:${data.match.awayTeam.id}:${data.match.competition}`;
+                if (h2hFetchedKey.current !== h2hKey) {
+                    h2hFetchedKey.current = h2hKey;
+                    try {
+                        const h2hRes = await fetch(
+                            `/api/head-to-head?team1=${data.match.homeTeam.id}&team2=${data.match.awayTeam.id}&competition=${data.match.competition}`
+                        );
+                        const h2hData = await h2hRes.json();
+                        if (!h2hRes.ok) h2hFetchedKey.current = null;
+                        setH2hData(h2hData);
+                    } catch (h2hError) {
+                        // Allow the next fetch cycle to retry.
+                        h2hFetchedKey.current = null;
+                        console.error('Error fetching H2H data:', h2hError);
+                    }
                 }
             }
         } catch (error) {
@@ -751,9 +771,10 @@ export default function MatchDetailClient() {
                     <div className="flex items-center justify-between gap-4">
                         {/* Home Team */}
                         <div className="flex items-center gap-3 flex-1">
-                            <img
-                                src={match.homeTeam.logo}
-                                alt={match.homeTeam.name}
+                            <HeaderTeamLogo
+                                logo={match.homeTeam.logo}
+                                name={match.homeTeam.name}
+                                compact={isCompact}
                                 className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                             {/* Star sits outside the sm:block name wrapper below -- it's an
@@ -852,9 +873,10 @@ export default function MatchDetailClient() {
                             >
                                 <Star className={`w-4 h-4 ${isFavoriteTeam(match.awayTeam.id) ? 'fill-current' : ''}`} />
                             </button>
-                            <img
-                                src={match.awayTeam.logo}
-                                alt={match.awayTeam.name}
+                            <HeaderTeamLogo
+                                logo={match.awayTeam.logo}
+                                name={match.awayTeam.name}
+                                compact={isCompact}
                                 className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                         </div>

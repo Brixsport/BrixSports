@@ -489,14 +489,14 @@ export class MatchStateManager {
     private isValidTransition(from: MatchPeriod, to: MatchPeriod): boolean {
         const validTransitions: Record<MatchPeriod, MatchPeriod[]> = {
             'NOT_STARTED': ['FIRST_HALF'],
-            'FIRST_HALF': ['HALF_TIME', 'SUSPENDED'],
-            'HALF_TIME': ['SECOND_HALF'],
+            'FIRST_HALF': ['HALF_TIME', 'SUSPENDED', 'FINISHED'], // FINISHED: logger ends the match early
+            'HALF_TIME': ['SECOND_HALF', 'FINISHED'], // FINISHED: logger ends the match at the break
             'SECOND_HALF': ['FINISHED', 'EXTRA_TIME_1', 'SUSPENDED'],
             'EXTRA_TIME_1': ['EXTRA_TIME_2', 'FINISHED'],
             'EXTRA_TIME_2': ['PENALTY_SHOOTOUT', 'FINISHED'],
             'PENALTY_SHOOTOUT': ['FINISHED'],
             'FINISHED': ['EXTRA_TIME_1', 'PENALTY_SHOOTOUT'], // Allow knockout progression from FT
-            'SUSPENDED': ['FIRST_HALF', 'SECOND_HALF', 'ABANDONED'],
+            'SUSPENDED': ['FIRST_HALF', 'SECOND_HALF', 'ABANDONED', 'FINISHED'],
             'ABANDONED': [],
         };
 

@@ -413,7 +413,7 @@ export default function TeamDetailClient() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-6">
+                                    <div className="space-y-6 min-w-0">
                                         <div className="p-6 bg-gradient-to-br from-muted to-muted/50 rounded-3xl border border-border backdrop-blur-md">
                                             <div className="flex items-center justify-between mb-6 gap-2">
                                                 <h3 className="text-lg font-bold flex items-center gap-2">
@@ -431,7 +431,7 @@ export default function TeamDetailClient() {
                                                         value={statsSeasons.selected}
                                                         disabled={statsLoading}
                                                         onChange={(e) => fetchTeamData(e.target.value)}
-                                                        className="text-[10px] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 py-1 focus:outline-none focus:border-primary/50 disabled:opacity-50"
+                                                        className="min-w-0 max-w-full text-[10px] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 py-1 focus:outline-none focus:border-primary/50 disabled:opacity-50"
                                                     >
                                                         <option value="all">All Competitions</option>
                                                         {statsSeasons.seasons.map((s) => (

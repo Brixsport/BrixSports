@@ -76,6 +76,33 @@ describe('MatchStateManager — status transition table', () => {
         expect(m.getState().clock.period).toBe('EXTRA_TIME_1');
     });
 
+    it('allows ending the match straight from HALF_TIME', () => {
+        const m = freshManager();
+        m.transitionStatus('FIRST_HALF');
+        m.transitionStatus('HALF_TIME');
+        expect(() => m.transitionStatus('FINISHED')).not.toThrow();
+        expect(m.getState().clock.period).toBe('FINISHED');
+        expect(m.isLive()).toBe(false);
+    });
+
+    it('allows ending the match from FIRST_HALF and SUSPENDED', () => {
+        const early = freshManager();
+        early.transitionStatus('FIRST_HALF');
+        expect(() => early.transitionStatus('FINISHED')).not.toThrow();
+        early.destroy();
+
+        const suspended = freshManager();
+        suspended.transitionStatus('FIRST_HALF');
+        suspended.transitionStatus('SUSPENDED');
+        expect(() => suspended.transitionStatus('FINISHED')).not.toThrow();
+        expect(suspended.getState().clock.period).toBe('FINISHED');
+    });
+
+    it('still rejects FINISHED from NOT_STARTED', () => {
+        const m = freshManager();
+        expect(() => m.transitionStatus('FINISHED')).toThrow(/Invalid status transition/);
+    });
+
     it('ABANDONED is a dead end -- no valid transition out of it', () => {
         const m = freshManager();
         m.transitionStatus('FIRST_HALF');
