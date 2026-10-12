@@ -2476,8 +2476,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     <FoulOutcomeModal
                         onSelect={(outcome) => {
                             if (outcome === 'None') {
-                                confirmEvent('Foul', pendingFoulPlayerId, null);
-                                // Then maybe ask reason for foul?
+                                // No card: the reason modal records the single Foul event
+                                // (on select or on close), so do not confirm it here too.
                                 setPendingReasonEvent({ type: 'Foul', playerId: pendingFoulPlayerId });
                                 setShowReasonModal(true);
                             } else {
