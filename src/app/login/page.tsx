@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Mail, Lock, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { BackButton } from "@/components/ui/BackButton";
+import { BrandMark } from "@/components/BrandMark";
 import { safeCallbackPath } from "@/lib/safe-redirect";
 
 const formSchema = z.object({
@@ -159,9 +160,7 @@ function LoginPageContent() {
 
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center font-display text-3xl -skew-x-12 text-primary-foreground mx-auto mb-4 shadow-lg shadow-primary/20">
-                            B
-                        </div>
+                        <BrandMark variant="viewer" size={64} className="mx-auto mb-4 rounded-2xl shadow-lg shadow-primary/20" />
                         <h2 className="font-display text-3xl tracking-tight italic uppercase mb-2 text-foreground">
                             Welcome Back
                         </h2>

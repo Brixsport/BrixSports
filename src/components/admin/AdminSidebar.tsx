@@ -10,6 +10,7 @@ import {
     Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User, Megaphone, Layers
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { BrandMark } from '@/components/BrandMark';
 import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 
 const navItems = [
@@ -87,7 +88,7 @@ export function AdminSidebar() {
       `}>
                 <div className="flex items-center justify-between mb-10">
                     <Link href="/admin" className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-black font-display text-2xl -skew-x-12 shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]">B</div>
+                        <BrandMark variant="admin" size={40} className="rounded-xl shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]" />
                         <div className="flex flex-col">
                             <span className="font-display text-xl tracking-tight italic uppercase leading-none">Command</span>
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Nexus v2.4</span>

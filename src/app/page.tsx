@@ -9,6 +9,7 @@ import { Trophy, Calendar, User, Users, Search, Bell, Menu, ChevronRight, Chevro
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
+import { BrandMark } from '@/components/BrandMark';
 import { useNotifications } from '@/components/Notifications';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
@@ -462,7 +463,7 @@ export default function Home() {
           <div className="h-14 flex items-center justify-between">
             <div className="flex items-center gap-6">
               <Link href="/" className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center font-display text-lg -skew-x-12 text-primary-foreground">B</div>
+                <BrandMark variant="viewer" size={28} priority />
                 <span className="font-display text-xl tracking-tight hidden sm:block">BRIXSPORT</span>
               </Link>
 
