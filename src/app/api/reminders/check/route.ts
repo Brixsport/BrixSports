@@ -20,6 +20,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import webpush from 'web-push';
 import { logNotificationSend, sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { collectAcrossPages, isStartWithinWindow } from '@/lib/notifications/reminder-window';
+import { isValidBearerSecret } from '@/lib/notifications/cron-auth';
 
 // Item 9: lineup-not-published reminder -- matches kicking off within this
 // window with either team's lineup still not marked `status: 'published'`
@@ -58,8 +59,7 @@ function isAuthorized(request: NextRequest): boolean {
         console.error('[Reminder Checker] CRON_SECRET is not set; rejecting request (fail closed)');
         return false;
     }
-    const authHeader = request.headers.get('authorization');
-    return authHeader === `Bearer ${cronSecret}`;
+    return isValidBearerSecret(request.headers.get('authorization'), cronSecret);
 }
 
 async function runReminderCheck() {

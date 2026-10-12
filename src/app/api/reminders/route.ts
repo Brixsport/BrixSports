@@ -11,6 +11,7 @@ import { db } from '@/db';
 import { matchReminders, matches, pushSubscriptions } from '@/db/schema';
 import { eq, and, lt, gte } from 'drizzle-orm';
 import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
+import { validateReminderRequest } from '@/lib/notifications/reminder-input';
 
 /**
  * GET /api/reminders
@@ -99,6 +100,16 @@ export async function POST(request: NextRequest) {
                 { error: 'Match not found' },
                 { status: 404 }
             );
+        }
+
+        const validation = validateReminderRequest({
+            minutesBefore,
+            matchStatus: match.status,
+            matchStartTime: match.startTime,
+            now: new Date(),
+        });
+        if (!validation.ok) {
+            return NextResponse.json({ error: validation.error }, { status: 422 });
         }
 
         // Check if reminder already exists
