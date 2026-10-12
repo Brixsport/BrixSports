@@ -9,6 +9,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import * as Sentry from '@sentry/nextjs';
 import { env as appEnv } from './env';
 import { createScoreVersionClock } from './score-version';
+import { resolveWsEnv } from './ws-env';
 
 // Extend global namespace to include io
 declare global {
@@ -28,6 +29,7 @@ export function getIO(): SocketIOServer | null {
 // BACKLOG-467 item 4: warn/report a missing WS config once per process, not on
 // every broadcast (this runs inside after() for every logged event).
 let wsConfigMissingReported = false;
+let wsEnvPreviewWarned = false;
 
 // Sentry reports of "WS server rejected the broadcast" are limited to one per minute per process.
 const REJECTED_REPORT_INTERVAL_MS = 60 * 1000;
@@ -79,9 +81,13 @@ async function broadcast(room: string | null, event: string, data: any): Promise
         // hostname patterns the socket connection handlers already check on the
         // incoming browser Origin, so both sides always agree on the room name. Same
         // default-to-'prod' direction as the rest of BUG-074's fix either way.
-        const wsEnv = (appEnv.appUrl.includes('staging.brixsports.com') || appEnv.appUrl.includes('brixsports-staging.vercel.app'))
-            ? 'staging'
-            : 'prod';
+        // WS_ENV, when set, overrides that heuristic (see src/lib/ws-env.ts).
+        const resolved = resolveWsEnv(appEnv.wsEnv, appEnv.appUrl);
+        const wsEnv = resolved.env;
+        if (resolved.previewMayHitProd && !wsEnvPreviewWarned) {
+            wsEnvPreviewWarned = true;
+            console.warn(`[Socket] NEXT_PUBLIC_APP_URL (${appEnv.appUrl}) is a vercel.app URL but broadcasts go to the 'prod' rooms. Set WS_ENV=staging on this deployment if it is not production.`);
+        }
         const res = await fetch(broadcastUrl, {
             method: 'POST',
             headers: {

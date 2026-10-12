@@ -28,6 +28,8 @@ export const env = {
     wsUrl: process.env.NEXT_PUBLIC_WS_URL ?? '',
     // Shared secret between this app and the standalone ws-server (server-side only).
     wsApiKey: process.env.WS_API_KEY ?? '',
+    // Optional explicit ws-server room environment ('prod' | 'staging'); see src/lib/ws-env.ts.
+    wsEnv: process.env.WS_ENV ?? '',
 
     // Monitoring
     sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? '',
