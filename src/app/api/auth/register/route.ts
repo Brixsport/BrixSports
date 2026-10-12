@@ -28,8 +28,9 @@ export async function POST(request: NextRequest) {
         let { email, password, name } = body;
         const role = normalizeUserRole('user');
         
+        // The password is deliberately not trimmed: login sends it as typed, so
+        // trimming here would make a password with edge whitespace impossible to use.
         if (email) email = email.trim();
-        if (password) password = password.trim();
         if (name) name = name.trim();
 
         // Validate input
