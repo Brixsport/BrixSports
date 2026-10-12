@@ -228,12 +228,16 @@ export async function GET(request: NextRequest) {
             });
         }
 
+        // This list never reads the session, so the plain (no stats) response is the same for
+        // every caller and safe to share at the edge: 30s fresh plus 60s stale-while-revalidate.
+        // The includeStats variant above feeds the admin page and stays uncached.
         return NextResponse.json({
             competitions: filteredCompetitions.slice(offset, offset + limit),
             total: totalFiltered,
             groups: allSeasonsGroups,
         }, {
             headers: {
+                'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
                 'X-Total-Count': String(totalFiltered),
                 'X-Limit': String(limit),
                 'X-Offset': String(offset),
