@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useAuth } from '@/contexts/AuthContext';
 import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
@@ -159,6 +160,13 @@ export default function MatchDetailClient() {
     const disconnectToastFired = useRef(false);
     const prevConnectedForSync = useRef<boolean | null>(null);
 
+    // Viewers poll the cookie-free, edge-cached public route. Admin and logger sessions keep
+    // using the session-aware route so they still get draft lineups and logger names.
+    const { user: sessionUser } = useAuth();
+    const isStaff = sessionUser?.role === 'admin' || sessionUser?.role === 'logger';
+    const isStaffRef = useRef(false);
+    isStaffRef.current = isStaff;
+
     const isUpcoming = matchData?.match?.status === 'UPCOMING';
 
     useEffect(() => {
@@ -304,6 +312,12 @@ export default function MatchDetailClient() {
     useEffect(() => {
         fetchMatchData();
     }, [matchId]);
+
+    // The session resolves after the first load. When it turns out to be staff, refetch once from
+    // the session-aware route so draft lineups and logger names appear without waiting for a poll.
+    useEffect(() => {
+        if (isStaff) fetchMatchData(true);
+    }, [isStaff]);
 
     // Update events in real-time — dedup by id OR (type+minute+playerId) to handle
     // temp-ID vs permanent-ID discrepancy from dual broadcast paths.
@@ -470,7 +484,7 @@ export default function MatchDetailClient() {
     const fetchMatchData = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
-            const response = await fetch(`/api/matches/${matchId}`);
+            const response = await fetch(isStaffRef.current ? `/api/matches/${matchId}` : `/api/matches/${matchId}/public`);
             const data = await response.json();
 
             // BUG-236: neither path checked response.ok or that `data` actually has the
