@@ -130,3 +130,101 @@ export async function checkRateLimit(
         return checkInMemory(bucketKey, max, windowMs);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Failure-only limiter (login-style endpoints)
+//
+// checkRateLimit above counts every request. For credential endpoints that
+// punishes the wrong people: a campus NAT shares one IP, and successful logins
+// would burn the budget that exists for guessing. This limiter only counts
+// failures, checked before the work and recorded after a failed attempt, and a
+// success can clear its counter. Callers build `subject` (for example
+// `ip:1.2.3.4` or `email:a@b.c`) so one endpoint can apply an IP key and a
+// per-account key independently.
+//
+// Fixed window: the first failure starts the window, it ends `windowMs` later.
+// Backed by Upstash when `distributed` and Redis is configured, otherwise (or on
+// a Redis error) by the per-instance Map, same fallback as checkRateLimit.
+// ---------------------------------------------------------------------------
+
+export interface FailureLimitOpts {
+    max: number;
+    windowMs: number;
+    distributed?: boolean;
+}
+
+const failureBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function failureKey(scope: string, subject: string): string {
+    return `brixsports-fail:${scope}:${subject}`;
+}
+
+function useRedis(opts: FailureLimitOpts): boolean {
+    return !!redis && !!opts.distributed;
+}
+
+export async function isFailureLimited(
+    scope: string,
+    subject: string,
+    opts: FailureLimitOpts
+): Promise<RateLimitResult> {
+    const key = failureKey(scope, subject);
+    if (useRedis(opts)) {
+        try {
+            const count = Number((await redis!.get(key)) ?? 0);
+            if (count >= opts.max) {
+                const ttlMs = await redis!.pttl(key);
+                return { limited: true, retryAfterSeconds: Math.max(1, Math.ceil((ttlMs > 0 ? ttlMs : opts.windowMs) / 1000)) };
+            }
+            return { limited: false };
+        } catch (err) {
+            console.error('[rate-limit] Upstash error, falling back to in-memory:', err);
+        }
+    }
+    const cur = failureBuckets.get(key);
+    const now = Date.now();
+    if (cur && now < cur.resetAt && cur.count >= opts.max) {
+        return { limited: true, retryAfterSeconds: Math.max(1, Math.ceil((cur.resetAt - now) / 1000)) };
+    }
+    return { limited: false };
+}
+
+export async function recordFailure(scope: string, subject: string, opts: FailureLimitOpts): Promise<void> {
+    const key = failureKey(scope, subject);
+    if (useRedis(opts)) {
+        try {
+            const count = await redis!.incr(key);
+            if (count === 1) await redis!.pexpire(key, opts.windowMs);
+            return;
+        } catch (err) {
+            console.error('[rate-limit] Upstash error, falling back to in-memory:', err);
+        }
+    }
+    const now = Date.now();
+    const cur = failureBuckets.get(key);
+    if (cur && now < cur.resetAt) {
+        cur.count += 1;
+    } else {
+        failureBuckets.set(key, { count: 1, resetAt: now + opts.windowMs });
+    }
+}
+
+export async function clearFailures(scope: string, subject: string, opts: FailureLimitOpts): Promise<void> {
+    const key = failureKey(scope, subject);
+    failureBuckets.delete(key);
+    if (useRedis(opts)) {
+        try {
+            await redis!.del(key);
+        } catch (err) {
+            console.error('[rate-limit] Upstash error clearing failures:', err);
+        }
+    }
+}
+
+export function ipSubject(request: NextRequest | Request): string {
+    return `ip:${getClientIp(request)}`;
+}
+
+export function emailSubject(email: string): string {
+    return `email:${email.trim().toLowerCase()}`;
+}
