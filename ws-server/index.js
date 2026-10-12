@@ -11,6 +11,16 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { MAX_BODY_BYTES, isAuthorizedApiKey, readBodyLimited } = require('./http-guard');
+const { isValidId, asObject, getMatchId, guarded, canJoinRoom } = require('./payload-guard');
+
+// One bad packet or stray rejection must not take down every connected viewer and logger (and wipe
+// the in-memory clock state with them): log it and keep serving.
+process.on('uncaughtException', (err) => {
+    console.error('[WS] uncaughtException (still serving):', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[WS] unhandledRejection (still serving):', reason);
+});
 
 // /broadcast and /infrastructure/endpoint authenticate with WS_API_KEY and FAIL CLOSED: with the variable
 // unset or empty every request is rejected (it used to be accepted: undefined !== undefined is false).
@@ -87,8 +97,7 @@ const httpServer = http.createServer((req, res) => {
                 if (room && event) {
                     const scopedRoom = `${scopedEnv}:${room}`;
                     io.to(scopedRoom).emit(event, { ...data, timestamp: Date.now() });
-                    console.log(`[Broadcast API] ${event} → ${scopedRoom}`);
-                } else if (event) {
+                    console.log(`[Broadcast API] ${event} → ${scopedRoom}`);                } else if (event) {
                     // Global broadcast — scoped to the caller's environment, not truly global
                     io.to(scopedEnv).emit(event, { ...data, timestamp: Date.now() });
                     console.log(`[Broadcast API] ${event} → ${scopedEnv} (global)`);
@@ -308,9 +317,28 @@ io.on('connection', (socket) => {
         return handler(data);
     };
 
+    // Every handler below is registered through on(): a malformed packet (no payload, null, wrong
+    // types) or an unexpected throw is logged and ignored instead of killing the process, and an
+    // async handler's rejection is caught. Handlers validate their own payload first and return
+    // quietly on anything invalid.
+    const on = (event, handler) => socket.on(event, guarded(event, handler));
+
+    // A socket may sit in at most MAX_ROOMS_PER_SOCKET rooms, so one client cannot subscribe itself
+    // to an unbounded number of rooms.
+    const joinRoom = (roomName) => {
+        if (!canJoinRoom(socket.rooms, roomName)) {
+            socket.emit('error', { message: 'Too many rooms', type: 'room:limit' });
+            return false;
+        }
+        socket.join(roomName);
+        return true;
+    };
+
     // ── Match Subscription ──────────────────────────────────────
-    socket.on('match:subscribe', ({ matchId }) => {
-        socket.join(room(`match:${matchId}`));
+    on('match:subscribe', (payload) => {
+        const matchId = getMatchId(payload);
+        if (!matchId) return;
+        if (!joinRoom(room(`match:${matchId}`))) return;
         console.log(`[WS] ${socket.id} → ${room(`match:${matchId}`)}`);
         socket.emit('match:subscribed', { matchId });
 
@@ -325,7 +353,9 @@ io.on('connection', (socket) => {
         io.to(room(`match:${matchId}`)).emit('match:viewers', { matchId, count: roomSize });
     });
 
-    socket.on('match:unsubscribe', ({ matchId }) => {
+    on('match:unsubscribe', (payload) => {
+        const matchId = getMatchId(payload);
+        if (!matchId) return;
         socket.leave(room(`match:${matchId}`));
         socket.emit('match:unsubscribed', { matchId });
 
@@ -345,7 +375,8 @@ io.on('connection', (socket) => {
     // as BUG-205, just at the WS layer instead of push. This handler is now purely
     // an ack back to the sending logger; the server-side REST-triggered broadcasts
     // are the single source of truth for what viewers actually see.
-    socket.on('event:log', requireLogger((data) => {
+    on('event:log', requireLogger((data) => {
+        if (!asObject(data)) return;
         try {
             console.log(`[WS] Event logged (ack only, broadcast is server-side): ${data.type} in match ${data.matchId}`);
             socket.emit('event:logged', {
@@ -359,7 +390,8 @@ io.on('connection', (socket) => {
     }));
 
     // ── Event Deletion ──────────────────────────────────────────
-    socket.on('event:delete', requireLogger((data) => {
+    on('event:delete', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         console.log(`[WS] Event deleted: ${data.eventId} in match ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('event:deleted', {
             matchId: data.matchId,
@@ -368,33 +400,39 @@ io.on('connection', (socket) => {
     }));
 
     // ── Score Updates ───────────────────────────────────────────
-    socket.on('match:score:update', requireLogger((data) => {
+    on('match:score:update', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         console.log(`[WS] Score: ${data.homeScore}-${data.awayScore} in ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('match:score:updated', data);
     }));
 
     // ── Player Rating Updates ───────────────────────────────────
-    socket.on('rating:update', requireLogger((data) => {
+    on('rating:update', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`match:${data.matchId}`)).emit('rating:updated', data);
     }));
 
     // ── Team Stats Updates ──────────────────────────────────────
-    socket.on('stats:update', requireLogger((data) => {
+    on('stats:update', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`match:${data.matchId}`)).emit('stats:updated', data);
     }));
 
     // ── Eye Point ───────────────────────────────────────────────
-    socket.on('eyepoint:award', requireLogger((data) => {
+    on('eyepoint:award', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`match:${data.matchId}`)).emit('eyepoint:awarded', data);
     }));
 
     // ── Substitution ────────────────────────────────────────────
-    socket.on('substitution:log', requireLogger((data) => {
+    on('substitution:log', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`match:${data.matchId}`)).emit('substitution:logged', data);
     }));
 
     // ── Match Status ────────────────────────────────────────────
-    socket.on('match:status:change', requireLogger((data) => {
+    on('match:status:change', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         console.log(`[WS] Status: ${data.status} for ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('match:status:changed', data);
     }));
@@ -403,8 +441,9 @@ io.on('connection', (socket) => {
     // Single-writer enforcement lives only here -- it's specifically the
     // clock-flicker problem, not a general logger-mutation gate. event:log
     // and everything else stay as requireLogger() alone (BUG-120).
-    socket.on('match:time:update', requireLogger(async (data) => {
-        const { matchId } = data;
+    on('match:time:update', requireLogger(async (data) => {
+        const matchId = getMatchId(data);
+        if (!matchId) return;
 
         const assigned = await isAssignedLogger(socket, matchId);
         if (!assigned) {
@@ -432,45 +471,54 @@ io.on('connection', (socket) => {
     }));
 
     // ── Lineup Updates ──────────────────────────────────────────
-    socket.on('match:lineup:update', requireLogger((data) => {
+    on('match:lineup:update', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         console.log(`[WS] Lineup update for ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('match:lineup:updated', data);
     }));
 
     // ── Match General Update ────────────────────────────────────
-    socket.on('match:update', requireLogger((data) => {
+    on('match:update', requireLogger((data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`match:${data.matchId}`)).emit('match:updated', data);
     }));
 
     // ── Live Chat ───────────────────────────────────────────────
-    socket.on('chat:join', ({ matchId }) => {
-        socket.join(room(`chat:${matchId}`));
+    on('chat:join', (payload) => {
+        const matchId = getMatchId(payload);
+        if (!matchId) return;
+        joinRoom(room(`chat:${matchId}`));
     });
 
-    socket.on('chat:leave', ({ matchId }) => {
+    on('chat:leave', (payload) => {
+        const matchId = getMatchId(payload);
+        if (!matchId) return;
         socket.leave(room(`chat:${matchId}`));
     });
 
-    socket.on('chat:message', (data) => {
+    on('chat:message', (data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`chat:${data.matchId}`)).emit('chat:message', data);
     });
 
     // ── Competition / Standings ─────────────────────────────────
-    socket.on('join-competition', (competitionId) => {
-        socket.join(room(`competition:${competitionId}`));
+    on('join-competition', (competitionId) => {
+        if (!isValidId(competitionId)) return;
+        if (!joinRoom(room(`competition:${competitionId}`))) return;
         console.log(`[WS] ${socket.id} → ${room(`competition:${competitionId}`)}`);
     });
 
-    socket.on('leave-competition', (competitionId) => {
+    on('leave-competition', (competitionId) => {
+        if (!isValidId(competitionId)) return;
         socket.leave(room(`competition:${competitionId}`));
     });
 
     // ── Admin Channels ──────────────────────────────────────────
-    socket.on('admin:subscribe', requireAdmin(() => {
+    on('admin:subscribe', requireAdmin(() => {
         socket.join(room('admin:loggers'));
     }));
 
-    socket.on('admin:livestream:subscribe', requireAdmin(() => {
+    on('admin:livestream:subscribe', requireAdmin(() => {
         socket.join(room('admin:livestreams'));
     }));
 
@@ -480,7 +528,7 @@ io.on('connection', (socket) => {
     // (uptime, memory, io.engine.clientsCount), which is already shared across
     // staging and prod by construction — scoping the room wouldn't scope the
     // underlying data, since clientsCount counts every connected socket regardless.
-    socket.on('admin:infrastructure:subscribe', requireAdmin(() => {
+    on('admin:infrastructure:subscribe', requireAdmin(() => {
         socket.join('admin:infrastructure');
         console.log(`[WS] ${socket.id} subscribed to infrastructure updates`);
 
@@ -493,20 +541,24 @@ io.on('connection', (socket) => {
         });
     }));
 
-    socket.on('admin:infrastructure:unsubscribe', () => {
+    on('admin:infrastructure:unsubscribe', () => {
         socket.leave('admin:infrastructure');
         console.log(`[WS] ${socket.id} unsubscribed from infrastructure updates`);
     });
 
-    socket.on('logger:status:update', requireLogger((data) => {
+    on('logger:status:update', requireLogger((data) => {
+        if (!asObject(data)) return;
         io.to(room('admin:loggers')).emit('logger:updated', data);
     }));
 
     // ── Multi-Logger Real-time Sync ─────────────────────────────
     // Tracks which loggers are active in each match room
-    socket.on('logger:join', requireLogger(({ matchId, loggerId, loggerName }) => {
+    on('logger:join', requireLogger((payload) => {
+        const matchId = getMatchId(payload);
+        if (!matchId) return;
+        const { loggerId, loggerName } = payload;
         const loggerRoom = room(`logger:${matchId}`);
-        socket.join(loggerRoom);
+        if (!joinRoom(loggerRoom)) return;
         // Store logger info on the socket for disconnect handling
         socket.data.loggerInfo = { matchId, loggerId, loggerName };
 
@@ -532,7 +584,10 @@ io.on('connection', (socket) => {
         socket.emit('sync-response', { loggers });
     }));
 
-    socket.on('logger:leave', requireLogger(({ matchId, loggerId }) => {
+    on('logger:leave', requireLogger((payload) => {
+        const matchId = getMatchId(payload);
+        if (!matchId) return;
+        const { loggerId } = payload;
         const loggerRoom = room(`logger:${matchId}`);
         socket.leave(loggerRoom);
         console.log(`[WS] Logger ${loggerId} left match ${matchId}`);
@@ -540,28 +595,33 @@ io.on('connection', (socket) => {
         socket.data.loggerInfo = null;
     }));
 
-    socket.on('logger:broadcast-event', requireLogger(({ matchId, event }) => {
+    on('logger:broadcast-event', requireLogger((payload) => {
+        const matchId = getMatchId(payload);
+        if (!matchId) return;
+        const { event } = payload;
         const loggerRoom = room(`logger:${matchId}`);
         // Broadcast to all other loggers in this match room (not the sender)
         socket.to(loggerRoom).emit('logger:event', event);
     }));
 
     // ── Polls & Predictions ─────────────────────────────────────
-    socket.on('poll:vote', (data) => {
+    on('poll:vote', (data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`match:${data.matchId}`)).emit('poll:updated', data);
     });
 
-    socket.on('prediction:submit', (data) => {
+    on('prediction:submit', (data) => {
+        if (!getMatchId(data)) return;
         io.to(room(`match:${data.matchId}`)).emit('prediction:updated', data);
     });
 
     // ── Heartbeat ───────────────────────────────────────────────
-    socket.on('ping', () => {
+    on('ping', () => {
         socket.emit('pong', { timestamp: Date.now() });
     });
 
     // ── Disconnect ──────────────────────────────────────────
-    socket.on('disconnect', (reason) => {
+    on('disconnect', (reason) => {
         console.log(`[WS] Disconnected: ${socket.id} (${reason})`);
 
         // Clean up logger room if this socket was a logger
@@ -585,7 +645,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('error', (error) => {
+    on('error', (error) => {
         console.error(`[WS] Error ${socket.id}:`, error);
     });
 });
