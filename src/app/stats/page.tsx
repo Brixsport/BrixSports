@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { BackButton } from '@/components/ui/BackButton';
 import { useResilientFetch } from '@/hooks/useResilientFetch';
 import { LoadFailedState } from '@/components/resilience/ReadPathStates';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface TeamStats {
     team: {
@@ -58,6 +59,18 @@ interface TeamStats {
 }
 
 const isTeamStatsList = (body: unknown): body is TeamStats[] => Array.isArray(body);
+
+// The team logo is usually an image URL, but can be an emoji or empty. Render a URL with the
+// shared logo component (image with initials fallback) and anything else as text, so a long
+// URL is never printed as page text.
+function StatsTeamLogo({ logo, name }: { logo: string | null | undefined; name: string }) {
+    const value = (logo || '').trim();
+    const isUrl = /^(https?:)?\/\//.test(value) || value.startsWith('/') || value.startsWith('data:image/');
+    if (isUrl) {
+        return <TeamLogo logo={value} name={name} size="lg" />;
+    }
+    return <span className="text-5xl shrink-0">{value || '⚽'}</span>;
+}
 
 export default function StatsPage() {
     const [selectedSport, setSelectedSport] = useState<'Football' | 'Basketball'>('Football');
@@ -129,7 +142,7 @@ export default function StatsPage() {
                                 {/* Team Header */}
                                 <div className="flex items-center justify-between mb-8">
                                     <div className="flex items-center gap-4">
-                                        <span className="text-5xl">{stats.team.logo || '⚽'}</span>
+                                        <StatsTeamLogo logo={stats.team.logo} name={stats.team.name} />
                                         <div>
                                             <h2 className="text-2xl font-display italic uppercase tracking-tight">{stats.team.name}</h2>
                                             <p className="text-xs text-foreground/60 font-bold uppercase tracking-wider">{stats.team.sport}</p>
