@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
+import { toPublicMatchRating } from '@/lib/public-ratings';
 
 /**
  * GET /api/matches/[id]/ratings
@@ -32,68 +33,30 @@ export async function GET(
             );
         }
 
-        // Get all ratings for this match
+        // Get all ratings for this match. Ratings are calculated when the match is set
+        // FINISHED, so an empty list is the correct answer when none exist yet.
         const ratings = await db
             .select({
-                rating: playerRatings,
-                player: players
+                playerId: playerRatings.playerId,
+                teamId: playerRatings.teamId,
+                autoRating: playerRatings.autoRating,
+                finalRating: playerRatings.finalRating,
+                isMotM: playerRatings.isMotM,
+                name: players.name,
+                jerseyName: players.jerseyName,
+                number: players.number,
+                position: players.position,
+                image: players.image
             })
             .from(playerRatings)
             .leftJoin(players, eq(playerRatings.playerId, players.id))
-            .where(eq(playerRatings.matchId, matchId));
-
-        // Check if ratings exist
-        if (ratings.length === 0 && match[0].status === 'FINISHED') {
-            console.log(`[Public Ratings] No ratings for finished match ${matchId}, attempting auto-calc...`);
-
-            try {
-                const protocol = request.headers.get('x-forwarded-proto') || 'http';
-                const host = request.headers.get('host');
-                const baseUrl = `${protocol}://${host}`;
-
-                // Trigger calculation (which also initializes if needed)
-                // Note: We use a POST to ourselves. This requires no specific auth if we allow it, 
-                // but usually ratings calculation requires logger/admin.
-                // For public safety, we might just return empty, but let's try to be helpful.
-
-                const calcRes = await fetch(`${baseUrl}/api/matches/${matchId}/ratings`, {
-                    method: 'POST',
-                    headers: { 'Cookie': request.headers.get('cookie') || '' }
-                });
-
-                if (calcRes.ok) {
-                    // Re-fetch
-                    const newRatings = await db
-                        .select({
-                            rating: playerRatings,
-                            player: players
-                        })
-                        .from(playerRatings)
-                        .leftJoin(players, eq(playerRatings.playerId, players.id))
-                        .where(eq(playerRatings.matchId, matchId));
-
-                    return NextResponse.json({
-                        matchId,
-                        matchStatus: match[0].status,
-                        ratings: newRatings.map(r => ({
-                            ...r.rating,
-                            player: r.player
-                        })),
-                        autoCalculated: true
-                    });
-                }
-            } catch (e) {
-                console.error('[Public Ratings] Auto-calc trigger failed:', e);
-            }
-        }
+            .where(eq(playerRatings.matchId, matchId))
+            .limit(200);
 
         return NextResponse.json({
             matchId,
             matchStatus: match[0].status,
-            ratings: ratings.map(r => ({
-                ...r.rating,
-                player: r.player
-            }))
+            ratings: ratings.map(toPublicMatchRating)
         });
 
     } catch (error) {

@@ -22,3 +22,16 @@ describe('public ratings shaping', () => {
         expect(toPublicRatedTeam(undefined)).toBeNull();
     });
 });
+
+import { toPublicMatchRating } from '@/lib/public-ratings';
+
+describe('public match rating shaping', () => {
+    it('drops adjustment audit fields and player contact data', () => {
+        const dto = toPublicMatchRating({
+            playerId: 'p1', teamId: 't1', autoRating: 6.5, finalRating: 7, isMotM: true, name: 'A', jerseyName: 'A', number: 4, position: 'DF', image: null,
+            adjustedBy: 'staff-1', adjustmentNotes: 'note', email: 'a@b.c', profileId: 'x', id: 'r1', matchId: 'm1', ratingBreakdown: {},
+        });
+        for (const k of ['adjustedBy', 'adjustmentNotes', 'email', 'profileId', 'id', 'matchId', 'ratingBreakdown']) expect(dto).not.toHaveProperty(k);
+        expect(dto).toMatchObject({ playerId: 'p1', teamId: 't1', autoRating: 6.5, finalRating: 7, isMotM: true, name: 'A' });
+    });
+});
