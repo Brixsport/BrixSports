@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { news } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import NewsDetailClient from './NewsDetailClient';
+import { serializeJsonLd } from '@/lib/json-ld';
 
 // BACKLOG-189: same fix as matches/[id] -- was a 'use client' page with no
 // generateMetadata, so every article shared the generic site-wide title
@@ -12,7 +13,7 @@ import NewsDetailClient from './NewsDetailClient';
 // enhancement path only, NewsDetailClient does its own independent fetching.
 async function getArticle(slug: string) {
     try {
-        const [article] = await db.select().from(news).where(eq(news.slug, slug)).limit(1);
+        const [article] = await db.select().from(news).where(and(eq(news.slug, slug), eq(news.status, 'published'))).limit(1);
         return article ?? null;
     } catch (error) {
         console.error('getArticle: DB error, falling back to generic metadata', error);
@@ -72,7 +73,7 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
             {schema && (
                 <script
                     type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+                    dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema) }}
                 />
             )}
             <NewsDetailClient />

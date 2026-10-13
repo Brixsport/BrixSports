@@ -7,7 +7,7 @@ import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
-import { calculateAndSaveRatings } from '@/lib/ratingsService';
+import { toRatingsMatchDto } from '@/lib/public-ratings';
 
 /**
  * GET /api/matches/[id]/ratings/adjust
@@ -19,8 +19,6 @@ export async function GET(
 ) {
     try {
         const user = await getAuthUser(request);
-
-        console.log('[Ratings Adjust] User:', user?.email, 'Role:', user?.role);
 
         if (!user) {
             return NextResponse.json(
@@ -46,6 +44,16 @@ export async function GET(
         }
 
         const { id: matchId } = await params;
+        if (user.role === 'logger' && !(await isLoggerAssigned(matchId, user.id))) {
+            return NextResponse.json(
+                {
+                    error: 'Forbidden',
+                    message: 'You are not assigned to this match',
+                    code: 'NOT_ASSIGNED'
+                },
+                { status: 403 }
+            );
+        }
         console.log('[Ratings Adjust] Fetching match:', matchId);
 
         // Get match details with teams
@@ -97,74 +105,13 @@ export async function GET(
 
         console.log('[Ratings Adjust] Found ratings:', ratings.length);
 
-        // Check if ratings exist
+        // Check if ratings exist. A GET never writes: ratings are calculated when the match is
+        // finished or on demand through POST /api/matches/[id]/ratings.
         if (ratings.length === 0) {
-            console.log('[Ratings Adjust] No ratings found, attempting auto-calculation...');
-
-            // BACKLOG-321: this used to self-fetch two of this route's own sibling
-            // HTTP endpoints (initialize, then calculate) -- the exact anti-pattern
-            // BACKLOG-124 already fixed once elsewhere (forwards no Authorization
-            // header, only Cookie; NEXT_PUBLIC_APP_URL points at a real deployed URL
-            // even in local dev, so this made a genuine outbound HTTPS call to
-            // itself). calculateAndSaveRatings() is self-sufficient -- it builds
-            // playerRatings rows from scratch off the match's lineups, with no
-            // dependency on ratings/initialize having run first (confirmed: this is
-            // exactly what ratings/route.ts's own GET fallback already does, calling
-            // it alone).
-            try {
-                await calculateAndSaveRatings(matchId);
-
-                // Re-fetch ratings
-                const newRatings = await db
-                    .select({
-                        rating: playerRatings,
-                        player: players
-                    })
-                    .from(playerRatings)
-                    .leftJoin(players, eq(playerRatings.playerId, players.id))
-                    .where(eq(playerRatings.matchId, matchId))
-                    .limit(200);
-
-                if (newRatings.length > 0) {
-                    const homeScore = match.homeScore ?? 0;
-                    const awayScore = match.awayScore ?? 0;
-
-                    return NextResponse.json({
-                        matchId,
-                        match: match,
-                        ratings: newRatings.map(r => {
-                            const position = r.player?.position || '';
-                            // BACKLOG-321: was computed once, globally, from
-                            // homeScore/awayScore alone -- showed every AWAY
-                            // player "Clean sheet" suggestions whenever HOME kept
-                            // one, and vice versa. Scoped to the rated player's
-                            // own team.
-                            const isHome = r.rating.teamId === match.homeTeamId;
-                            const ownScore = isHome ? homeScore : awayScore;
-                            const oppScore = isHome ? awayScore : homeScore;
-                            const teamCleanSheet = oppScore === 0;
-                            const teamWon = ownScore > oppScore;
-
-                            return {
-                                ...r.rating,
-                                playerName: r.player?.name,
-                                playerNumber: r.player?.number,
-                                playerPosition: position,
-                                suggestions: RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon)
-                            };
-                        }),
-                        lineups: match.lineups ? JSON.parse(match.lineups) : null,
-                        autoCalculated: true
-                    });
-                }
-            } catch (e) {
-                console.error('[Ratings Adjust] Auto-calc failed:', e);
-            }
-
             return NextResponse.json(
                 {
                     error: 'No ratings found',
-                    message: 'No player ratings have been calculated for this match yet. We tried to auto-calculate them but failed. Please ensure match lineups are set.',
+                    message: 'No player ratings have been calculated for this match yet. Calculate ratings first, and make sure match lineups are set.',
                     code: 'NO_RATINGS',
                     matchId
                 },
@@ -267,7 +214,7 @@ export async function GET(
 
         return NextResponse.json({
             matchId,
-            match: match,
+            match: toRatingsMatchDto(match),
             ratings: playableRatings,
             unusedSubstitutes: unusedSubstitutes.map(r => ({
                 playerId: r.playerId,

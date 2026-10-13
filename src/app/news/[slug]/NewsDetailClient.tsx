@@ -52,6 +52,17 @@ interface Comment {
     updatedAt: string;
 }
 
+// Tags are stored as a JSON string; a malformed value must not take the page down.
+function parseTags(raw: string | null): string[] {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
 export default function NewsDetailClient() {
     const params = useParams();
     const slug = params.slug as string;
@@ -93,6 +104,10 @@ export default function NewsDetailClient() {
     const fetchArticle = async () => {
         try {
             const response = await fetch(`/api/news/${slug}`);
+            if (!response.ok) {
+                setArticle(null);
+                return;
+            }
             const data = await response.json();
             setArticle(data);
             setLikeCount(data.likes || 0);
@@ -465,9 +480,9 @@ export default function NewsDetailClient() {
                 />
 
                 {/* Tags */}
-                {article.tags && (
+                {parseTags(article.tags).length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap mb-12 pb-12 border-b border-border">
-                        {JSON.parse(article.tags).map((tag: string, index: number) => (
+                        {parseTags(article.tags).map((tag: string, index: number) => (
                             <Link
                                 key={index}
                                 href={`/news?search=${tag}`}

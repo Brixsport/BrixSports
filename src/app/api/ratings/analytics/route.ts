@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { playerRatings, players, teams } from '@/db/schema';
 import { eq, and, sql, desc } from 'drizzle-orm';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { toPublicRatedPlayer, toPublicRatedTeam } from '@/lib/public-ratings';
+
+// Only the columns the public response exposes are ever read from the database.
+const publicPlayerColumns = {
+    id: players.id,
+    name: players.name,
+    jerseyName: players.jerseyName,
+    number: players.number,
+    position: players.position,
+    image: players.image,
+    teamId: players.teamId,
+    teamName: teams.name,
+};
+
+const publicTeamColumns = {
+    id: teams.id,
+    name: teams.name,
+    shortName: teams.shortName,
+    logo: teams.logo,
+};
+
+function clampLimit(raw: string | null, fallback: number, max: number) {
+    return Math.min(Math.max(1, parseInt(raw || String(fallback), 10) || fallback), max);
+}
 
 /**
  * GET /api/ratings/analytics
@@ -9,12 +34,21 @@ import { eq, and, sql, desc } from 'drizzle-orm';
  */
 export async function GET(request: NextRequest) {
     try {
+        const rl = await checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const { searchParams } = new URL(request.url);
         const type = searchParams.get('type'); // 'player-average', 'best-rated', 'position-comparison', 'team-average'
         const playerId = searchParams.get('playerId');
         const teamId = searchParams.get('teamId');
         const position = searchParams.get('position');
-        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '10', 10) || 10), 100);
+        const limit = clampLimit(searchParams.get('limit'), 10, 100);
+        const teamLimit = clampLimit(searchParams.get('limit'), 100, 200);
 
         switch (type) {
             case 'player-average':
@@ -27,7 +61,7 @@ export async function GET(request: NextRequest) {
                 return await getPositionComparison();
 
             case 'team-average':
-                return await getTeamAverageRatings(teamId);
+                return await getTeamAverageRatings(teamId, teamLimit);
 
             default:
                 return NextResponse.json(
@@ -57,12 +91,14 @@ async function getPlayerAverageRating(playerId: string | null) {
             avgFinalRating: sql<number>`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`,
             totalMatches: sql<number>`COUNT(*)`,
             motmCount: sql<number>`SUM(CASE WHEN ${playerRatings.isMotM} = 1 THEN 1 ELSE 0 END)`,
-            player: players
+            player: publicPlayerColumns
         })
         .from(playerRatings)
         .leftJoin(players, eq(playerRatings.playerId, players.id))
+        .leftJoin(teams, eq(players.teamId, teams.id))
         .where(eq(playerRatings.playerId, playerId))
-        .groupBy(playerRatings.playerId);
+        .groupBy(playerRatings.playerId)
+        .limit(1);
 
     if (ratings.length === 0) {
         return NextResponse.json({ error: 'No ratings found for player' }, { status: 404 });
@@ -70,7 +106,7 @@ async function getPlayerAverageRating(playerId: string | null) {
 
     return NextResponse.json({
         playerId,
-        player: ratings[0].player,
+        player: toPublicRatedPlayer(ratings[0].player),
         averageAutoRating: parseFloat(ratings[0].avgAutoRating.toFixed(2)),
         averageFinalRating: parseFloat(ratings[0].avgFinalRating.toFixed(2)),
         totalMatches: ratings[0].totalMatches,
@@ -86,10 +122,11 @@ async function getBestRatedPlayers(limit: number, position: string | null) {
             avgRating: sql<number>`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`,
             totalMatches: sql<number>`COUNT(*)`,
             motmCount: sql<number>`SUM(CASE WHEN ${playerRatings.isMotM} = 1 THEN 1 ELSE 0 END)`,
-            player: players
+            player: publicPlayerColumns
         })
         .from(playerRatings)
         .leftJoin(players, eq(playerRatings.playerId, players.id))
+        .leftJoin(teams, eq(players.teamId, teams.id))
         .groupBy(playerRatings.playerId)
         .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`))
         .limit(limit);
@@ -99,7 +136,7 @@ async function getBestRatedPlayers(limit: number, position: string | null) {
     return NextResponse.json({
         bestRatedPlayers: results.map(r => ({
             playerId: r.playerId,
-            player: r.player,
+            player: toPublicRatedPlayer(r.player),
             averageRating: parseFloat(r.avgRating.toFixed(2)),
             totalMatches: r.totalMatches,
             manOfTheMatchAwards: r.motmCount
@@ -119,7 +156,8 @@ async function getPositionComparison() {
         .from(playerRatings)
         .leftJoin(players, eq(playerRatings.playerId, players.id))
         .groupBy(players.position)
-        .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`));
+        .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`))
+        .limit(50);
 
     return NextResponse.json({
         positionComparison: results.map(r => ({
@@ -132,7 +170,7 @@ async function getPositionComparison() {
 }
 
 // Get team average ratings
-async function getTeamAverageRatings(teamId: string | null) {
+async function getTeamAverageRatings(teamId: string | null, limit: number) {
     if (!teamId) {
         // Get all teams
         const results = await db
@@ -141,17 +179,18 @@ async function getTeamAverageRatings(teamId: string | null) {
                 avgRating: sql<number>`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`,
                 totalMatches: sql<number>`COUNT(DISTINCT ${playerRatings.matchId})`,
                 totalPlayers: sql<number>`COUNT(DISTINCT ${playerRatings.playerId})`,
-                team: teams
+                team: publicTeamColumns
             })
             .from(playerRatings)
             .leftJoin(teams, eq(playerRatings.teamId, teams.id))
             .groupBy(playerRatings.teamId)
-            .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`));
+            .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`))
+            .limit(limit);
 
         return NextResponse.json({
             teamRatings: results.map(r => ({
                 teamId: r.teamId,
-                team: r.team,
+                team: toPublicRatedTeam(r.team),
                 averageRating: parseFloat(r.avgRating.toFixed(2)),
                 totalMatches: r.totalMatches,
                 totalPlayers: r.totalPlayers
@@ -165,12 +204,13 @@ async function getTeamAverageRatings(teamId: string | null) {
                 avgRating: sql<number>`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`,
                 totalMatches: sql<number>`COUNT(DISTINCT ${playerRatings.matchId})`,
                 totalPlayers: sql<number>`COUNT(DISTINCT ${playerRatings.playerId})`,
-                team: teams
+                team: publicTeamColumns
             })
             .from(playerRatings)
             .leftJoin(teams, eq(playerRatings.teamId, teams.id))
             .where(eq(playerRatings.teamId, teamId))
-            .groupBy(playerRatings.teamId);
+            .groupBy(playerRatings.teamId)
+            .limit(1);
 
         if (results.length === 0) {
             return NextResponse.json({ error: 'No ratings found for team' }, { status: 404 });
@@ -178,7 +218,7 @@ async function getTeamAverageRatings(teamId: string | null) {
 
         return NextResponse.json({
             teamId,
-            team: results[0].team,
+            team: toPublicRatedTeam(results[0].team),
             averageRating: parseFloat(results[0].avgRating.toFixed(2)),
             totalMatches: results[0].totalMatches,
             totalPlayers: results[0].totalPlayers

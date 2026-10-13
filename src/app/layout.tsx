@@ -17,6 +17,7 @@ import { env } from "@/lib/env";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { isFeatureEnabled } from "@/lib/featureFlags";
+import { serializeJsonLd } from '@/lib/json-ld';
 
 export const metadata: Metadata = {
   // Without this, Next.js resolves relative OG/Twitter image URLs (the root
@@ -144,7 +145,7 @@ export default async function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: serializeJsonLd({
               "@context": "https://schema.org",
               "@graph": [
                 {

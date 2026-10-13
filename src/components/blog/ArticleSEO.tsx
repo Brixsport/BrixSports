@@ -2,6 +2,7 @@
 
 import Head from 'next/head';
 import { generateArticleSchema, generateOGMetadata, generateTwitterMetadata } from '@/lib/utils/seo';
+import { serializeJsonLd } from '@/lib/json-ld';
 
 interface ArticleSEOProps {
     article: {
@@ -86,7 +87,7 @@ export default function ArticleSEO({ article, metaTitle, metaDescription, canoni
             {/* Schema.org JSON-LD */}
             <script
                 type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+                dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema) }}
             />
         </Head>
     );

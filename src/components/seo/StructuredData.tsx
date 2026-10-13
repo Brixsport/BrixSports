@@ -1,6 +1,7 @@
 'use client';
 
 import Script from 'next/script';
+import { serializeJsonLd } from '@/lib/json-ld';
 
 interface StructuredDataProps {
     data: Record<string, unknown> | Record<string, unknown>[];
@@ -24,7 +25,7 @@ export function StructuredData({ data, id = 'structured-data' }: StructuredDataP
         <Script
             id={id}
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+            dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
         />
     );
 }
@@ -49,7 +50,7 @@ export function MultiStructuredData({ schemas }: MultiStructuredDataProps) {
                     key={schema.id}
                     id={schema.id}
                     type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(schema.data) }}
+                    dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema.data) }}
                 />
             ))}
         </>

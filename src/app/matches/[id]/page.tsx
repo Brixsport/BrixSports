@@ -5,6 +5,7 @@ import { matches, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { generateSportsEventSchema } from '@/lib/utils/aeo';
 import MatchDetailClient from './MatchDetailClient';
+import { serializeJsonLd } from '@/lib/json-ld';
 
 // BACKLOG-189: this page was a 'use client' component with no generateMetadata
 // export (client components can't export one in App Router), so every match
@@ -92,7 +93,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
             {schema && (
                 <script
                     type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+                    dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema) }}
                 />
             )}
             <MatchDetailClient />

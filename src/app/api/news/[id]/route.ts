@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { news, newsRelations, newsLikes, teams, players, competitions } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
+import {
+    toPublicNewsArticle,
+    toPublicNewsRelatedPlayer,
+    toPublicNewsRelatedTeam,
+    toPublicNewsRelatedCompetition,
+} from '@/lib/public-news';
 // Note: newsRelations is the news_relations table, not a Drizzle relations object
 import { eq, and, sql, or } from 'drizzle-orm';
 
@@ -30,17 +36,30 @@ export async function GET(
 
         const article = newsArticle[0];
 
-        // Increment view count
-        await db
-            .update(news)
-            .set({ views: sql`${news.views} + 1` })
-            .where(eq(news.id, article.id));
+        // Unpublished articles are visible to admins only; everyone else gets a 404.
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isPublished = article.status === 'published';
+        if (!isPublished && authUser?.role !== 'admin') {
+            return NextResponse.json(
+                { error: 'News article not found' },
+                { status: 404 }
+            );
+        }
+
+        // Increment view count (published articles only)
+        if (isPublished) {
+            await db
+                .update(news)
+                .set({ views: sql`${news.views} + 1` })
+                .where(eq(news.id, article.id));
+        }
 
         // Fetch related entities (teams, players, competitions)
         const relations = await db
             .select()
             .from(newsRelations)
-            .where(eq(newsRelations.newsId, article.id));
+            .where(eq(newsRelations.newsId, article.id))
+            .limit(50);
 
         // Fetch actual related data
         const relatedData: any = {
@@ -57,27 +76,27 @@ export async function GET(
                     .from(teams)
                     .where(eq(teams.id, relation.relationId))
                     .limit(1);
-                if (team[0]) relatedData.teams.push(team[0]);
+                if (team[0]) relatedData.teams.push(toPublicNewsRelatedTeam(team[0]));
             } else if (relation.relationType === 'player') {
                 const player = await db
                     .select()
                     .from(players)
                     .where(eq(players.id, relation.relationId))
                     .limit(1);
-                if (player[0]) relatedData.players.push(player[0]);
+                if (player[0]) relatedData.players.push(toPublicNewsRelatedPlayer(player[0]));
             } else if (relation.relationType === 'competition') {
                 const competition = await db
                     .select()
                     .from(competitions)
                     .where(eq(competitions.id, relation.relationId))
                     .limit(1);
-                if (competition[0]) relatedData.competitions.push(competition[0]);
+                if (competition[0]) relatedData.competitions.push(toPublicNewsRelatedCompetition(competition[0]));
             }
         }
 
         return NextResponse.json({
-            ...article,
-            views: (article.views || 0) + 1, // Return updated view count
+            ...toPublicNewsArticle(article),
+            views: (article.views || 0) + (isPublished ? 1 : 0), // Return updated view count
             related: relatedData,
         });
     } catch (error) {
