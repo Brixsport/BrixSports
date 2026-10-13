@@ -25,9 +25,25 @@ describe('pickStagingDeployment', () => {
         expect(picked.id).toBe(2);
     });
 
-    it('does not match a production environment that merely contains the name', () => {
-        expect(pickStagingDeployment([{ id: 3, environment: 'Production – brixsports-staging' }])).toBeNull();
+    it('finds the dev branch deployment of the staging project (its Production environment)', () => {
+        const picked = pickStagingDeployment([
+            { id: 1, environment: 'Preview – brixs2', created_at: '2026-10-13T12:30:57Z' },
+            { id: 2, environment: 'Production – brixsports-staging', created_at: '2026-10-13T12:31:31Z' },
+        ]);
+        expect(picked.id).toBe(2);
+    });
+
+    it('never matches any deployment of the production project, in either environment', () => {
+        expect(pickStagingDeployment([
+            { id: 3, environment: 'Production – brixs2' },
+            { id: 4, environment: 'Preview – brixs2' },
+        ])).toBeNull();
         expect(pickStagingDeployment(null)).toBeNull();
+    });
+
+    it('does not match an environment that only contains the staging name', () => {
+        expect(pickStagingDeployment([{ id: 5, environment: 'Production – brixsports-staging-extra' }])).toBeNull();
+        expect(pickStagingDeployment([{ id: 6, environment: 'Staging – brixsports-staging' }])).toBeNull();
     });
 });
 
