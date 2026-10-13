@@ -9,6 +9,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
 import { generateClientEventId } from '@/lib/event-id';
 import { classifyEventPostStatus, describeEventRejection, scoresForFinalization } from '@/lib/event-post-outcome';
+import { appendUnseenRemoteEvents } from '@/lib/logger-event-merge';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -687,9 +688,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 }));
 
                 const merged = await syncEvents(syncedEvents);
-                if (merged.length !== events.length) {
-                    setEvents(merged);
-                }
+                // Functional update against the CURRENT list: `events` above is a
+                // snapshot from before the await, so replacing state with `merged`
+                // dropped anything logged meanwhile and stripped period/made/
+                // assistPlayerId/createdAt off every event.
+                setEvents(prev => appendUnseenRemoteEvents(prev, merged as any[]));
             } catch (error) {
                 console.error('Sync error:', error);
             }
