@@ -7,10 +7,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { competitions } from '@/db/schema';
+import { competitions, matches, organizations } from '@/db/schema';
 import { inArray, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
+import { MAX_BULK_COMPETITION_DELETES, buildCompetitionUpdate } from '@/lib/competition-update';
 
 /**
  * POST - Bulk create competitions
@@ -106,33 +107,35 @@ export async function PATCH(request: NextRequest) {
             );
         }
 
-        // Validate each update has an ID
+        // Validate each update has an ID and only touches allow-listed fields
+        const prepared: { id: string; updateData: Record<string, unknown> }[] = [];
         for (const update of updates) {
-            if (!update.id) {
+            if (!update || typeof update !== 'object' || typeof update.id !== 'string' || !update.id) {
                 return NextResponse.json(
                     { error: 'Each update must have an id field' },
                     { status: 400 }
                 );
             }
+            const { id, ...data } = update;
+            const built = buildCompetitionUpdate(data);
+            if (!built.ok) {
+                return NextResponse.json({ error: built.error }, { status: 422 });
+            }
+            for (const orgField of ['hostOrganizationId', 'governingOrganizationId'] as const) {
+                const orgId = built.update[orgField];
+                if (typeof orgId === 'string') {
+                    const [org] = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
+                    if (!org) {
+                        return NextResponse.json({ error: `Invalid ${orgField}: organization not found` }, { status: 422 });
+                    }
+                }
+            }
+            prepared.push({ id, updateData: { ...built.update, updatedAt: new Date() } });
         }
 
         // Perform updates individually (SQLite doesn't support bulk updates easily)
         const results = [];
-        for (const update of updates) {
-            const { id, ...data } = update;
-
-            const updateData: any = {
-                ...data,
-                updatedAt: new Date(),
-            };
-
-            // Convert dates if provided
-            if (data.startDate) updateData.startDate = new Date(data.startDate);
-            if (data.endDate) updateData.endDate = new Date(data.endDate);
-            if (data.rules && typeof data.rules === 'object') {
-                updateData.rules = JSON.stringify(data.rules);
-            }
-
+        for (const { id, updateData } of prepared) {
             const updated = await db
                 .update(competitions)
                 .set(updateData)
@@ -178,6 +181,30 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json(
                 { error: 'ids must be a non-empty array' },
                 { status: 400 }
+            );
+        }
+
+        if (ids.length > MAX_BULK_COMPETITION_DELETES || ids.some((id) => typeof id !== 'string' || !id)) {
+            return NextResponse.json(
+                { error: `ids must be non-empty strings, at most ${MAX_BULK_COMPETITION_DELETES} per request` },
+                { status: 422 }
+            );
+        }
+
+        // matches.competition_id does not cascade: refuse instead of failing on the FK
+        const referenced = await db
+            .select({ competitionId: matches.competitionId })
+            .from(matches)
+            .where(inArray(matches.competitionId, ids))
+            .groupBy(matches.competitionId)
+            .limit(MAX_BULK_COMPETITION_DELETES);
+        if (referenced.length > 0) {
+            return NextResponse.json(
+                {
+                    error: 'Some competitions still have matches and cannot be deleted',
+                    competitionIds: referenced.map((r) => r.competitionId),
+                },
+                { status: 409 }
             );
         }
 

@@ -6,6 +6,7 @@ import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { resolveSlot } from '@/lib/lineup/placement';
 import { getMatchConfig } from '@/lib/matchConfig';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
@@ -61,7 +62,7 @@ export async function POST(
         }
 
         // If logger, verify they're assigned to this match
-        if (user.role === 'logger' && match[0].loggerId !== user.id) {
+        if (user.role === 'logger' && !(await isLoggerAssigned(matchId, user.id))) {
             return NextResponse.json(
                 { error: 'Not assigned to this match' },
                 { status: 403 }

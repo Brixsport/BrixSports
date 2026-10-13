@@ -89,6 +89,30 @@ export async function PATCH(request: NextRequest) {
             );
         }
 
+        if (typeof userId !== 'string' || typeof role !== 'string') {
+            return NextResponse.json(
+                { error: 'userId and role must be strings' },
+                { status: 400 }
+            );
+        }
+
+        // An admin must not remove their own admin role (could leave no admin)
+        if (userId === authUser.id && role !== 'admin') {
+            return NextResponse.json(
+                { error: 'You cannot change your own role away from admin' },
+                { status: 409 }
+            );
+        }
+
+        const [target] = await db
+            .select({ id: users.id, role: users.role })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+        if (!target) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+
         // Update user role
         await db.update(users)
             .set({
@@ -96,6 +120,8 @@ export async function PATCH(request: NextRequest) {
                 updatedAt: new Date(),
             })
             .where(eq(users.id, userId));
+
+        console.info(`[admin-audit] user role changed: target=${userId} from=${target.role} to=${role} by=${authUser.id}`);
 
         return NextResponse.json({
             success: true,

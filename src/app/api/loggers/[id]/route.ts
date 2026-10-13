@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { loggers } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { loggers, matchLoggerAssignments, matches } from '@/db/schema';
+import { and, eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { getLoggerMatches } from '@/lib/match-logger-helpers';
 import { getAuthUser } from '@/lib/auth';
@@ -132,6 +132,25 @@ export async function DELETE(
         }
 
         const { id } = await params;
+
+        // A logger who is mid-match must not vanish: the live logging session would
+        // start failing. The admin has to reassign or finish the match first.
+        const [liveAssignment] = await db
+            .select({ matchId: matchLoggerAssignments.matchId })
+            .from(matchLoggerAssignments)
+            .innerJoin(matches, eq(matchLoggerAssignments.matchId, matches.id))
+            .where(and(
+                eq(matchLoggerAssignments.loggerId, id),
+                eq(matchLoggerAssignments.status, 'active'),
+                eq(matches.status, 'LIVE')
+            ))
+            .limit(1);
+        if (liveAssignment) {
+            return NextResponse.json(
+                { error: 'Logger is assigned to a live match. Reassign or finish the match first.' },
+                { status: 409 }
+            );
+        }
 
         // Note: The foreign key constraint with ON DELETE CASCADE
         // will automatically remove assignments when the logger is deleted

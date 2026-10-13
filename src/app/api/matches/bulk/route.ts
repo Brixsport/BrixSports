@@ -8,6 +8,8 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
+import { validateMatchTeams } from '@/lib/match-bulk-input';
+import { MATCH_BULK_RESPONSE_FIELDS } from '@/lib/match-admin-fields';
 
 export async function POST(request: NextRequest) {
     try {
@@ -27,6 +29,13 @@ export async function POST(request: NextRequest) {
                 { error: 'Invalid request: Expected an array of matches' },
                 { status: 400 }
             );
+        }
+
+        for (const match of matchesToCreate) {
+            const teamsError = validateMatchTeams(match?.homeTeamId, match?.awayTeamId);
+            if (teamsError) {
+                return NextResponse.json({ error: teamsError }, { status: 422 });
+            }
         }
 
         const newMatches = matchesToCreate.map(match => ({
@@ -49,7 +58,7 @@ export async function POST(request: NextRequest) {
         }));
 
         // Batch insert
-        const inserted = await db.insert(matches).values(newMatches).returning();
+        const inserted = await db.insert(matches).values(newMatches).returning(MATCH_BULK_RESPONSE_FIELDS);
 
         return NextResponse.json({
             success: true,

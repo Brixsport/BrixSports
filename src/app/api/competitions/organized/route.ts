@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
                 asc(competitions.displayOrder),
                 desc(competitions.startDate),
             ],
+            limit: 500,
         });
 
         // Filter out archived if needed

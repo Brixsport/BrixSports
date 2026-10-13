@@ -177,6 +177,12 @@ export async function GET(request: Request) {
     }
 }
 
+const PLAYER_CREATE_FIELDS = [
+    'name', 'jerseyName', 'number', 'teamId', 'position', 'age', 'height', 'weight',
+    'nationality', 'college', 'department', 'university', 'isExternal', 'image',
+    'marketValue', 'profileId', 'email', 'attributes',
+] as const;
+
 export async function POST(request: Request) {
     try {
         const user = await getAuthUser(request as any);
@@ -207,10 +213,20 @@ export async function POST(request: Request) {
             }, { status: 400 });
         }
 
-        const playerId = body.id || `player-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Generated server-side; a client-supplied id is ignored
+        const playerId = `player-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        // Allow-list, not a spread of the request body: id, rating, eyePoints and
+        // createdAt are not client-settable
+        const playerFields: Record<string, unknown> = {};
+        for (const field of PLAYER_CREATE_FIELDS) {
+            if (body[field] !== undefined) playerFields[field] = body[field];
+        }
 
         const newPlayer = await db.insert(players).values({
-            ...body,
+            ...playerFields,
+            name: body.name,
+            position: body.position,
             id: playerId,
             teamId: body.teamId || null,
             number: body.number ?? 0,

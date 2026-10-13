@@ -4,6 +4,7 @@ import { matches, teams, matchLoggerAssignments } from '@/db/schema';
 import { eq, and, or, inArray, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { validateMatchTeams } from '@/lib/match-bulk-input';
 import { playerRatings } from '@/db/schema-ratings';
 
 // BACKLOG-258: explicit allow-list, not `db.select()` (full row). Every
@@ -262,6 +263,11 @@ export async function POST(request: NextRequest) {
         const matchData: Record<string, unknown> = {};
         for (const field of MATCH_CREATE_FIELDS) {
             if (body[field] !== undefined) matchData[field] = body[field];
+        }
+
+        const teamsError = validateMatchTeams(matchData.homeTeamId, matchData.awayTeamId);
+        if (teamsError) {
+            return NextResponse.json({ error: teamsError }, { status: 422 });
         }
 
         // Ensure competition is never null/empty (database requires NOT NULL)

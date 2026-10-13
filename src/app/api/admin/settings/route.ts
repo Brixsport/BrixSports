@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { systemSettings, systemSettingsHistory } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
+import { validateSettingValue } from '@/lib/settings-validation';
 
 // Default settings to initialize if not in database
 const DEFAULT_SETTINGS = {
@@ -114,9 +115,9 @@ export async function PATCH(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { key, value, reason } = body;
+        const { key, value: rawValue, reason } = body;
 
-        if (!key || value === undefined) {
+        if (!key || typeof key !== 'string' || rawValue === undefined) {
             return NextResponse.json(
                 { error: 'Missing key or value' },
                 { status: 400 }
@@ -138,19 +139,11 @@ export async function PATCH(request: NextRequest) {
         }
 
         // Validate value based on type
-        if (currentSetting.type === 'number' && isNaN(Number(value))) {
-            return NextResponse.json(
-                { error: 'Invalid number value' },
-                { status: 400 }
-            );
+        const validated = validateSettingValue(key, currentSetting.type, rawValue);
+        if (!validated.ok) {
+            return NextResponse.json({ error: validated.error }, { status: 400 });
         }
-
-        if (currentSetting.type === 'boolean' && !['true', 'false'].includes(value.toLowerCase())) {
-            return NextResponse.json(
-                { error: 'Invalid boolean value. Must be "true" or "false"' },
-                { status: 400 }
-            );
-        }
+        const value = validated.value;
 
         // Create history record
         await db.insert(systemSettingsHistory).values({

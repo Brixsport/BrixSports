@@ -296,6 +296,19 @@ export async function DELETE(
             );
         }
 
+        // matches.competition_id does not cascade: refuse instead of failing on the FK
+        const [linkedMatch] = await db
+            .select({ id: matches.id })
+            .from(matches)
+            .where(eq(matches.competitionId, competitionId))
+            .limit(1);
+        if (linkedMatch) {
+            return NextResponse.json(
+                { error: 'Competition has matches and cannot be deleted' },
+                { status: 409 }
+            );
+        }
+
         // Delete competition
         await db
             .delete(competitions)

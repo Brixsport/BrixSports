@@ -74,6 +74,9 @@ export async function POST(
         if (authUser.role === 'logger' && authUser.id !== loggerId) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
+        if (authUser.role === 'logger' && !(await isLoggerAssigned(matchId, authUser.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
         const sessionStore = getSessionStore();
 
         // Verify logger exists
