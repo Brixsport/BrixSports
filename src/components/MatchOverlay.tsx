@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,6 +21,7 @@ import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
 import { ResponsiveLineup } from '@/components/lineup/ResponsiveLineup';
 import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers, useMatchTimer, useLineupUpdates } from '@/hooks/useWebSocket';
+import { ratingOrUndefined } from '@/lib/ratings/display';
 
 interface MatchOverlayProps {
   match: Match;
@@ -1093,7 +1094,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return homeLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: entry.rating || 0, // Use live rating from lineup
+                          rating: ratingOrUndefined(entry.rating), // Use live rating from lineup
                           isCaptain: entry.isCaptain || false,
                           isMotM: entry.isMotM || false
                         }));
@@ -1101,7 +1102,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                       if (Array.isArray(homeLineup)) {
                         return homeLineup.map((entry: any) => ({
                           ...entry,
-                          rating: entry.rating || 0, // Use live rating from lineup
+                          rating: ratingOrUndefined(entry.rating), // Use live rating from lineup
                           isMotM: entry.isMotM || false
                         }));
                       }
@@ -1114,7 +1115,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return awayLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: entry.rating || 0, // Use live rating from lineup
+                          rating: ratingOrUndefined(entry.rating), // Use live rating from lineup
                           isCaptain: entry.isCaptain || false,
                           isMotM: entry.isMotM || false
                         }));
@@ -1122,7 +1123,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                       if (Array.isArray(awayLineup)) {
                         return awayLineup.map((entry: any) => ({
                           ...entry,
-                          rating: entry.rating || 0, // Use live rating from lineup
+                          rating: ratingOrUndefined(entry.rating), // Use live rating from lineup
                           isMotM: entry.isMotM || false
                         }));
                       }
@@ -1135,7 +1136,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return homeLineup.substitutes.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
+                          rating: ratingOrUndefined(ratings[entry.playerId]?.finalRating ?? ratings[entry.playerId]?.autoRating),
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
@@ -1148,7 +1149,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return awayLineup.substitutes.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
+                          rating: ratingOrUndefined(ratings[entry.playerId]?.finalRating ?? ratings[entry.playerId]?.autoRating),
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
