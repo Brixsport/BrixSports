@@ -9,6 +9,7 @@ import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification 
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
+import { isPushEligibleMatchType } from '@/lib/notifications/send-gate';
 import { getCurrentSeason } from '@/lib/rosterService';
 import { isValidClientEventId } from '@/lib/event-id';
 import { validateEventInput } from '@/lib/event-input';
@@ -511,7 +512,7 @@ export async function POST(
         }
 
         const notificationEventType = getNotifiableEventType(match.sport, type);
-        if (notificationEventType && !isPenaltyShootout) {
+        if (notificationEventType && !isPenaltyShootout && isPushEligibleMatchType(match.matchType)) {
             after(async () => {
                 try {
                     // Penalty Saved credits the keeper (relatedPlayerId), not the taker --

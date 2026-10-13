@@ -15,6 +15,7 @@ import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
 import { toPublicMatchUpdate } from '@/lib/ws-public-payload';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
+import { shouldSendPeriodNotification } from '@/lib/notifications/send-gate';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
 import { advanceBracketForMatch } from '@/lib/bracketService';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
@@ -300,6 +301,12 @@ export async function PATCH(
             }
         }
 
+        // Stored period before this write: the period push below fires only on a real change.
+        const previousRow = body.currentPeriod !== undefined
+            ? await db.select({ currentPeriod: matches.currentPeriod, matchType: matches.matchType })
+                .from(matches).where(eq(matches.id, matchId)).get()
+            : undefined;
+
         await db
             .update(matches)
             .set(updateData)
@@ -384,7 +391,11 @@ export async function PATCH(
         // consciously-kept table row rather than an accidental match on a
         // football-shaped if-chain (it was firing unintentionally before Phase 2
         // formalized it — NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md thread 3).
-        if (body.currentPeriod !== undefined) {
+        if (previousRow && shouldSendPeriodNotification({
+            previousPeriod: previousRow.currentPeriod,
+            newPeriod: body.currentPeriod,
+            matchType: previousRow.matchType,
+        })) {
             after(async () => {
                 try {
                     const [current] = await db
