@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { FullPitchLineups } from './FullPitchLineups';
 import { PlayerStatsModal } from './PlayerStatsModal';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 
 interface MatchLineupsProps {
     lineups: any;
@@ -302,9 +303,9 @@ const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
                 </div>
 
                 {/* Time */}
-                {substitution.minute && (
+                {hasKnownMinute(substitution.minute) && substitution.minute > 0 && (
                     <div className="text-right">
-                        <div className="text-sm font-bold text-foreground/80">{substitution.minute}'</div>
+                        <div className="text-sm font-bold text-foreground/80">{formatEventMinute(substitution.minute)}</div>
                         <div className="text-xs text-foreground/60">
                             {substitution.half === 2 ? '2nd Half' : '1st Half'}
                         </div>

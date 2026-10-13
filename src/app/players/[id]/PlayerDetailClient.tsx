@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { PlayerAvatar } from '@/lib/utils/player-avatar';
 import { useFavorites } from '@/hooks/useFavorites';
-import { displayMinute } from '@/lib/eventMinute';
+import { formatEventMinute } from '@/lib/eventMinute';
 import { safeFormat } from '@/lib/safe-date';
 
 interface PlayerData {
@@ -417,7 +417,7 @@ export default function PlayerDetailClient() {
                                                                 key={idx}
                                                                 className="px-2 py-1 bg-primary/20 text-primary rounded text-xs inline-flex items-center gap-1"
                                                             >
-                                                                {getEventIcon(event.type, playerSport)} {displayMinute(event.minute)}'
+                                                                {getEventIcon(event.type, playerSport)} {formatEventMinute(event.minute)}
                                                             </span>
                                                         ))}
                                                     </div>
@@ -654,7 +654,7 @@ export default function PlayerDetailClient() {
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="text-sm font-bold">{event.minute}'</div>
+                                            <div className="text-sm font-bold">{formatEventMinute(event.minute)}</div>
                                             <div className="text-xs text-foreground/60">{event.match?.competition}</div>
                                         </div>
                                     </motion.div>
