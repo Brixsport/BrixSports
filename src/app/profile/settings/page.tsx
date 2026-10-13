@@ -591,6 +591,13 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
                 throw new Error(data.error || 'Failed to update password');
             }
 
+            // The server ended the old token with the password change and issued a new
+            // one (cookie already set). Keep the localStorage copy in step so Bearer
+            // callers do not send the dead token.
+            if (typeof data.token === 'string' && data.token.length > 0) {
+                localStorage.setItem('authToken', data.token);
+            }
+
             toast.success('Password updated successfully');
             onClose();
         } catch (error) {
