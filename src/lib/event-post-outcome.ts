@@ -16,10 +16,19 @@ export function classifyEventPostStatus(status: number): EventPostAction {
     return 'rejected';
 }
 
+/** The machine-readable code of an error response body: body.code, else body.error. */
+export function extractErrorCode(body: unknown): string {
+    const b = body as { code?: unknown; error?: unknown } | null | undefined;
+    if (b && typeof b.code === 'string') return b.code;
+    if (b && typeof b.error === 'string') return b.error;
+    return '';
+}
+
 /** User-facing text for a non-retryable rejection (shown in the persistent banner). */
-export function describeEventRejection(status: number, eventType: string): string {
+export function describeEventRejection(status: number, eventType: string, code?: string): string {
     if (status === 401) return `Session expired - "${eventType}" was NOT saved. Please log in again, then re-log it.`;
     if (status === 403) return `Not authorised to log events for this match - "${eventType}" was NOT saved. Contact admin.`;
+    if (status === 409 && code && code.includes('MATCH_NOT_LIVE')) return `The match is not live - "${eventType}" was NOT saved.`;
     if (status === 409) return `Match is finished - "${eventType}" was NOT saved.`;
     return `"${eventType}" was NOT saved (error ${status}). Check it and re-log if needed.`;
 }

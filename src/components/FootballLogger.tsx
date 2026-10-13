@@ -13,7 +13,7 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // in a separate file. Importing from the shared module closes that gap here
 // too, for free, and removes the duplication.
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
-import { classifyEventPostStatus, describeEventRejection, scoresForFinalization } from '@/lib/event-post-outcome';
+import { classifyEventPostStatus, describeEventRejection, extractErrorCode, scoresForFinalization } from '@/lib/event-post-outcome';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { clockCheckpoint } from '@/lib/clock-checkpoint';
 import { getClientErrorMessage } from '@/lib/client-error';
@@ -933,7 +933,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     // score may now be ahead of the saved score until reconciled.
                     const errBody = await res.json().catch(() => ({}));
                     console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
-                    setEventSaveError(describeEventRejection(res.status, event.type));
+                    setEventSaveError(describeEventRejection(res.status, event.type, extractErrorCode(errBody)));
                     // Take the refused event back out, by id: it is not saved, so it
                     // must not keep counting towards the local score or the timeline.
                     rejectedEventCount.current += 1;

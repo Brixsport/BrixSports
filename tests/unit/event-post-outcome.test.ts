@@ -1,6 +1,32 @@
 // BACKLOG-466 item 4: live-POST status handling for the loggers.
 import { describe, it, expect } from 'vitest';
-import { classifyEventPostStatus, describeEventRejection, scoresForFinalization } from '@/lib/event-post-outcome';
+import { classifyEventPostStatus, describeEventRejection, extractErrorCode, scoresForFinalization } from '@/lib/event-post-outcome';
+
+describe('describeEventRejection 409 wording', () => {
+    it('says the match is not live for MATCH_NOT_LIVE', () => {
+        expect(describeEventRejection(409, 'Goal', 'MATCH_NOT_LIVE')).toBe('The match is not live - "Goal" was NOT saved.');
+    });
+
+    it('keeps the finished wording for MATCH_FINISHED_LOCKED and for a 409 with no code', () => {
+        expect(describeEventRejection(409, 'Goal', 'MATCH_FINISHED_LOCKED')).toBe('Match is finished - "Goal" was NOT saved.');
+        expect(describeEventRejection(409, 'Goal')).toBe('Match is finished - "Goal" was NOT saved.');
+        expect(describeEventRejection(409, 'Goal', '')).toBe('Match is finished - "Goal" was NOT saved.');
+    });
+
+    it('ignores the code on other statuses', () => {
+        expect(describeEventRejection(403, 'Goal', 'MATCH_NOT_LIVE')).toMatch(/Not authorised/);
+    });
+});
+
+describe('extractErrorCode', () => {
+    it('prefers body.code, falls back to body.error, else empty', () => {
+        expect(extractErrorCode({ code: 'MATCH_NOT_LIVE', error: 'x' })).toBe('MATCH_NOT_LIVE');
+        expect(extractErrorCode({ error: 'MATCH_NOT_LIVE' })).toBe('MATCH_NOT_LIVE');
+        expect(extractErrorCode({ code: 5 })).toBe('');
+        expect(extractErrorCode(null)).toBe('');
+        expect(extractErrorCode(undefined)).toBe('');
+    });
+});
 
 describe('scoresForFinalization', () => {
     it('sends the client tally when every event was accepted', () => {

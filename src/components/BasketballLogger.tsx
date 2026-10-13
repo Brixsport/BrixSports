@@ -8,7 +8,7 @@ import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
 import { generateClientEventId } from '@/lib/event-id';
-import { classifyEventPostStatus, describeEventRejection, scoresForFinalization } from '@/lib/event-post-outcome';
+import { classifyEventPostStatus, describeEventRejection, extractErrorCode, scoresForFinalization } from '@/lib/event-post-outcome';
 import { appendUnseenRemoteEvents } from '@/lib/logger-event-merge';
 import { saveQuarterStart, loadQuarterStart } from '@/lib/quarter-start-store';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
@@ -1067,7 +1067,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 console.error('[BasketballLogger] Event POST not saved, queueing:', res.status);
                 if (!(await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`))) return;
             } else if (action === 'rejected') {
-                setEventSaveError(describeEventRejection(res.status, type));
+                const rejectedBody = await res.json().catch(() => null);
+                setEventSaveError(describeEventRejection(res.status, type, extractErrorCode(rejectedBody)));
                 // Take the refused event back out, by id: it is not saved, so it must
                 // not keep counting towards the local score or the timeline.
                 rejectedEventCount.current += 1;
