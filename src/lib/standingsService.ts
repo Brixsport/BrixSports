@@ -317,17 +317,33 @@ export async function getTeamCompetitionSeasons(teamId: string, sport: string): 
     );
 }
 
+export interface StandingsRecalcTarget {
+    sport: string;
+    competition: string;
+    competitionId: string | null;
+    homeTeamId: string;
+    awayTeamId: string;
+}
+
+// Recompute both teams' standings row and overall record from their FINISHED matches. Unlike
+// recalculateStandingsForMatch this does not require the given match itself to be FINISHED:
+// it is how standings are refreshed after a finished match is reopened or deleted (the match
+// has then dropped out of the FINISHED set and the totals must shrink accordingly).
+export async function recalculateStandingsForTeams(target: StandingsRecalcTarget) {
+    const { pointsForWin, pointsForDraw } = await getPointsRule(target.competitionId, target.sport);
+
+    for (const teamId of [target.homeTeamId, target.awayTeamId]) {
+        if (target.competitionId) {
+            const record = await aggregateTeamRecord(teamId, target.sport, target.competitionId, pointsForWin, pointsForDraw);
+            await syncCompetitionStandings(teamId, target.sport, target.competition, target.competitionId, record);
+        }
+        await syncTeamOverallRecord(teamId, target.sport);
+    }
+}
+
 export async function recalculateStandingsForMatch(matchId: string) {
     const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
     if (!match || match.status !== 'FINISHED') return;
 
-    const { pointsForWin, pointsForDraw } = await getPointsRule(match.competitionId, match.sport);
-
-    for (const teamId of [match.homeTeamId, match.awayTeamId]) {
-        if (match.competitionId) {
-            const record = await aggregateTeamRecord(teamId, match.sport, match.competitionId, pointsForWin, pointsForDraw);
-            await syncCompetitionStandings(teamId, match.sport, match.competition, match.competitionId, record);
-        }
-        await syncTeamOverallRecord(teamId, match.sport);
-    }
+    await recalculateStandingsForTeams(match);
 }
