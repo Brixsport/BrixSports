@@ -527,6 +527,12 @@ export async function PATCH(
             return NextResponse.json({ error: 'Player not found' }, { status: 404 });
         }
 
+        // Identity-linking fields: record who changed them (field names only, no values)
+        const changedIdentityFields = (['profileId', 'email'] as const).filter((f) => updateData[f] !== undefined);
+        if (changedIdentityFields.length > 0) {
+            console.info(`[admin-audit] player identity fields changed: player=${id} fields=${changedIdentityFields.join(',')} by=${user.id}`);
+        }
+
         if (body.teamId) {
             await db
                 .update(playerTeamAffiliations)
