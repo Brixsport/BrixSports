@@ -23,3 +23,24 @@ export function describeEventRejection(status: number, eventType: string): strin
     if (status === 409) return `Match is finished - "${eventType}" was NOT saved.`;
     return `"${eventType}" was NOT saved (error ${status}). Check it and re-log if needed.`;
 }
+
+/** Events that did not (yet) reach the server cleanly. */
+export interface UnsettledEvents {
+    pending: number;   // queued for replay
+    failed: number;    // refused on replay (permanently)
+    rejected: number;  // refused on the live POST this session
+}
+
+/**
+ * Score fields for the final-whistle PATCH. The client tally includes events the
+ * server may not hold, so it is only sent when every event was accepted. Otherwise
+ * the fields are omitted and the server's own derived score stands.
+ */
+export function scoresForFinalization(
+    homeScore: number,
+    awayScore: number,
+    unsettled: UnsettledEvents
+): { homeScore: number; awayScore: number } | Record<string, never> {
+    if (unsettled.pending > 0 || unsettled.failed > 0 || unsettled.rejected > 0) return {};
+    return { homeScore, awayScore };
+}

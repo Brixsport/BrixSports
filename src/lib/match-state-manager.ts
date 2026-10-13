@@ -694,8 +694,19 @@ export class MatchStateManager {
 
     undoLastEvent(): MatchEvent | null {
         if (this.state.events.length === 0) return null;
+        return this.undoEventById(this.state.events[this.state.events.length - 1].id);
+    }
 
-        const lastEvent = this.state.events[this.state.events.length - 1];
+    /**
+     * Removes one specific event (and reverts its score, ratings and stats), wherever
+     * it sits in the log. Used to roll back an event the server refused, which is
+     * not necessarily the most recent one by the time the refusal arrives.
+     */
+    undoEventById(eventId: string): MatchEvent | null {
+        const index = this.state.events.findIndex(e => e.id === eventId);
+        if (index === -1) return null;
+
+        const lastEvent = this.state.events[index];
 
         // Revert score
         if (['Goal', 'Penalty'].includes(lastEvent.type)) {
@@ -716,7 +727,7 @@ export class MatchStateManager {
         this.applyEventRatingImpact(lastEvent, -1);
 
         // Remove event
-        this.state.events = this.state.events.slice(0, -1);
+        this.state.events = [...this.state.events.slice(0, index), ...this.state.events.slice(index + 1)];
 
         // Recalculate stats
         this.calculateMatchStats();

@@ -8,7 +8,7 @@ import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
 import { generateClientEventId } from '@/lib/event-id';
-import { classifyEventPostStatus, describeEventRejection } from '@/lib/event-post-outcome';
+import { classifyEventPostStatus, describeEventRejection, scoresForFinalization } from '@/lib/event-post-outcome';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -79,6 +79,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // Visible failure signal for event-save failures -- recordEvent used to only
     // console.error on failure, with no on-screen indication the event never saved.
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
+    // Events the server refused on the live POST this session (rolled back locally);
+    // while any exist the client score tally is not sent with the final-whistle PATCH.
+    const rejectedEventCount = useRef(0);
 
 
 
@@ -1050,6 +1053,20 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 if (!(await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`))) return;
             } else if (action === 'rejected') {
                 setEventSaveError(describeEventRejection(res.status, type));
+                // Take the refused event back out, by id: it is not saved, so it must
+                // not keep counting towards the local score or the timeline.
+                rejectedEventCount.current += 1;
+                setEvents(prev => prev.filter(e => e.id !== newEvent.id));
+                if (points) {
+                    if (newEvent.teamId === match.homeTeamId) {
+                        setHomeScore(prev => Math.max(0, prev - points));
+                    } else {
+                        setAwayScore(prev => Math.max(0, prev - points));
+                    }
+                }
+                setPendingEvent(null);
+                setSelectedEventPlayer(null);
+                return;
             } else {
                 setEventSaveError(null);
                 // BUG-129: the local temp id (`e${events.length + 1}`) must be swapped
@@ -1180,8 +1197,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 body: JSON.stringify({
                     status: 'FINISHED',
                     currentPeriod: 'FINISHED',
-                    homeScore,
-                    awayScore,
+                    // Only when every event was accepted; otherwise the server's own
+                    // derived score stands.
+                    ...scoresForFinalization(homeScore, awayScore, {
+                        pending: queuedOfflineCount,
+                        failed: failedQueuedCount,
+                        rejected: rejectedEventCount.current,
+                    }),
                 }),
             });
 
