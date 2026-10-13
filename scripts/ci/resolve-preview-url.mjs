@@ -9,9 +9,13 @@
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const STAGING_ENVIRONMENT = /^Preview\s*[–—-]\s*brixsports-staging$/;
+// The staging project builds a Preview environment for feature branches and deploys the dev
+// branch as its Production environment, so a pull request whose head is dev (the promotion
+// PR) is only found under the latter. Both belong to the staging project; the production
+// project's deployments ("... - brixs2") never match.
+const STAGING_ENVIRONMENT = /^(Preview|Production)\s*[–—-]\s*brixsports-staging$/;
 
-/** Newest deployment of the staging project's preview environment, or null. */
+/** Newest deployment of the staging project (preview or production environment), or null. */
 export function pickStagingDeployment(deployments) {
     const matching = (Array.isArray(deployments) ? deployments : [])
         .filter((d) => d && typeof d.environment === 'string' && STAGING_ENVIRONMENT.test(d.environment.trim()));
