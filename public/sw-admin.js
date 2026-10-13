@@ -291,177 +291,225 @@ self.addEventListener('sync', (event) => {
     }
 });
 
-// BACKLOG-466 item 2: how a drain should treat each POST response class.
+// How a drain should treat each replay response class.
 // 2xx (incl. the server's idempotent-replay 200) -> delete the row.
+// DELETE answered 404 -> the target is already gone: delete the row.
+// 409 MATCH_NOT_LIVE -> the match start has not landed yet: keep and retry.
 // 408/429/5xx/anything unexpected -> keep and retry later.
 // any other 4xx (401/403/404/409 finished/422 ...) -> will never succeed on replay:
 // mark the row failed (kept, visible, never retried) instead of looping forever.
 // BEGIN sync-policy
-function classifySyncResponse(status) {
+function classifySyncResponse(status, code, method) {
     if (status >= 200 && status < 300) return 'done';
+    if (method === 'DELETE' && status === 404) return 'done';
+    if (status === 409 && typeof code === 'string' && code.indexOf('MATCH_NOT_LIVE') !== -1) return 'retry';
     if (status === 408 || status === 429 || status >= 500) return 'retry';
     if (status >= 400 && status < 500) return 'failed';
     return 'retry';
 }
 // END sync-policy
 
-// BACKLOG-466 item 6: single-flight guard. online / visibilitychange / Background
-// Sync / the page's own DRAIN message can all land at once; two concurrent drains
-// would read the same rows and POST them twice. A call made while a drain is running
-// shares its promise and requests ONE re-run so rows queued mid-drain are not missed.
-let matchSyncInFlight = null;
-let matchSyncRerunRequested = false;
+// Drain order. The two queues used to drain independently, so the final-whistle
+// FINISHED write could land before queued goals, which the server then refused.
+// One plan, three phases, always in this order:
+//   1. writes that START the match (status LIVE / first period)
+//   2. queued events, then queued event deletes
+//   3. every other period / FINISHED write
+// A queued delete whose target event is still queued is cancelled together with it.
+// Pure and dependency-free: the unit test loads this block straight from this file.
+// BEGIN drain-plan
+function parseEventDeleteUrl(url) {
+    if (typeof url !== 'string') return null;
+    var m = url.replace(/^https?:\/\/[^/]+/i, '').match(/^\/api\/matches\/([^/?#]+)\/events\/([^/?#]+)\/?(?:[?#].*)?$/);
+    return m ? { matchId: m[1], eventId: m[2] } : null;
+}
 
-function syncMatchEvents() {
-    if (matchSyncInFlight) {
-        matchSyncRerunRequested = true;
-        return matchSyncInFlight;
+function adminChangePhase(change) {
+    if (change && change.method === 'DELETE') return 'mid';
+    var d = (change && change.data) || {};
+    if (d.status === 'FINISHED') return 'end';
+    if (d.status === 'LIVE' || d.currentPeriod === 'FIRST_HALF' || d.currentPeriod === 'Q1') return 'start';
+    return 'end';
+}
+
+function planDrain(eventRows, changeRows) {
+    var byQueueOrder = function (a, b) {
+        if (typeof a.id === 'number' && typeof b.id === 'number') return a.id - b.id;
+        return (a.timestamp || 0) - (b.timestamp || 0);
+    };
+    var events = (eventRows || []).filter(function (r) { return r && !r.failed; }).sort(byQueueOrder);
+    var changes = (changeRows || []).filter(function (r) { return r && !r.failed; }).sort(byQueueOrder);
+
+    var cancelled = [];
+    var cancelledEventIds = {};
+    var cancelledChangeIds = {};
+    changes.forEach(function (c) {
+        if (c.method !== 'DELETE') return;
+        var target = parseEventDeleteUrl(c.url);
+        if (!target) return;
+        events.forEach(function (e) {
+            if (cancelledEventIds[e.id]) return;
+            if (e.data && e.data.id === target.eventId && String(e.matchId) === target.matchId) {
+                cancelledEventIds[e.id] = true;
+                cancelledChangeIds[c.id] = true;
+                cancelled.push({ store: 'pendingMatchEvents', row: e });
+                cancelled.push({ store: 'pendingAdminChanges', row: c });
+            }
+        });
+    });
+
+    var live = changes.filter(function (c) { return !cancelledChangeIds[c.id]; });
+    var asStep = function (store) { return function (row) { return { store: store, row: row }; }; };
+    var start = live.filter(function (c) { return adminChangePhase(c) === 'start'; }).map(asStep('pendingAdminChanges'));
+    var evs = events.filter(function (e) { return !cancelledEventIds[e.id]; }).map(asStep('pendingMatchEvents'));
+    var mid = live.filter(function (c) { return adminChangePhase(c) === 'mid'; }).map(asStep('pendingAdminChanges'));
+    var end = live.filter(function (c) { return adminChangePhase(c) === 'end'; }).map(asStep('pendingAdminChanges'));
+    return { phases: [start, evs.concat(mid), end], cancelled: cancelled };
+}
+// END drain-plan
+
+// Single-flight guard. online / visibilitychange / Background Sync / the page's own
+// DRAIN message can all land at once; two concurrent drains would read the same rows
+// and send them twice. A call made while a drain is running shares its promise and
+// requests ONE re-run so rows queued mid-drain are not missed. Both queues share this
+// one drain so the ordering above holds no matter which trigger fired.
+let drainInFlight = null;
+let drainRerunRequested = false;
+
+function drainQueues() {
+    if (drainInFlight) {
+        drainRerunRequested = true;
+        return drainInFlight;
     }
-    matchSyncInFlight = (async () => {
+    drainInFlight = (async () => {
         try {
             let result;
             do {
-                matchSyncRerunRequested = false;
-                result = await drainMatchEventsOnce();
-            } while (matchSyncRerunRequested);
+                drainRerunRequested = false;
+                result = await drainQueuesOnce();
+            } while (drainRerunRequested);
             // Rows still pending for a retryable reason: reject so Background Sync
             // reschedules (no-op for the message-triggered path).
             if (result && result.sawRetryable) {
-                throw new Error('Match events still pending after sync — will retry');
+                throw new Error('Queued writes still pending after sync — will retry');
             }
         } finally {
-            matchSyncInFlight = null;
+            drainInFlight = null;
         }
     })();
-    return matchSyncInFlight;
+    return drainInFlight;
 }
 
-// Sync match events (for logger): one pass over the pending store.
-async function drainMatchEventsOnce() {
+function syncMatchEvents() { return drainQueues(); }
+function syncAdminChanges() { return drainQueues(); }
+
+// Sends one queued row. Returns 'done' | 'failed' | 'retry' | 'network'.
+async function sendQueuedRow(db, step) {
+    const row = step.row;
+    const isEvent = step.store === 'pendingMatchEvents';
+    const label = isEvent ? 'Match event' : 'Admin change';
+
+    // token is stored at queue-write time by the loggers. SW background sync fires
+    // outside any browser session — no cookie available.
+    if (!row.token) {
+        // A tokenless request can never succeed; mark failed (visible)
+        // instead of leaving it pending forever.
+        console.warn('[SW Admin]', label, row.id, 'has no token stored — marking failed');
+        await idbPut(db, step.store, Object.assign({}, row, { failed: true, failStatus: 0, failedAt: Date.now() }));
+        return 'failed';
+    }
+
+    const url = isEvent ? `/api/matches/${row.matchId}/events` : row.url;
+    const method = isEvent ? 'POST' : row.method;
+
+    let response;
+    try {
+        response = await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${row.token}`,
+            },
+            body: JSON.stringify(row.data),
+        });
+    } catch (networkError) {
+        // Offline / unreachable: keep everything left in the queue, stop
+        // hammering the network, let the next trigger retry.
+        console.warn('[SW Admin] Network error while syncing, keeping', label, row.id, networkError);
+        return 'network';
+    }
+
+    let code = '';
+    if (response.status === 409) {
+        try {
+            const body = await response.clone().json();
+            code = String((body && (body.code || body.error)) || '');
+        } catch (e) { /* no JSON body */ }
+    }
+
+    const outcome = classifySyncResponse(response.status, code, method);
+    if (outcome === 'done') {
+        await idbDelete(db, step.store, row.id);
+        console.log('[SW Admin]', label, 'synced:', row.id);
+    } else if (outcome === 'failed') {
+        console.warn('[SW Admin]', label, 'rejected, marking failed:', row.id, response.status);
+        await idbPut(db, step.store, Object.assign({}, row, { failed: true, failStatus: response.status, failedAt: Date.now() }));
+    } else {
+        console.warn('[SW Admin]', label, 'not saved (retryable):', row.id, response.status);
+    }
+    return outcome;
+}
+
+// One ordered pass over both pending stores (see planDrain).
+async function drainQueuesOnce() {
     let sawRetryable = false;
     try {
         const db = await openDB();
-        const pendingEvents = await idbGetAll(db, 'pendingMatchEvents');
+        const plan = planDrain(
+            await idbGetAll(db, 'pendingMatchEvents'),
+            await idbGetAll(db, 'pendingAdminChanges')
+        );
 
-        for (const event of pendingEvents) {
-            // Rows already marked failed are kept for the logger to see, never retried.
-            if (event.failed) continue;
-
-            // token is stored at queue-write time by FootballLogger (BACKLOG-058).
-            // SW background sync fires outside any browser session — no cookie available.
-            if (!event.token) {
-                // A tokenless request can never succeed; mark failed (visible)
-                // instead of leaving it pending forever.
-                console.warn('[SW Admin] Event', event.id, 'has no token stored — marking failed');
-                await idbPut(db, 'pendingMatchEvents', Object.assign({}, event, { failed: true, failStatus: 0, failedAt: Date.now() }));
-                continue;
-            }
-
-            const headers = {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${event.token}`,
-            };
-
-            let response;
-            try {
-                response = await fetch(`/api/matches/${event.matchId}/events`, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(event.data),
-                });
-            } catch (networkError) {
-                // Offline / unreachable: keep everything left in the queue, stop
-                // hammering the network, let the next trigger retry.
-                console.warn('[SW Admin] Network error while syncing, keeping', event.id, networkError);
-                sawRetryable = true;
-                break;
-            }
-
-            const outcome = classifySyncResponse(response.status);
-            if (outcome === 'done') {
-                await idbDelete(db, 'pendingMatchEvents', event.id);
-                console.log('[SW Admin] Match event synced:', event.id);
-            } else if (outcome === 'failed') {
-                console.warn('[SW Admin] Match event rejected, marking failed:', event.id, response.status);
-                await idbPut(db, 'pendingMatchEvents', Object.assign({}, event, { failed: true, failStatus: response.status, failedAt: Date.now() }));
-            } else {
-                console.warn('[SW Admin] Match event not saved (retryable):', event.id, response.status);
-                sawRetryable = true;
-            }
+        // An undo whose event never left the device: drop both, send nothing.
+        for (const item of plan.cancelled) {
+            await idbDelete(db, item.store, item.row.id);
         }
 
-        // BACKLOG-466 item 2: report what is actually left. SYNC_COMPLETE only when
-        // the queue is truly empty; otherwise SYNC_PARTIAL with real counts so the
-        // logger never shows "synced" while an event is still unsaved.
-        const rows = await idbGetAll(db, 'pendingMatchEvents');
-        const failedCount = rows.filter((r) => r.failed).length;
-        const remainingCount = rows.length - failedCount;
+        phases: for (const steps of plan.phases) {
+            for (const step of steps) {
+                const outcome = await sendQueuedRow(db, step);
+                if (outcome === 'network') {
+                    sawRetryable = true;
+                    break phases;
+                }
+                if (outcome === 'retry') sawRetryable = true;
+            }
+            // Never start a later phase while an earlier one still has unsent rows.
+            if (sawRetryable) break;
+        }
+
+        // Report what is actually left. SYNC_COMPLETE only when the queue is truly
+        // empty; otherwise SYNC_PARTIAL with real counts so the logger never shows
+        // "synced" while a write is still unsaved.
+        const eventRows = await idbGetAll(db, 'pendingMatchEvents');
+        const changeRows = await idbGetAll(db, 'pendingAdminChanges');
         const clients = await self.clients.matchAll();
+        const report = (tag, rows) => {
+            const failedCount = rows.filter((r) => r.failed).length;
+            return rows.length === 0
+                ? { type: 'SYNC_COMPLETE', tag }
+                : { type: 'SYNC_PARTIAL', tag, remaining: rows.length - failedCount, failed: failedCount };
+        };
         clients.forEach((client) => {
-            client.postMessage(
-                rows.length === 0
-                    ? { type: 'SYNC_COMPLETE', tag: 'sync-match-events' }
-                    : { type: 'SYNC_PARTIAL', tag: 'sync-match-events', remaining: remainingCount, failed: failedCount }
-            );
+            client.postMessage(report('sync-match-events', eventRows));
+            client.postMessage(report('sync-admin-changes', changeRows));
         });
 
-        console.log('[SW Admin] Match event sync pass done. remaining:', remainingCount, 'failed:', failedCount);
+        console.log('[SW Admin] Queue drain pass done. events left:', eventRows.length, 'admin changes left:', changeRows.length);
         return { sawRetryable };
     } catch (error) {
-        console.error('[SW Admin] Error syncing match events:', error);
+        console.error('[SW Admin] Error draining queues:', error);
         throw error; // Retry sync
-    }
-}
-
-// Sync admin changes -- this store/drain existed but nothing ever wrote to it
-// (confirmed: zero references anywhere in src/ before BUG-142's period-transition/
-// undo scope). Fixed a real bug found while activating it: no Authorization header
-// was ever sent, same class of gap BACKLOG-058 fixed for pendingMatchEvents --
-// a background sync fires with no browser session/cookie, so every retry would
-// have 401'd. token is now required at queue-write time, same convention as
-// pendingMatchEvents.
-async function syncAdminChanges() {
-    try {
-        const db = await openDB();
-        const pendingChanges = await idbGetAll(db, 'pendingAdminChanges');
-
-        for (const change of pendingChanges) {
-            if (!change.token) {
-                console.warn('[SW Admin] Skipping admin change', change.id, '— no token stored, will retry on next sync');
-                continue;
-            }
-
-            const response = await fetch(change.url, {
-                method: change.method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${change.token}`,
-                },
-                body: JSON.stringify(change.data),
-            });
-
-            if (response.ok) {
-                await idbDelete(db, 'pendingAdminChanges', change.id);
-                console.log('[SW Admin] Admin change synced:', change.id);
-            }
-        }
-
-        // Notify all clients. BACKLOG-466 item 2 (same false-"synced" gap): only
-        // SYNC_COMPLETE when nothing is left in the store, else SYNC_PARTIAL.
-        const remainingChanges = await idbGetAll(db, 'pendingAdminChanges');
-        const clients = await self.clients.matchAll();
-        clients.forEach((client) => {
-            client.postMessage(
-                remainingChanges.length === 0
-                    ? { type: 'SYNC_COMPLETE', tag: 'sync-admin-changes' }
-                    : { type: 'SYNC_PARTIAL', tag: 'sync-admin-changes', remaining: remainingChanges.length, failed: 0 }
-            );
-        });
-
-        console.log('[SW Admin] All admin changes synced');
-    } catch (error) {
-        console.error('[SW Admin] Error syncing admin changes:', error);
-        throw error;
     }
 }
 
