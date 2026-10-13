@@ -166,6 +166,26 @@ export async function clearFailedQueuedEvents(): Promise<number> {
     }
 }
 
+/**
+ * Empties both queues. Used on logout: queued rows carry the previous logger's token,
+ * so they must not survive on a shared device for the next session to replay.
+ */
+export async function clearAllQueuedWrites(): Promise<void> {
+    const db = await openAdminDB();
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(['pendingMatchEvents', 'pendingAdminChanges'], 'readwrite');
+            tx.objectStore('pendingMatchEvents').clear();
+            tx.objectStore('pendingAdminChanges').clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        });
+    } finally {
+        db.close();
+    }
+}
+
 // BUG-142 (period-transition PATCH / undo DELETE queueing): a generic queue for
 // any authenticated write that isn't an event POST. sw-admin.js's syncAdminChanges()
 // already existed to drain this store but nothing ever wrote to it -- confirmed

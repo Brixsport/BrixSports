@@ -11,6 +11,7 @@ import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
 import { SessionExpiryBanner } from '@/components/logger/SessionExpiryBanner';
 import { LoggerErrorBoundary } from '@/components/logger/LoggerErrorBoundary';
+import { getQueuedEventCounts, clearAllQueuedWrites } from '@/lib/admin-offline-queue';
 
 import { Match, Logger } from '@/db/schema';
 
@@ -261,7 +262,29 @@ export default function LoggerPage() {
     );
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Unsent events and period writes are stored with this logger's token. Warn
+    // before discarding them, and never leave them behind for the next session.
+    try {
+      const counts = await getQueuedEventCounts();
+      if (counts.pending > 0 && !confirm(`${counts.pending} logged event(s) have not been saved to the server yet. Logging out will discard them. Log out anyway?`)) {
+        return;
+      }
+    } catch (err) {
+      console.error('Could not read the offline queue before logout:', err);
+    }
+    try {
+      await clearAllQueuedWrites();
+    } catch (err) {
+      console.error('Could not clear the offline queue on logout:', err);
+    }
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('match_state_') || key.startsWith('bb_quarter_start_')) localStorage.removeItem(key);
+      }
+    } catch {
+      // storage unavailable: nothing to clear
+    }
     setIsLoggedIn(false);
     setLogger(null);
     setAssignedMatches([]);
