@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { playerRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray, ne } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
 import { getEnteredPlayerIds } from '@/lib/ratings/participation';
+import { isUnchangedAdjustment, normalizeAdjustmentNotes } from '@/lib/ratings/adjustments';
 import { toRatingsMatchDto } from '@/lib/public-ratings';
 
 /**
@@ -312,21 +313,18 @@ export async function POST(
         const updated: { playerId: string; autoRating: number; finalRating: number; isMotM: boolean }[] = [];
         const errors: { playerId: string; error: string }[] = [];
 
-        // BACKLOG-321: nothing previously stopped a client from submitting more
-        // than one isMotM:true in the same batch (or a second batch after an
-        // earlier one already set one) -- MotM is a single-winner-per-match
-        // concept, so a later true always wins here, clearing every other
-        // player's flag for this match first, inside the same transaction.
-        const newMotMPlayerId = adjustedRatings.find((a: any) => a?.isMotM === true)?.playerId as string | undefined;
+        // Rows the admin page sent back untouched. They are skipped so that
+        // publishing does not freeze every rating or credit the admin with reviews
+        // they did not do.
+        let unchanged = 0;
+
+        // MotM is a single-winner-per-match award. The winner is the first
+        // submitted player whose update is actually applied; every other flag for
+        // the match is cleared only after that, inside the same transaction, so a
+        // rejected MotM row can never wipe the previous winner.
+        let motmWinnerPlayerId: string | null = null;
 
         await db.transaction(async (tx) => {
-            if (newMotMPlayerId) {
-                await tx
-                    .update(playerRatings)
-                    .set({ isMotM: false })
-                    .where(and(eq(playerRatings.matchId, matchId), eq(playerRatings.isMotM, true)));
-            }
-
             for (const adjustment of adjustedRatings) {
                 const { playerId, finalRating, notes, isMotM } = adjustment;
 
@@ -352,15 +350,26 @@ export async function POST(
                     continue;
                 }
 
+                const normalizedNotes = normalizeAdjustmentNotes(notes);
+                if (!normalizedNotes.ok) {
+                    errors.push({ playerId, error: normalizedNotes.error });
+                    continue;
+                }
+
+                if (isUnchangedAdjustment(existing, { playerId, finalRating, notes: normalizedNotes.value, isMotM })) {
+                    unchanged++;
+                    continue;
+                }
+
                 try {
                     await tx
                         .update(playerRatings)
                         .set({
                             finalRating,
-                            adjustmentNotes: notes || null,
+                            adjustmentNotes: normalizedNotes.value,
                             adjustedBy: user.id,
                             adjustmentTime: new Date(),
-                            isMotM: isMotM || false,
+                            isMotM: isMotM === true,
                             updatedAt: new Date()
                         })
                         .where(eq(playerRatings.id, existing.id));
@@ -369,14 +378,28 @@ export async function POST(
                         playerId,
                         autoRating: existing.autoRating,
                         finalRating,
-                        isMotM
+                        isMotM: isMotM === true
                     });
+                    if (isMotM === true && motmWinnerPlayerId === null) {
+                        motmWinnerPlayerId = playerId;
+                    }
                 } catch (error) {
                     errors.push({
                         playerId,
                         error: 'Failed to update rating'
                     });
                 }
+            }
+
+            if (motmWinnerPlayerId !== null) {
+                await tx
+                    .update(playerRatings)
+                    .set({ isMotM: false })
+                    .where(and(
+                        eq(playerRatings.matchId, matchId),
+                        eq(playerRatings.isMotM, true),
+                        ne(playerRatings.playerId, motmWinnerPlayerId)
+                    ));
             }
         });
 
@@ -392,6 +415,7 @@ export async function POST(
         return NextResponse.json({
             message: 'Ratings adjusted successfully',
             updated: updated.length,
+            unchanged,
             errors: errors.length,
             details: {
                 updated,

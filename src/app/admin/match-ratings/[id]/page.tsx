@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { RatingCalculator } from '@/lib/ratingCalculator';
+import { selectChangedAdjustments, MAX_ADJUSTMENT_NOTES_LENGTH } from '@/lib/ratings/adjustments';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Save, AlertCircle, RefreshCw, Star, Info, Filter, X } from 'lucide-react';
 import Image from 'next/image';
@@ -186,12 +187,29 @@ export default function MatchRatingsAdjustPage() {
         setError(null);
 
         try {
-            const ratingsToSubmit = Array.from(adjustedRatings.entries()).map(([playerId, data]) => ({
-                playerId,
-                finalRating: data.rating,
-                notes: data.notes,
-                isMotM: data.isMotM
-            }));
+            // Send only the rows the admin actually changed. Sending the whole
+            // roster would freeze every player's rating and credit the admin with
+            // reviews they did not do.
+            const storedByPlayerId = new Map(ratings.map((r) => [r.playerId, {
+                autoRating: r.autoRating,
+                finalRating: r.finalRating,
+                adjustmentNotes: r.adjustmentNotes,
+                isMotM: r.isMotM
+            }]));
+            const ratingsToSubmit = selectChangedAdjustments(
+                Array.from(adjustedRatings.entries()).map(([playerId, data]) => ({
+                    playerId,
+                    finalRating: data.rating,
+                    notes: data.notes,
+                    isMotM: data.isMotM
+                })),
+                storedByPlayerId
+            );
+
+            if (ratingsToSubmit.length === 0) {
+                setError('No ratings have been changed, so there is nothing to publish.');
+                return;
+            }
 
             console.log('[Publish Ratings] Submitting', ratingsToSubmit.length, 'ratings for match', matchId);
             console.log('[Publish Ratings] Payload:', ratingsToSubmit);
@@ -531,6 +549,7 @@ export default function MatchRatingsAdjustPage() {
                                                 <input
                                                     type="text"
                                                     value={adjusted.notes}
+                                                    maxLength={MAX_ADJUSTMENT_NOTES_LENGTH}
                                                     onChange={(e) => handleNotesChange(rating.playerId, e.target.value)}
                                                     placeholder="Stats/Notes..."
                                                     className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
