@@ -7,6 +7,7 @@ import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
+import { getEnteredPlayerIds } from '@/lib/ratings/participation';
 import { toRatingsMatchDto } from '@/lib/public-ratings';
 
 /**
@@ -134,13 +135,10 @@ export async function GET(
         // direct DB scan, zero rows anywhere ever matched the all-caps string.
         // wasSubbedOn was therefore always false, silently excluding every real
         // played-substitute from ratings regardless of the starters/bench fix.
-        const subbedOnPlayerIds = new Set<string>();
-        events.forEach(event => {
-            if (event.type === 'Substitution' && event.relatedPlayerId) {
-                // relatedPlayerId is the player who came ON in a substitution
-                subbedOnPlayerIds.add(event.relatedPlayerId);
-            }
-        });
+        // Same rule the rating calculation uses to decide who played: a
+        // substitution's relatedPlayerId is the player who came ON, and a
+        // substitute with events of their own also counts as having played.
+        const subbedOnPlayerIds = getEnteredPlayerIds(events);
 
         console.log('[Ratings Adjust] Players who were subbed on:', Array.from(subbedOnPlayerIds));
 
