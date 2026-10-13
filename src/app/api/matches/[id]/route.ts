@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
-import { matches, teams, bracketNodes, teamForm, headToHead } from '@/db/schema';
+import { matches, teams, bracketNodes, teamForm, headToHead, matchEvents } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { loadMatchDetail } from '@/lib/match-detail';
@@ -16,12 +16,20 @@ import { toPublicMatchUpdate } from '@/lib/ws-public-payload';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { shouldSendPeriodNotification } from '@/lib/notifications/send-gate';
-import { recalculateStandingsForMatch } from '@/lib/standingsService';
+import { recalculateStandingsForMatch, recalculateStandingsForTeams } from '@/lib/standingsService';
+import { isPeriodRegression } from '@/lib/period-order';
+import { planMatchPatchEffects, canWriteMatchStats } from '@/lib/match-patch-effects';
+import { getEventStatEffects, mergeStatEffects } from '@/lib/player-stats-key';
+import { revertEventStats } from '@/lib/playerStatsService';
+import { safeParseEventValue } from '@/lib/eventValue';
 import { advanceBracketForMatch } from '@/lib/bracketService';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { isFinishedLockViolation } from '@/lib/match-finished-lock';
+
+// Upper bound on the events read to reverse a deleted match's player stats.
+const MATCH_DELETE_EVENT_LIMIT = 5000;
 
 export async function GET(
     request: NextRequest,
@@ -97,6 +105,28 @@ export async function PATCH(
 
         const body = await request.json();
 
+        // The stored row before this write: drives the finished-lock, the period-order check
+        // and which full-time side effects this request may trigger.
+        const [stored] = await db
+            .select({
+                status: matches.status,
+                currentPeriod: matches.currentPeriod,
+                matchType: matches.matchType,
+                sport: matches.sport,
+                homeScore: matches.homeScore,
+                awayScore: matches.awayScore,
+                homeTeamId: matches.homeTeamId,
+                awayTeamId: matches.awayTeamId,
+                competition: matches.competition,
+                competitionId: matches.competitionId,
+            })
+            .from(matches)
+            .where(eq(matches.id, matchId))
+            .limit(1);
+        if (!stored) {
+            return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+        }
+
         // BUG-051: validate status against allowed enum; restrict loggers to safe transitions only
         const VALID_STATUSES = ['PENDING', 'UPCOMING', 'LIVE', 'FINISHED', 'CANCELLED'] as const;
         const LOGGER_ALLOWED_STATUSES: string[] = ['LIVE', 'FINISHED'];
@@ -117,8 +147,7 @@ export async function PATCH(
             (body.status !== undefined || body.currentPeriod !== undefined ||
                 body.minute !== undefined || body.extraTime !== undefined)
         ) {
-            const [current] = await db.select({ status: matches.status }).from(matches).where(eq(matches.id, matchId)).limit(1);
-            if (isFinishedLockViolation({ role: authUser.role, currentStatus: current?.status, body })) {
+            if (isFinishedLockViolation({ role: authUser.role, currentStatus: stored.status, body })) {
                 return NextResponse.json(
                     { error: 'Match is finished and locked; only an admin can re-open it', code: 'MATCH_FINISHED_LOCKED' },
                     { status: 409 }
@@ -197,6 +226,14 @@ export async function PATCH(
             if (!VALID_PERIODS.includes(body.currentPeriod) && !isNumberedOT) {
                 return NextResponse.json({ error: 'Invalid currentPeriod value' }, { status: 422 });
             }
+            // A replayed queued write must not move a match back to an earlier period.
+            // Only an admin may set any period.
+            if (authUser.role !== 'admin' && isPeriodRegression(stored.sport, stored.currentPeriod, body.currentPeriod)) {
+                return NextResponse.json(
+                    { error: 'The match is already past this period', code: 'PERIOD_REGRESSION' },
+                    { status: 409 }
+                );
+            }
             updateData.currentPeriod = body.currentPeriod;
         }
         // BUG-109: periodic DB checkpoint of the live clock — assigned logger or admin only
@@ -231,7 +268,8 @@ export async function PATCH(
         // untouched by this field) but a silent data-integrity gap on an
         // admin-attribution field.
         if (body.loggerId !== undefined && authUser.role === 'admin') updateData.loggerId = body.loggerId;
-        if (body.stats) updateData.stats = JSON.stringify(body.stats);
+        // On a finished match `stats` is admin-only: a retried or late logger request must not overwrite it.
+        if (body.stats && canWriteMatchStats(authUser.role, stored.status)) updateData.stats = JSON.stringify(body.stats);
 
         // Structural match fields (teams, sport, competition, match type, lineups, start time,
         // venue) are admin-only. An assigned logger's PATCH is limited to live state
@@ -303,9 +341,17 @@ export async function PATCH(
 
         // Stored period before this write: the period push below fires only on a real change.
         const previousRow = body.currentPeriod !== undefined
-            ? await db.select({ currentPeriod: matches.currentPeriod, matchType: matches.matchType })
-                .from(matches).where(eq(matches.id, matchId)).get()
+            ? { currentPeriod: stored.currentPeriod, matchType: stored.matchType }
             : undefined;
+
+        // Which full-time side effects and standings refresh this write is entitled to.
+        const effects = planMatchPatchEffects({
+            storedStatus: stored.status,
+            bodyStatus: body.status,
+            scoreChanged:
+                (updateData.homeScore !== undefined && updateData.homeScore !== stored.homeScore) ||
+                (updateData.awayScore !== undefined && updateData.awayScore !== stored.awayScore),
+        });
 
         await db
             .update(matches)
@@ -324,7 +370,9 @@ export async function PATCH(
         // BACKLOG-097: standings/team-record recalculation, wired into the FINISHED
         // transition — see standingsService.ts for why this is safe to call more than
         // once (fully recomputed from FINISHED matches each time, not incremental).
-        if (body.status === 'FINISHED') {
+        // Only the transition into FINISHED runs these: a retried FINISHED request on a match that
+        // is already finished must not run standings, ratings and bracket advancement again.
+        if (effects.runFullTime) {
             after(async () => {
                 try {
                     await recalculateStandingsForMatch(matchId);
@@ -376,6 +424,24 @@ export async function PATCH(
                     if (!isExpected) {
                         Sentry.captureException(error, { tags: { area: 'ratings-calc' }, extra: { matchId } });
                     }
+                }
+            });
+        }
+
+        // A finished match whose score an admin corrected, or that an admin reopened, changes the
+        // standings of both teams. A reopened match is no longer FINISHED, so its teams are
+        // recomputed directly instead of through the match row.
+        if (!effects.runFullTime && effects.standings !== 'none') {
+            after(async () => {
+                try {
+                    if (effects.standings === 'by-teams') {
+                        await recalculateStandingsForTeams(stored);
+                    } else {
+                        await recalculateStandingsForMatch(matchId);
+                    }
+                } catch (error) {
+                    console.error('Error recalculating standings:', error);
+                    Sentry.captureException(error, { tags: { area: 'standings-recalc' }, extra: { matchId } });
                 }
             });
         }
@@ -506,27 +572,84 @@ export async function DELETE(
             );
         }
 
-        // Handle constraint: bracketNodes - clear foreign key
-        await db
-            .update(bracketNodes)
-            .set({ matchId: null })
-            .where(eq(bracketNodes.matchId, matchId));
+        // A live match is never deleted by accident: the admin finishes or reopens it first.
+        if (existing.status === 'LIVE') {
+            return NextResponse.json(
+                { error: 'A live match cannot be deleted. Finish or reopen it first.', code: 'MATCH_IS_LIVE' },
+                { status: 409 }
+            );
+        }
 
-        // Handle constraint: headToHead - clear foreign key
-        await db
-            .update(headToHead)
-            .set({ lastMatchId: null })
-            .where(eq(headToHead.lastMatchId, matchId));
+        // The events are cascade-deleted with the match, so work out now which player stats they
+        // produced (competitive matches only; events from a penalty shootout never counted).
+        let statsToRevert: ReturnType<typeof mergeStatEffects> = [];
+        if (existing.matchType !== 'friendly') {
+            const matchEventRows = await db
+                .select({
+                    type: matchEvents.type,
+                    playerId: matchEvents.playerId,
+                    relatedPlayerId: matchEvents.relatedPlayerId,
+                    value: matchEvents.value,
+                    period: matchEvents.period,
+                })
+                .from(matchEvents)
+                .where(eq(matchEvents.matchId, matchId))
+                .limit(MATCH_DELETE_EVENT_LIMIT);
+            statsToRevert = mergeStatEffects(
+                matchEventRows
+                    .filter(e => e.period !== 'PENALTY_SHOOTOUT')
+                    .flatMap(e => {
+                        const value = safeParseEventValue(e.value);
+                        return getEventStatEffects(existing.sport, {
+                            type: e.type,
+                            playerId: e.playerId,
+                            relatedPlayerId: e.relatedPlayerId,
+                            made: typeof value === 'number' && value > 0,
+                        });
+                    })
+            );
+        }
 
-        // Handle constraint: teamForm - delete related records
-        await db
-            .delete(teamForm)
-            .where(eq(teamForm.matchId, matchId));
+        // Unlink and delete in one transaction: a failure part-way leaves the match intact
+        // instead of half-detached from its bracket, form and head-to-head records.
+        await db.transaction(async (tx) => {
+            // Handle constraint: bracketNodes - clear foreign key
+            await tx
+                .update(bracketNodes)
+                .set({ matchId: null })
+                .where(eq(bracketNodes.matchId, matchId));
 
-        // Delete match (events, reminders, ratings, poll_votes, etc. will be cascade deleted)
-        await db
-            .delete(matches)
-            .where(eq(matches.id, matchId));
+            // Handle constraint: headToHead - clear foreign key
+            await tx
+                .update(headToHead)
+                .set({ lastMatchId: null })
+                .where(eq(headToHead.lastMatchId, matchId));
+
+            // Handle constraint: teamForm - delete related records
+            await tx
+                .delete(teamForm)
+                .where(eq(teamForm.matchId, matchId));
+
+            // Delete match (events, reminders, ratings, poll_votes, etc. will be cascade deleted)
+            await tx
+                .delete(matches)
+                .where(eq(matches.id, matchId));
+        });
+
+        // Best effort after the delete has committed; failures are logged, never returned.
+        if (existing.status === 'FINISHED') {
+            after(async () => {
+                try {
+                    await recalculateStandingsForTeams(existing);
+                } catch (error) {
+                    console.error('Error recalculating standings after match delete:', error);
+                    Sentry.captureException(error, { tags: { area: 'standings-recalc' }, extra: { matchId } });
+                }
+            });
+        }
+        if (statsToRevert.length > 0) {
+            after(() => revertEventStats(existing.sport, existing.competitionId, statsToRevert));
+        }
 
         return NextResponse.json({
             success: true,
