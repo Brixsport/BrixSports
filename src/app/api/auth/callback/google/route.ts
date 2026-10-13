@@ -151,10 +151,12 @@ export async function GET(request: NextRequest) {
 
         let userId: string;
         let role: string;
+        let tokenVersion = 0;
 
         if (existing[0]) {
             userId = existing[0].id;
             role = normalizeUserRole(existing[0].role);
+            tokenVersion = existing[0].tokenVersion;
             // Registration does not verify email ownership, but this Google sign-in
             // does. Cut off any password set on the account before merging onto it,
             // so whoever pre-registered this address can no longer sign in with it.
@@ -181,7 +183,7 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        const token = generateToken(userId, email.toLowerCase(), role);
+        const token = generateToken(userId, email.toLowerCase(), role, tokenVersion);
 
         // A server-side redirect can set the httpOnly session cookie but cannot write
         // localStorage, and several client paths read localStorage.getItem('authToken')

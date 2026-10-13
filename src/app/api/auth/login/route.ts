@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         
         // Generate JWT token
         const normalizedRole = normalizeUserRole(user.role);
-        const token = generateToken(user.id, user.email, normalizedRole);
+        const token = generateToken(user.id, user.email, normalizedRole, user.tokenVersion);
 
         const response = NextResponse.json({
             success: true,
