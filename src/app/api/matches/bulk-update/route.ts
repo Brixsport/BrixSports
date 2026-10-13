@@ -6,8 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches } from '@/db/schema';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { parseBulkMatchUpdate } from '@/lib/match-bulk-input';
+import { MATCH_BULK_RESPONSE_FIELDS } from '@/lib/match-admin-fields';
 
 export async function PATCH(request: NextRequest) {
     try {
@@ -19,32 +21,25 @@ export async function PATCH(request: NextRequest) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const body = await request.json();
-        const { ids, updates } = body;
-
-        if (!Array.isArray(ids) || ids.length === 0 || !updates) {
-            return NextResponse.json(
-                { error: 'Invalid request: Expected an array of ids and an updates object' },
-                { status: 400 }
-            );
+        let body: unknown;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
         }
 
-        // Build update object
-        const updateData: any = {
-            updatedAt: new Date(),
-        };
+        const parsed = parseBulkMatchUpdate(body);
+        if (!parsed.ok) {
+            return NextResponse.json({ error: parsed.error }, { status: 422 });
+        }
+        const { ids, update } = parsed;
 
-        if (updates.status) updateData.status = updates.status;
-        if (updates.venue) updateData.venue = updates.venue;
-        if (updates.competition) updateData.competition = updates.competition;
         // loggerId intentionally excluded — logger assignment must go through the dedicated assign/remove-logger endpoints
-
-        // Perform bulk update
         const result = await db
             .update(matches)
-            .set(updateData)
+            .set({ ...update, updatedAt: new Date() })
             .where(inArray(matches.id, ids))
-            .returning();
+            .returning(MATCH_BULK_RESPONSE_FIELDS);
 
         return NextResponse.json({
             success: true,

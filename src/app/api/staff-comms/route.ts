@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
             .from(staffComms)
             .leftJoin(users, eq(staffComms.userId, users.id))
             .where(eq(staffComms.matchId, matchId))
-            .orderBy(desc(staffComms.createdAt));
+            .orderBy(desc(staffComms.createdAt))
+            .limit(200);
 
         return NextResponse.json(comms);
     } catch (error) {
