@@ -295,6 +295,8 @@ self.addEventListener('sync', (event) => {
 // 2xx (incl. the server's idempotent-replay 200) -> delete the row.
 // DELETE answered 404 -> the target is already gone: delete the row.
 // 409 MATCH_NOT_LIVE -> the match start has not landed yet: keep and retry.
+// 409 PERIOD_REGRESSION -> the period write is obsolete (the match is already past
+// it): drop the row, it must neither be retried nor shown as a failure.
 // 408/429/5xx/anything unexpected -> keep and retry later.
 // any other 4xx (401/403/404/409 finished/422 ...) -> will never succeed on replay:
 // mark the row failed (kept, visible, never retried) instead of looping forever.
@@ -303,6 +305,7 @@ function classifySyncResponse(status, code, method) {
     if (status >= 200 && status < 300) return 'done';
     if (method === 'DELETE' && status === 404) return 'done';
     if (status === 409 && typeof code === 'string' && code.indexOf('MATCH_NOT_LIVE') !== -1) return 'retry';
+    if (status === 409 && typeof code === 'string' && code.indexOf('PERIOD_REGRESSION') !== -1) return 'drop';
     if (status === 408 || status === 429 || status >= 500) return 'retry';
     if (status >= 400 && status < 500) return 'failed';
     return 'retry';
@@ -448,7 +451,7 @@ async function sendQueuedRow(db, step) {
     }
 
     const outcome = classifySyncResponse(response.status, code, method);
-    if (outcome === 'done') {
+    if (outcome === 'done' || outcome === 'drop') {
         await idbDelete(db, step.store, row.id);
         console.log('[SW Admin]', label, 'synced:', row.id);
     } else if (outcome === 'failed') {

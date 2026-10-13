@@ -19,7 +19,7 @@ function loadSw() {
     return new Function(
         `${grab('sync-policy')}\n${grab('drain-plan')}\nreturn { classifySyncResponse, planDrain };`
     )() as {
-        classifySyncResponse: (status: number, code?: string, method?: string) => 'done' | 'retry' | 'failed';
+        classifySyncResponse: (status: number, code?: string, method?: string) => 'done' | 'retry' | 'failed' | 'drop';
         planDrain: (events: Row[], changes: Row[]) => Plan;
     };
 }
@@ -115,7 +115,11 @@ describe('classifySyncResponse (drain additions)', () => {
         expect(classifySyncResponse(409, 'MATCH_NOT_LIVE', 'POST')).toBe('retry');
         expect(classifySyncResponse(409, 'Cannot log events against a finished match', 'POST')).toBe('failed');
         expect(classifySyncResponse(409, '', 'POST')).toBe('failed');
-        expect(classifySyncResponse(409, 'PERIOD_REGRESSION', 'PATCH')).toBe('failed');
+    });
+
+    it('drops an obsolete period write on 409 PERIOD_REGRESSION instead of retrying or failing it', () => {
+        expect(classifySyncResponse(409, 'PERIOD_REGRESSION', 'PATCH')).toBe('drop');
+        expect(classifySyncResponse(409, 'PERIOD_REGRESSION: stale period', 'PATCH')).toBe('drop');
     });
 
     it('is unchanged for callers passing only a status', () => {
