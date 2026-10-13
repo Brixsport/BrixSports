@@ -17,14 +17,41 @@ function loadSw() {
         return m[1];
     };
     return new Function(
-        `${grab('sync-policy')}\n${grab('drain-plan')}\nreturn { classifySyncResponse, planDrain };`
+        `${grab('sync-policy')}\n${grab('drain-plan')}\nreturn { classifySyncResponse, planDrain, applyNotLiveAgeLimit };`
     )() as {
         classifySyncResponse: (status: number, code?: string, method?: string) => 'done' | 'retry' | 'failed' | 'drop';
         planDrain: (events: Row[], changes: Row[]) => Plan;
+        applyNotLiveAgeLimit: (outcome: string, code: string, rowTimestamp: unknown, now: number) => string;
     };
 }
 
-const { classifySyncResponse, planDrain } = loadSw();
+const { classifySyncResponse, planDrain, applyNotLiveAgeLimit } = loadSw();
+
+describe('applyNotLiveAgeLimit', () => {
+    const now = 100 * 60 * 60 * 1000;
+    const hours = (h: number) => h * 60 * 60 * 1000;
+
+    it('keeps a young row queued on MATCH_NOT_LIVE', () => {
+        expect(applyNotLiveAgeLimit('retry', 'MATCH_NOT_LIVE', now - hours(1), now)).toBe('retry');
+        expect(applyNotLiveAgeLimit('retry', 'MATCH_NOT_LIVE', now - hours(6), now)).toBe('retry');
+    });
+
+    it('fails a row older than 6 hours that is still answered MATCH_NOT_LIVE', () => {
+        expect(applyNotLiveAgeLimit('retry', 'MATCH_NOT_LIVE', now - hours(6) - 1, now)).toBe('failed');
+        expect(applyNotLiveAgeLimit('retry', 'MATCH_NOT_LIVE', now - hours(48), now)).toBe('failed');
+    });
+
+    it('leaves other retries and other outcomes alone, however old', () => {
+        expect(applyNotLiveAgeLimit('retry', '', now - hours(48), now)).toBe('retry');
+        expect(applyNotLiveAgeLimit('done', 'MATCH_NOT_LIVE', now - hours(48), now)).toBe('done');
+        expect(applyNotLiveAgeLimit('failed', 'MATCH_NOT_LIVE', now - hours(48), now)).toBe('failed');
+    });
+
+    it('treats a row with no usable timestamp as young', () => {
+        expect(applyNotLiveAgeLimit('retry', 'MATCH_NOT_LIVE', undefined, now)).toBe('retry');
+        expect(applyNotLiveAgeLimit('retry', 'MATCH_NOT_LIVE', NaN, now)).toBe('retry');
+    });
+});
 
 const ev = (id: number, eventId: string, matchId = 'm1'): Row => ({ id, matchId, data: { id: eventId, type: 'Goal' }, token: 't' });
 const patch = (id: number, data: object, matchId = 'm1'): Row => ({ id, url: `/api/matches/${matchId}`, method: 'PATCH', data, token: 't' });

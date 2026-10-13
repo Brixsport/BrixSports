@@ -310,6 +310,17 @@ function classifySyncResponse(status, code, method) {
     if (status >= 400 && status < 500) return 'failed';
     return 'retry';
 }
+
+// A row kept for MATCH_NOT_LIVE is waiting for a start write that may never come
+// (the match was finished or cancelled meanwhile). Past this age it stops waiting.
+const NOT_LIVE_RETRY_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function applyNotLiveAgeLimit(outcome, code, rowTimestamp, now) {
+    if (outcome !== 'retry') return outcome;
+    if (typeof code !== 'string' || code.indexOf('MATCH_NOT_LIVE') === -1) return outcome;
+    if (typeof rowTimestamp !== 'number' || !Number.isFinite(rowTimestamp)) return outcome;
+    return now - rowTimestamp > NOT_LIVE_RETRY_MAX_AGE_MS ? 'failed' : outcome;
+}
 // END sync-policy
 
 // Drain order. The two queues used to drain independently, so the final-whistle
@@ -450,7 +461,7 @@ async function sendQueuedRow(db, step) {
         } catch (e) { /* no JSON body */ }
     }
 
-    const outcome = classifySyncResponse(response.status, code, method);
+    const outcome = applyNotLiveAgeLimit(classifySyncResponse(response.status, code, method), code, row.timestamp, Date.now());
     if (outcome === 'done' || outcome === 'drop') {
         await idbDelete(db, step.store, row.id);
         console.log('[SW Admin]', label, 'synced:', row.id);
