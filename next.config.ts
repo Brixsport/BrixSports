@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
         hostname: '**',
       },
     ],
+    // Hosts stay open (logos and avatars come from arbitrary URLs stored in the
+    // database), so bound what the optimiser can be made to do: one output
+    // format, no 2K/4K device widths, a week-long cache so repeat requests do
+    // not re-run transformations, and SVG pass-through stays off.
+    formats: ['image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    minimumCacheTTL: 60 * 60 * 24 * 7,
+    dangerouslyAllowSVG: false,
   },
 
   typescript: {

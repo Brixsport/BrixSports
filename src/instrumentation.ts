@@ -1,11 +1,13 @@
 import * as Sentry from '@sentry/nextjs';
 
-// BACKLOG-469 item 2: warn mode. Env problems are logged and reported to
-// Sentry but NEVER rethrown -- a missing optional var must not crash a
-// production cold start. Variable names only, never values.
+// Warn mode. Env problems are logged and reported to Sentry but NEVER
+// rethrown -- a missing optional var must not crash a production cold start.
+// Variable names only, never values. The production check also runs when
+// VERCEL_ENV is 'production', which the staging project reports too, so the
+// message describes the variables, not which environment is misconfigured.
 async function checkEnvWarnOnly() {
   try {
-    const { validateEnv, validateProductionEnv } = await import('./lib/env');
+    const { env, validateEnv, validateProductionEnv } = await import('./lib/env');
 
     try {
       validateEnv();
@@ -14,11 +16,11 @@ async function checkEnvWarnOnly() {
       Sentry.captureException(error);
     }
 
-    const missingInProduction = validateProductionEnv();
-    if (missingInProduction.length > 0) {
-      const message = `[env] production environment is missing: ${missingInProduction.join(', ')}`;
-      console.error(message);
-      Sentry.captureMessage(message, 'error');
+    const productionEnvProblems = validateProductionEnv();
+    if (productionEnvProblems.length > 0) {
+      const message = `[env] these variables are unset or invalid for a deployment running with production settings: ${productionEnvProblems.join(', ')}`;
+      console.warn(message);
+      Sentry.captureMessage(message, env.isProduction ? 'error' : 'warning');
     }
   } catch (error) {
     console.error('[env] startup validation could not run:', error instanceof Error ? error.message : error);

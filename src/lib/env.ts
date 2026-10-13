@@ -74,37 +74,79 @@ export function validateEnv(): void {
     }
 }
 
+type EnvVars = Record<string, string | undefined>;
+
+const PRODUCTION_REQUIRED_VARS = [
+    'NEXT_PUBLIC_APP_URL',
+    'NEXT_PUBLIC_WS_URL',
+    'WS_SERVER_URL',
+    'WS_API_KEY',
+    'VAPID_PRIVATE_KEY',
+    'NEXT_PUBLIC_VAPID_PUBLIC_KEY',
+    'CRON_SECRET',
+    'JWT_SECRET',
+    'NEXTAUTH_SECRET',
+    'COOKIE_DOMAIN',
+    'CLOUDINARY_CLOUD_NAME',
+    'CLOUDINARY_API_KEY',
+    'CLOUDINARY_API_SECRET',
+] as const;
+
+function isSet(value: string | undefined): boolean {
+    return typeof value === 'string' && value.trim() !== '';
+}
+
 /**
- * BACKLOG-469 item 2: names of variables that must be set when
- * NEXT_PUBLIC_ENV === 'production' but are NOT hard-required by validateEnv()
- * (a missing one degrades a feature; it must never stop a cold start).
- *
- * Pure and side-effect free on purpose (no Sentry import: this module is also
- * imported by client components). Returns [] outside production. Returns
- * variable NAMES only, never values. The caller (src/instrumentation.ts) is
- * responsible for logging and must not throw on a non-empty result.
+ * True when this deployment runs with production settings. Vercel reports
+ * VERCEL_ENV === 'production' for any project's production environment, and
+ * the staging project also deploys its branch as that environment, so this
+ * is not proof of a real production deployment. Callers must only warn.
  */
-export function validateProductionEnv(): string[] {
-    if (process.env.NEXT_PUBLIC_ENV !== 'production') return [];
+export function isProductionLikeEnv(vars: EnvVars): boolean {
+    return vars.NEXT_PUBLIC_ENV === 'production' || vars.VERCEL_ENV === 'production';
+}
 
-    const required = [
-        'NEXT_PUBLIC_APP_URL',
-        'NEXT_PUBLIC_WS_URL',
-        'WS_SERVER_URL',
-        'WS_API_KEY',
-        'VAPID_PRIVATE_KEY',
-        'NEXT_PUBLIC_VAPID_PUBLIC_KEY',
-        'CRON_SECRET',
-        'JWT_SECRET',
-    ];
+/**
+ * Pure check behind validateProductionEnv(): given a set of variables, returns
+ * the names (never values) that are unset or malformed for a production-style
+ * deployment. Returns [] when the variables do not describe one.
+ */
+export function findProductionEnvProblems(vars: EnvVars): string[] {
+    if (!isProductionLikeEnv(vars)) return [];
 
-    const missing = required.filter((key) => !process.env[key]);
+    const problems: string[] = PRODUCTION_REQUIRED_VARS.filter((key) => !isSet(vars[key]));
+
+    if (isSet(vars.NEXT_PUBLIC_APP_URL) && vars.NEXT_PUBLIC_APP_URL!.trim().endsWith('/')) {
+        problems.push('NEXT_PUBLIC_APP_URL (must not end with a slash)');
+    }
 
     // Either DSN counts: the server/edge configs read SENTRY_DSN, the browser
     // config reads NEXT_PUBLIC_SENTRY_DSN.
-    if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) {
-        missing.push('SENTRY_DSN or NEXT_PUBLIC_SENTRY_DSN');
+    if (!isSet(vars.SENTRY_DSN) && !isSet(vars.NEXT_PUBLIC_SENTRY_DSN)) {
+        problems.push('SENTRY_DSN or NEXT_PUBLIC_SENTRY_DSN');
     }
 
-    return missing;
+    // At least one email provider: AWS SES (both keys) or Gmail (EMAIL_PASS).
+    const hasSes = isSet(vars.AWS_ACCESS_KEY_ID) && isSet(vars.AWS_SECRET_ACCESS_KEY);
+    if (!hasSes && !isSet(vars.EMAIL_PASS)) {
+        problems.push('EMAIL_PASS or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY');
+    }
+
+    return problems;
+}
+
+/**
+ * Names of variables that should be set when this deployment runs with
+ * production settings (NEXT_PUBLIC_ENV or VERCEL_ENV is 'production') but are
+ * NOT hard-required by validateEnv(): a missing one degrades a feature, it must
+ * never stop a cold start. The staging Vercel project also reports
+ * VERCEL_ENV === 'production', so the caller must warn only and must not word
+ * the message as a misconfiguration of a specific environment.
+ *
+ * Side-effect free on purpose (no Sentry import: this module is also imported
+ * by client components). Returns variable NAMES only, never values. The caller
+ * (src/instrumentation.ts) is responsible for logging and must not throw.
+ */
+export function validateProductionEnv(): string[] {
+    return findProductionEnvProblems(process.env);
 }
