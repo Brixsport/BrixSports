@@ -10,6 +10,7 @@ import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEve
 import { generateClientEventId } from '@/lib/event-id';
 import { classifyEventPostStatus, describeEventRejection, scoresForFinalization } from '@/lib/event-post-outcome';
 import { appendUnseenRemoteEvents } from '@/lib/logger-event-merge';
+import { saveQuarterStart, loadQuarterStart } from '@/lib/quarter-start-store';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -827,10 +828,21 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         setOtNumber(nextOtNumber);
         setQuarter(prev => prev + 1);
         setTime(`${overtimeDurationMinutes}:00`);
-        setQuarterStartedAt(Date.now());
+        const otStartedAt = Date.now();
+        setQuarterStartedAt(otStartedAt);
+        saveQuarterStart(match.id, `OT${nextOtNumber}`, otStartedAt);
         setShowPeriodModal(false);
         persistPeriodTransition(`OT${nextOtNumber}`);
     };
+    // A refresh mid-quarter remounts with quarterStartedAt = now, which restarted the
+    // quarter's elapsed time and gave later events lower minutes. Once the persisted
+    // period has been hydrated, restore the saved start for that same period.
+    useEffect(() => {
+        if (!matchStarted || matchEnded) return;
+        const saved = loadQuarterStart(match.id, getCurrentPeriod());
+        if (saved !== null) setQuarterStartedAt(saved);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [match.id, quarter, otNumber, periodCount, matchStarted, matchEnded]);
     const getElapsedSecondsInPeriod = () => Math.max(0, Math.floor((Date.now() - quarterStartedAt) / 1000));
     const getElapsedMinute = () => {
         const isOT = quarter > periodCount;
@@ -1310,7 +1322,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             }
 
                                             setMatchStarted(true);
-                                            setQuarterStartedAt(Date.now());
+                                            const matchStartedAt = Date.now();
+                                            setQuarterStartedAt(matchStartedAt);
+                                            saveQuarterStart(match.id, 'Q1', matchStartedAt);
 
                                             // Dispatch WebSocket event for match start
                                             if (typeof window !== 'undefined') {
@@ -2370,7 +2384,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             const nextQuarter = quarter + 1;
                                             setQuarter(nextQuarter);
                                             setTime(`${quarterDuration}:00`);
-                                            setQuarterStartedAt(Date.now());
+                                            const quarterStartedNow = Date.now();
+                                            setQuarterStartedAt(quarterStartedNow);
+                                            saveQuarterStart(match.id, `Q${nextQuarter}`, quarterStartedNow);
                                             setShowPeriodModal(false);
                                             // Persist the transition -- BasketballLogger never wrote
                                             // currentPeriod at all before this; every basketball match's
