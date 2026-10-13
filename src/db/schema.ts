@@ -508,6 +508,10 @@ export const users = sqliteTable('users', {
     bio: text('bio'),
     favoriteTeamId: text('favorite_team_id').references(() => teams.id),
     role: text('role').default('user'),
+    // Bumped on password change/reset; a JWT whose `tv` differs is rejected.
+    tokenVersion: integer('token_version').notNull().default(0),
+    // True once the person proved they control the address (Google sign-in or a reset link).
+    emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

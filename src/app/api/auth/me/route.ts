@@ -5,6 +5,7 @@ import { users, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
+import { isTokenVersionCurrent } from '@/lib/token-version';
 
 // GET /api/auth/me - Get current authenticated user
 export async function GET(request: NextRequest) {
@@ -72,7 +73,15 @@ export async function GET(request: NextRequest) {
                 { status: 401 }
             );
         }
-        
+
+        // Session ended by a password change/reset since this token was signed.
+        if (!isTokenVersionCurrent(payload.tv, user.tokenVersion)) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
         let favoriteTeam = null;
         if (user.favoriteTeamId) {
             const favoriteTeamResult = await db.select({

@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { env } from '@/lib/env';
 import { generateResetToken, hashResetToken } from '@/lib/reset-token';
+import { nextEmailVerified } from '@/lib/token-version';
 
 // POST /api/auth/forgot-password - Request password reset
 export async function POST(request: NextRequest) {
@@ -225,6 +226,10 @@ export async function PATCH(request: NextRequest) {
                 .update(users)
                 .set({
                     password: hashedPassword,
+                    // Every session signed with the old password ends with the reset.
+                    tokenVersion: sql`${users.tokenVersion} + 1`,
+                    // The link was delivered to the mailbox, so the address is proven.
+                    emailVerified: nextEmailVerified(false, 'password_reset'),
                     updatedAt: new Date(),
                 })
                 .where(eq(users.id, claimed[0].userId));

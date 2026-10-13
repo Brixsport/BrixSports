@@ -13,6 +13,7 @@ import {
     OAUTH_HANDOFF_COOKIE,
     OAUTH_HANDOFF_MAX_AGE_SECONDS,
 } from '@/lib/google-oauth';
+import { nextEmailVerified } from '@/lib/token-version';
 import { serializeCookie, setAuthCookie, isSecureRequest, getCookieDomain } from '@/lib/auth-cookie';
 
 // GET /api/auth/callback/google
@@ -151,20 +152,36 @@ export async function GET(request: NextRequest) {
 
         let userId: string;
         let role: string;
+        let tokenVersion = 0;
 
         if (existing[0]) {
             userId = existing[0].id;
             role = normalizeUserRole(existing[0].role);
+            tokenVersion = existing[0].tokenVersion;
             // Registration does not verify email ownership, but this Google sign-in
             // does. Cut off any password set on the account before merging onto it,
             // so whoever pre-registered this address can no longer sign in with it.
-            // The real owner uses Google, or resets the password by email.
-            if (shouldDropPasswordOnGoogleMerge(existing[0])) {
-                await db
+            // The real owner uses Google, or resets the password by email. An account
+            // whose email is already verified keeps its password: it was set by the owner.
+            const dropPassword = shouldDropPasswordOnGoogleMerge(existing[0]);
+            const markVerified = !existing[0].emailVerified;
+            if (dropPassword || markVerified) {
+                const [updated] = await db
                     .update(users)
-                    .set({ password: null, updatedAt: new Date() })
-                    .where(eq(users.id, userId));
-                console.warn(`[Google OAuth Callback] Password removed from existing account ${userId} on Google merge`);
+                    .set({
+                        ...(dropPassword
+                            ? { password: null, tokenVersion: sql`${users.tokenVersion} + 1` }
+                            : {}),
+                        emailVerified: nextEmailVerified(existing[0].emailVerified, 'google_sign_in'),
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(users.id, userId))
+                    .returning({ tokenVersion: users.tokenVersion });
+                // Removing a password also ends any session already signed in with it.
+                if (updated) tokenVersion = updated.tokenVersion;
+                if (dropPassword) {
+                    console.warn(`[Google OAuth Callback] Password removed from existing account ${userId} on Google merge`);
+                }
             }
         } else {
             userId = nanoid();
@@ -176,12 +193,13 @@ export async function GET(request: NextRequest) {
                 name: name || email.split('@')[0],
                 avatar: profile.picture || null,
                 role,
+                emailVerified: nextEmailVerified(false, 'google_sign_in'),
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
         }
 
-        const token = generateToken(userId, email.toLowerCase(), role);
+        const token = generateToken(userId, email.toLowerCase(), role, tokenVersion);
 
         // A server-side redirect can set the httpOnly session cookie but cannot write
         // localStorage, and several client paths read localStorage.getItem('authToken')
