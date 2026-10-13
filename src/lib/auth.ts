@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { users, loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { env } from '@/lib/env';
+import { isLoggerStatusActive } from '@/lib/logger-login';
 
 export interface AuthUser {
     userId: string;
@@ -109,7 +110,8 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
             const logger = loggerResult[0];
 
             if (logger) {
-                return toAuthenticatedLogger(logger);
+                // A disabled logger account has no session, even with an unexpired token.
+                return isLoggerStatusActive(logger.status) ? toAuthenticatedLogger(logger) : null;
             }
             // Not in loggers table — fall through to users table lookup below.
         }
@@ -140,7 +142,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
 
                 const logger = loggerResult[0];
                 if (logger) {
-                    return toAuthenticatedLogger(logger);
+                    return isLoggerStatusActive(logger.status) ? toAuthenticatedLogger(logger) : null;
                 }
             }
             return null;

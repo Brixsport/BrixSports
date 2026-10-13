@@ -16,6 +16,10 @@
 export const env = {
     // Auth
     jwtSecret: process.env.JWT_SECRET ?? '',
+    // Session cookie domain (apex of the production site). Only applied when
+    // NODE_ENV is production; empty means host-only cookies.
+    cookieDomain: process.env.COOKIE_DOMAIN ?? '',
+    isProdBuild: process.env.NODE_ENV === 'production',
 
     // Database
     tursoUrl: process.env.TURSO_CONNECTION_URL ?? '',
@@ -76,6 +80,12 @@ export function validateEnv(): void {
             'Check .env.example for the full list of required vars.'
         );
     }
+
+    // Warn only: changing a live secret invalidates every session, so this must
+    // never stop a cold start.
+    if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+        console.warn('[env] JWT_SECRET is shorter than 32 characters; use a random value of at least 32 (openssl rand -hex 32).');
+    }
 }
 
 type EnvVars = Record<string, string | undefined>;
@@ -89,7 +99,6 @@ const PRODUCTION_REQUIRED_VARS = [
     'NEXT_PUBLIC_VAPID_PUBLIC_KEY',
     'CRON_SECRET',
     'JWT_SECRET',
-    'NEXTAUTH_SECRET',
     'COOKIE_DOMAIN',
     'CLOUDINARY_CLOUD_NAME',
     'CLOUDINARY_API_KEY',

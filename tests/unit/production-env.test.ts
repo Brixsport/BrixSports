@@ -11,7 +11,6 @@ const complete = {
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: 'k',
     CRON_SECRET: 'k',
     JWT_SECRET: 'k',
-    NEXTAUTH_SECRET: 'k',
     COOKIE_DOMAIN: 'example.com',
     CLOUDINARY_CLOUD_NAME: 'c',
     CLOUDINARY_API_KEY: 'k',
@@ -46,7 +45,6 @@ describe('findProductionEnvProblems', () => {
         const problems = findProductionEnvProblems({ VERCEL_ENV: 'production' });
         expect(problems).toContain('CRON_SECRET');
         expect(problems).toContain('CLOUDINARY_API_SECRET');
-        expect(problems).toContain('NEXTAUTH_SECRET');
         expect(problems).toContain('COOKIE_DOMAIN');
     });
 
