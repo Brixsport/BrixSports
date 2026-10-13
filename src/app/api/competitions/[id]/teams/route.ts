@@ -37,7 +37,8 @@ export async function GET(
             .from(standings)
             .where(actualId
                 ? eq(standings.competitionId, actualId)
-                : eq(standings.competition, competitionName));
+                : eq(standings.competition, competitionName))
+            .limit(500);
 
         competitionStandings.forEach(s => {
             teamGroupMap.set(s.teamId, s.groupName);
@@ -45,11 +46,16 @@ export async function GET(
 
         // B. From Matches
         const competitionMatches = await db
-            .select()
+            .select({
+                homeTeamId: matches.homeTeamId,
+                awayTeamId: matches.awayTeamId,
+                groupName: matches.groupName,
+            })
             .from(matches)
             .where(actualId
                 ? eq(matches.competitionId, actualId)
-                : eq(matches.competition, competitionName));
+                : eq(matches.competition, competitionName))
+            .limit(5000);
 
         competitionMatches.forEach(match => {
             if (!teamGroupMap.has(match.homeTeamId)) teamGroupMap.set(match.homeTeamId, match.groupName);
@@ -59,9 +65,10 @@ export async function GET(
         // C. From Approved Registrations
         if (actualId) {
             const approvedRegistrations = await db
-                .select()
+                .select({ createdTeamId: teamRegistrations.createdTeamId })
                 .from(teamRegistrations)
-                .where(eq(teamRegistrations.competitionId, actualId));
+                .where(eq(teamRegistrations.competitionId, actualId))
+                .limit(500);
 
             approvedRegistrations.forEach(reg => {
                 if (reg.createdTeamId && !teamGroupMap.has(reg.createdTeamId)) {
