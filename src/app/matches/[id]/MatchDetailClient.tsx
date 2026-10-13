@@ -28,7 +28,15 @@ import { LivestreamView } from '@/components/livestream/LivestreamView';
 import { useNotifications } from '@/components/Notifications';
 import { getPushService } from '@/lib/notifications/push-service';
 import { getDeviceId } from '@/lib/notifications/device-id';
-import { displayMinute } from '@/lib/eventMinute';
+import { formatScorerLine, knownMinutes } from '@/lib/eventMinute';
+import {
+    shouldApplyMatchResponse,
+    matchPollIntervalMs,
+    selectUnseenLiveEvents,
+    prependNewEvents,
+    resolveDisplayPeriod,
+    applyTimerToMatch,
+} from '@/lib/match-detail-sync';
 import { TeamLogo, isValidLogo } from '@/lib/utils/team-logo';
 
 // BACKLOG-150: which matchIds this device has an active anonymous "notify me"
@@ -125,7 +133,6 @@ export default function MatchDetailClient() {
     const [isNotifySubscribed, setIsNotifySubscribed] = useState(false);
     const [notifyLoading, setNotifyLoading] = useState(false);
     const [h2hData, setH2hData] = useState<any>(null);
-    const [scrollY, setScrollY] = useState(0);
     // BACKLOG-338: the header used to fully retract off-screen on scroll-down
     // (translateY(-100%)) and reappear on scroll-up. Since `position: sticky`
     // never reserves flow space for a translated element, the timeline content
@@ -140,7 +147,7 @@ export default function MatchDetailClient() {
     const [isCompact, setIsCompact] = useState(false);
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
-    const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
+    const { events: liveEvents } = useMatchEvents(matchId);
     const { time: matchTime, isStale: isMatchTimeStale } = useMatchTimer(matchId);
     const { addNotification } = useNotifications();
     // BACKLOG-365 item 1: consequence note at the moment of favoriting, same
@@ -166,6 +173,17 @@ export default function MatchDetailClient() {
     const isStaff = sessionUser?.role === 'admin' || sessionUser?.role === 'logger';
     const isStaffRef = useRef(false);
     isStaffRef.current = isStaff;
+
+    // Request sequencing for fetchMatchData. A poll can finish after newer WebSocket state has been applied,
+    // or after the page moved to another match; these refs let the response be recognised and dropped.
+    const matchIdRef = useRef(matchId);
+    matchIdRef.current = matchId;
+    const requestSeq = useRef(0);
+    const lastAppliedSeq = useRef(0);
+    // When a WebSocket message last changed the match state; a silent poll that started earlier is stale.
+    const lastWsMutationAt = useRef(0);
+    // Live event ids already merged into the page state (so a poll that drops one does not get it re-added).
+    const seenLiveEventIds = useRef<Set<string>>(new Set());
 
     const isUpcoming = matchData?.match?.status === 'UPCOMING';
 
@@ -269,18 +287,14 @@ export default function MatchDetailClient() {
     };
 
     // Update match time in real-time
+    // (a finished match is left alone, so a late tick cannot push a live period into its status)
     useEffect(() => {
-        if (matchData && matchTime) {
-            setMatchData(prev => ({
-                ...prev!,
-                match: {
-                    ...prev!.match,
-                    minute: matchTime.minute,
-                    extraTime: matchTime.extraTime,
-                    status: matchTime.period || prev!.match.status
-                },
-            }));
-        }
+        if (!matchTime) return;
+        setMatchData(prev => {
+            if (!prev) return prev;
+            const nextMatch = applyTimerToMatch(prev.match, matchTime);
+            return nextMatch === prev.match ? prev : { ...prev, match: nextMatch };
+        });
     }, [matchTime]);
 
     // Collapse the header into a compact navbar (team/score/tabs only) past a
@@ -297,7 +311,6 @@ export default function MatchDetailClient() {
                 window.requestAnimationFrame(() => {
                     const currentScrollY = window.scrollY;
                     setIsCompact(currentScrollY > COMPACT_THRESHOLD);
-                    setScrollY(currentScrollY);
                     ticking = false;
                 });
                 ticking = true;
@@ -319,34 +332,39 @@ export default function MatchDetailClient() {
         if (isStaff) fetchMatchData(true);
     }, [isStaff]);
 
-    // Update events in real-time — dedup by id OR (type+minute+playerId) to handle
-    // temp-ID vs permanent-ID discrepancy from dual broadcast paths.
+    // Update events in real-time. Walks the hook's whole event list (two messages that land in the same
+    // render both arrive here) and dedups by event id only: a second goal by the same player in the same
+    // minute is a different event with a different id.
+    const hasMatchData = matchData !== null;
     useEffect(() => {
-        if (matchData && latestEvent) {
-            const exists = matchData.events.some(e =>
-                e.id === latestEvent.id ||
-                (e.type === latestEvent.type &&
-                    e.minute === latestEvent.minute &&
-                    e.playerId === latestEvent.playerId &&
-                    e.teamId === latestEvent.teamId)
-            );
-            if (!exists) {
-                setMatchData(prev => ({
-                    ...prev!,
-                    events: [latestEvent, ...prev!.events],
-                }));
-            }
-        }
-    }, [latestEvent]);
+        seenLiveEventIds.current = new Set();
+        lastWsMutationAt.current = 0;
+    }, [matchId]);
+    useEffect(() => {
+        if (!hasMatchData) return;
+        // The hook keeps its list when the page moves to another match; only this match's events count.
+        const forThisMatch = liveEvents.filter((e: any) => !e.matchId || e.matchId === matchId);
+        const { fresh, seen } = selectUnseenLiveEvents(forThisMatch, seenLiveEventIds.current);
+        if (fresh.length === 0) return;
+        seenLiveEventIds.current = seen;
+        lastWsMutationAt.current = Date.now();
+        setMatchData(prev => {
+            if (!prev) return prev;
+            const events = prependNewEvents(prev.events, fresh);
+            return events === prev.events ? prev : { ...prev, events };
+        });
+    }, [liveEvents, hasMatchData, matchId]);
 
     // BUG-080: HTTP polling fallback when WS is disconnected during a live match.
     // Silent — does NOT show loading spinner, just merges fresh data into state.
+    // With the socket down this poll is the only live source, so it runs every ~4s (viewers fetch the
+    // edge-cached public route, which absorbs the load). Staff keep the session-aware route.
     useEffect(() => {
         const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (isConnected || !isLiveStatus) return;
 
         // Paused while the tab is hidden, jittered, and an immediate refetch when it becomes visible again.
-        return startVisiblePolling(() => { fetchMatchData(true); }, 10000);
+        return startVisiblePolling(() => { fetchMatchData(true); }, matchPollIntervalMs(false));
     }, [isConnected, matchData?.match?.status]);
 
     // BUG-108: low-frequency reconciliation poll, runs even while WS IS connected —
@@ -356,12 +374,12 @@ export default function MatchDetailClient() {
     // purely client-side from the logger's own tab, so a perfectly healthy viewer
     // connection is no guarantee every DB-persisted event was ever pushed. Slower than
     // BUG-080's disconnect-only poll above (25s vs 10s) since this is a defense-in-depth
-    // check, not the primary recovery path — the two never run simultaneously.
+    // check, not the primary recovery path — the two never run simultaneously (4s when disconnected, above).
     useEffect(() => {
         const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (!isConnected || !isLiveStatus) return;
 
-        return startVisiblePolling(() => { fetchMatchData(true); }, 25000);
+        return startVisiblePolling(() => { fetchMatchData(true); }, matchPollIntervalMs(true));
     }, [isConnected, matchData?.match?.status]);
 
     // On WS reconnect: silently sync missed events from DB once.
@@ -402,6 +420,7 @@ export default function MatchDetailClient() {
     useEffect(() => {
         const handleScoreUpdate = (data: any) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 return {
@@ -421,6 +440,7 @@ export default function MatchDetailClient() {
 
         const handleStatusChange = (data: any) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 return { ...prev, match: { ...prev.match, status: data.status } };
@@ -437,6 +457,7 @@ export default function MatchDetailClient() {
         // insurance if that emit-name bug is ever fixed at the source instead.
         const handleMatchUpdate = (data: any) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 const nextMatch: any = { ...prev.match };
@@ -460,6 +481,7 @@ export default function MatchDetailClient() {
         // reconciliation poll (BUG-108) happened to refetch -- not instant.
         const handleEventDeleted = (data: { matchId: string; eventId: string }) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 return { ...prev, events: prev.events.filter((e: any) => e.id !== data.eventId) };
@@ -482,10 +504,28 @@ export default function MatchDetailClient() {
     const h2hFetchedKey = useRef<string | null>(null);
 
     const fetchMatchData = async (silent = false) => {
+        // Sequence number and start time decide, once the response is back, whether it is still current.
+        const seq = ++requestSeq.current;
+        const startedAt = Date.now();
+        const requestedMatchId = matchId;
+        const matchChanged = () => matchIdRef.current !== requestedMatchId;
         try {
             if (!silent) setLoading(true);
             const response = await fetch(isStaffRef.current ? `/api/matches/${matchId}` : `/api/matches/${matchId}/public`);
             const data = await response.json();
+
+            // A response for another match, from before a newer one was applied, or (for a silent poll)
+            // from before a WebSocket message changed the state, must not overwrite what is on screen.
+            if (!shouldApplyMatchResponse({
+                requestSeq: seq,
+                lastAppliedSeq: lastAppliedSeq.current,
+                startedAt,
+                lastWsMutationAt: lastWsMutationAt.current,
+                silent,
+                matchChanged: matchChanged(),
+            })) {
+                return;
+            }
 
             // BUG-236: neither path checked response.ok or that `data` actually has the
             // shape a successful match fetch has before using it. A 404/error response
@@ -511,6 +551,7 @@ export default function MatchDetailClient() {
             }
 
             if (!silent) setLoadError(null);
+            lastAppliedSeq.current = seq;
 
             if (silent) {
                 // BUG-113: diff/merge instead of a wholesale replace on every silent poll —
@@ -536,12 +577,19 @@ export default function MatchDetailClient() {
                 if (h2hFetchedKey.current !== h2hKey) {
                     h2hFetchedKey.current = h2hKey;
                     try {
-                        const h2hRes = await fetch(
-                            `/api/head-to-head?team1=${data.match.homeTeam.id}&team2=${data.match.awayTeam.id}&competition=${data.match.competition}`
-                        );
-                        const h2hData = await h2hRes.json();
-                        if (!h2hRes.ok) h2hFetchedKey.current = null;
-                        setH2hData(h2hData);
+                        const h2hParams = new URLSearchParams({
+                            team1: String(data.match.homeTeam.id),
+                            team2: String(data.match.awayTeam.id),
+                            competition: String(data.match.competition ?? ''),
+                        });
+                        const h2hRes = await fetch(`/api/head-to-head?${h2hParams}`);
+                        if (!h2hRes.ok) {
+                            // An error body is not head-to-head data: keep what we have and retry next cycle.
+                            h2hFetchedKey.current = null;
+                        } else {
+                            const h2hBody = await h2hRes.json();
+                            if (!matchChanged()) setH2hData(h2hBody);
+                        }
                     } catch (h2hError) {
                         // Allow the next fetch cycle to retry.
                         h2hFetchedKey.current = null;
@@ -555,12 +603,12 @@ export default function MatchDetailClient() {
             // response to read a status from, but this is unambiguously a load
             // failure, never a confirmed "doesn't exist". Silent polls intentionally
             // leave matchData/loadError untouched here (BUG-236's existing behavior).
-            if (!silent) {
+            if (!silent && !matchChanged()) {
                 setMatchData(null);
                 setLoadError('load-failed');
             }
         } finally {
-            if (!silent) setLoading(false);
+            if (!silent && !matchChanged()) setLoading(false);
         }
     };
 
@@ -608,7 +656,13 @@ export default function MatchDetailClient() {
         );
     }
 
-    const { match, events, timeTracking, eyePoints } = matchData;
+    const { events, timeTracking, eyePoints } = matchData;
+    // The API left-joins teams, so a match whose team row is missing arrives with a null team.
+    const match = {
+        ...matchData.match,
+        homeTeam: matchData.match.homeTeam ?? { id: matchData.match.homeTeamId ?? '', name: 'Home Team', shortName: '', logo: null },
+        awayTeam: matchData.match.awayTeam ?? { id: matchData.match.awayTeamId ?? '', name: 'Away Team', shortName: '', logo: null },
+    };
     const isLive = LIVE_STATES.has(match.status);
 
     // BACKLOG-326: basketball has no Timeline/Lineups tabs -- fall back to
@@ -643,14 +697,15 @@ export default function MatchDetailClient() {
             const rawName = e.player?.jerseyName ?? e.player?.name ?? e.playerSnapshot?.jerseyName ?? e.playerSnapshot?.name ?? 'Unknown';
             const key = isOwnGoal ? `${rawName} (OG)` : rawName;
             if (!byPlayer.has(key)) byPlayer.set(key, []);
-            byPlayer.get(key)!.push(displayMinute(e.minute));
+            byPlayer.get(key)!.push(e.minute);
         }
+        // A goal with no known minute (backfilled) is listed by name only; those scorers sort last.
         return Array.from(byPlayer.entries())
             .map(([name, minutes]) => {
-                const sorted = [...minutes].sort((a, b) => a - b);
-                return { name, minutes: sorted, firstMinute: sorted[0] };
+                const known = knownMinutes(minutes);
+                return { name, minutes, firstMinute: known.length > 0 ? known[0] : Infinity };
             })
-            .sort((a, b) => a.firstMinute - b.firstMinute);
+            .sort((a, b) => (a.firstMinute === b.firstMinute ? 0 : a.firstMinute - b.firstMinute));
     };
     const homeScorers = buildScorerSummary(match.homeTeamId);
     const awayScorers = buildScorerSummary(match.awayTeamId);
@@ -684,11 +739,13 @@ export default function MatchDetailClient() {
     // matches inserted with status: 'FINISHED' but no currentPeriod write) — it shows
     // "Not Started" forever regardless of the real status. A FINISHED match's period
     // is never ambiguous, so status wins outright once the match is actually over.
-    const displayPeriod = (!isMatchTimeStale && matchTime?.period)
-        ? matchTime.period
-        : match.status === 'FINISHED'
-            ? 'FINISHED'
-            : (match.currentPeriod ?? match.status);
+    // A FINISHED status outranks everything, including a live period the WS timer last reported.
+    const displayPeriod = resolveDisplayPeriod({
+        status: match.status,
+        currentPeriod: match.currentPeriod,
+        timerPeriod: matchTime?.period,
+        timerIsStale: isMatchTimeStale,
+    });
     const liveMinute = (!isMatchTimeStale && matchTime?.minute != null) ? matchTime.minute : match.minute;
     const liveExtraTime = (!isMatchTimeStale && matchTime?.extraTime != null) ? matchTime.extraTime : match.extraTime;
 
@@ -912,13 +969,13 @@ export default function MatchDetailClient() {
                             >
                                 <div className="flex-1 space-y-0.5 text-right">
                                     {homeScorers.map(s => (
-                                        <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
+                                        <div key={s.name}>{formatScorerLine(s.name, s.minutes)}</div>
                                     ))}
                                 </div>
                                 <FaFutbol className="w-3 h-3 text-foreground/30 flex-shrink-0 mt-1" />
                                 <div className="flex-1 space-y-0.5">
                                     {awayScorers.map(s => (
-                                        <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
+                                        <div key={s.name}>{formatScorerLine(s.name, s.minutes)}</div>
                                     ))}
                                 </div>
                             </motion.div>
