@@ -8,6 +8,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MatchEvent } from '@/db/schema';
+import { acceptScoreVersion } from '@/lib/score-version';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -456,16 +457,23 @@ export function useMatchStatus(
     const [score, setScore] = useState<{ home: number; away: number }>(initialScore);
     const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | undefined>(initialShootoutScore);
     const { socket } = useMatchSubscription(matchId);
+    // Highest score broadcast version applied so far; an older one (a slower request that
+    // arrives late) is ignored so it cannot roll the score back.
+    const lastScoreVersion = useRef<number | undefined>(undefined);
 
     useEffect(() => {
         if (!socket) return;
+        lastScoreVersion.current = undefined;
 
         const handleStatusUpdate = (data: { matchId: string; status: string }) => {
             if (data.matchId === matchId) setStatus(data.status);
         };
 
-        const handleScoreUpdate = (data: { matchId: string; homeScore: number; awayScore: number; shootoutHomeScore?: number; shootoutAwayScore?: number }) => {
+        const handleScoreUpdate = (data: { matchId: string; homeScore: number; awayScore: number; shootoutHomeScore?: number; shootoutAwayScore?: number; version?: number }) => {
             if (data.matchId !== matchId) return;
+            const ordering = acceptScoreVersion(lastScoreVersion.current, data.version);
+            if (!ordering.accept) return;
+            lastScoreVersion.current = ordering.next;
             setScore({ home: data.homeScore, away: data.awayScore });
             if (data.shootoutHomeScore !== undefined && data.shootoutAwayScore !== undefined) {
                 setShootoutScore({ home: data.shootoutHomeScore, away: data.shootoutAwayScore });

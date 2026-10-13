@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchLoggerAssignments } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { env as appEnv } from '@/lib/env';
+import { isAuthorizedApiKey } from '@/lib/api-key-guard';
 
 // GET /api/internal/logger-assignment-check?matchId=X&loggerId=Y
 // Server-to-server only (ws-server -> Vercel, opposite direction from
@@ -17,8 +19,8 @@ import { eq, and } from 'drizzle-orm';
 // persistence, exposed here for ws-server to call once per (socket,
 // matchId) pair and cache -- not a per-emit DB hit.
 export async function GET(request: NextRequest) {
-    const apiKey = request.headers.get('x-api-key');
-    if (apiKey !== process.env.WS_API_KEY) {
+    // Fails closed: with WS_API_KEY unset or empty every request is rejected.
+    if (!isAuthorizedApiKey(request.headers.get('x-api-key'), appEnv.wsApiKey)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -30,17 +32,24 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'matchId and loggerId are required' }, { status: 400 });
     }
 
-    const [assignment] = await db
-        .select({ id: matchLoggerAssignments.id })
-        .from(matchLoggerAssignments)
-        .where(
-            and(
-                eq(matchLoggerAssignments.matchId, matchId),
-                eq(matchLoggerAssignments.loggerId, loggerId),
-                eq(matchLoggerAssignments.status, 'active')
+    // A database error must come back as JSON 500, never an HTML error page: the ws-server tells
+    // "not assigned" (200) apart from "could not check" (non-2xx) and only trusts the former.
+    try {
+        const [assignment] = await db
+            .select({ id: matchLoggerAssignments.id })
+            .from(matchLoggerAssignments)
+            .where(
+                and(
+                    eq(matchLoggerAssignments.matchId, matchId),
+                    eq(matchLoggerAssignments.loggerId, loggerId),
+                    eq(matchLoggerAssignments.status, 'active')
+                )
             )
-        )
-        .limit(1);
+            .limit(1);
 
-    return NextResponse.json({ assigned: !!assignment });
+        return NextResponse.json({ assigned: !!assignment });
+    } catch (error) {
+        console.error('[logger-assignment-check] lookup failed:', error);
+        return NextResponse.json({ error: 'Assignment check failed' }, { status: 500 });
+    }
 }
