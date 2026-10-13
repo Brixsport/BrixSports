@@ -8,7 +8,9 @@ import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
 import { generateClientEventId } from '@/lib/event-id';
-import { classifyEventPostStatus, describeEventRejection } from '@/lib/event-post-outcome';
+import { classifyEventPostStatus, describeEventRejection, extractErrorCode, scoresForFinalization } from '@/lib/event-post-outcome';
+import { appendUnseenRemoteEvents } from '@/lib/logger-event-merge';
+import { saveQuarterStart, loadQuarterStart } from '@/lib/quarter-start-store';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -79,6 +81,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // Visible failure signal for event-save failures -- recordEvent used to only
     // console.error on failure, with no on-screen indication the event never saved.
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
+    // Events the server refused on the live POST this session (rolled back locally);
+    // while any exist the client score tally is not sent with the final-whistle PATCH.
+    const rejectedEventCount = useRef(0);
 
 
 
@@ -246,14 +251,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     // `sync` can exist yet reject register() (Background Sync disabled by the
                     // browser / privacy mode): fall back to the direct drain message, same as iOS.
                     syncReg.sync.register('sync-match-events').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
                     });
                     syncReg.sync.register('sync-admin-changes').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                     });
-                } else if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                } else if (navigator.serviceWorker.controller ?? reg.active) {
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                 }
             }).catch(() => {});
         };
@@ -684,9 +689,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 }));
 
                 const merged = await syncEvents(syncedEvents);
-                if (merged.length !== events.length) {
-                    setEvents(merged);
-                }
+                // Functional update against the CURRENT list: `events` above is a
+                // snapshot from before the await, so replacing state with `merged`
+                // dropped anything logged meanwhile and stripped period/made/
+                // assistPlayerId/createdAt off every event.
+                setEvents(prev => appendUnseenRemoteEvents(prev, merged as any[]));
             } catch (error) {
                 console.error('Sync error:', error);
             }
@@ -821,10 +828,21 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         setOtNumber(nextOtNumber);
         setQuarter(prev => prev + 1);
         setTime(`${overtimeDurationMinutes}:00`);
-        setQuarterStartedAt(Date.now());
+        const otStartedAt = Date.now();
+        setQuarterStartedAt(otStartedAt);
+        saveQuarterStart(match.id, `OT${nextOtNumber}`, otStartedAt);
         setShowPeriodModal(false);
         persistPeriodTransition(`OT${nextOtNumber}`);
     };
+    // A refresh mid-quarter remounts with quarterStartedAt = now, which restarted the
+    // quarter's elapsed time and gave later events lower minutes. Once the persisted
+    // period has been hydrated, restore the saved start for that same period.
+    useEffect(() => {
+        if (!matchStarted || matchEnded) return;
+        const saved = loadQuarterStart(match.id, getCurrentPeriod());
+        if (saved !== null) setQuarterStartedAt(saved);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [match.id, quarter, otNumber, periodCount, matchStarted, matchEnded]);
     const getElapsedSecondsInPeriod = () => Math.max(0, Math.floor((Date.now() - quarterStartedAt) / 1000));
     const getElapsedMinute = () => {
         const isOT = quarter > periodCount;
@@ -1049,7 +1067,22 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 console.error('[BasketballLogger] Event POST not saved, queueing:', res.status);
                 if (!(await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`))) return;
             } else if (action === 'rejected') {
-                setEventSaveError(describeEventRejection(res.status, type));
+                const rejectedBody = await res.json().catch(() => null);
+                setEventSaveError(describeEventRejection(res.status, type, extractErrorCode(rejectedBody)));
+                // Take the refused event back out, by id: it is not saved, so it must
+                // not keep counting towards the local score or the timeline.
+                rejectedEventCount.current += 1;
+                setEvents(prev => prev.filter(e => e.id !== newEvent.id));
+                if (points) {
+                    if (newEvent.teamId === match.homeTeamId) {
+                        setHomeScore(prev => Math.max(0, prev - points));
+                    } else {
+                        setAwayScore(prev => Math.max(0, prev - points));
+                    }
+                }
+                setPendingEvent(null);
+                setSelectedEventPlayer(null);
+                return;
             } else {
                 setEventSaveError(null);
                 // BUG-129: the local temp id (`e${events.length + 1}`) must be swapped
@@ -1180,8 +1213,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 body: JSON.stringify({
                     status: 'FINISHED',
                     currentPeriod: 'FINISHED',
-                    homeScore,
-                    awayScore,
+                    // Only when every event was accepted; otherwise the server's own
+                    // derived score stands.
+                    ...scoresForFinalization(homeScore, awayScore, {
+                        pending: queuedOfflineCount,
+                        failed: failedQueuedCount,
+                        rejected: rejectedEventCount.current,
+                    }),
                 }),
             });
 
@@ -1285,7 +1323,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             }
 
                                             setMatchStarted(true);
-                                            setQuarterStartedAt(Date.now());
+                                            const matchStartedAt = Date.now();
+                                            setQuarterStartedAt(matchStartedAt);
+                                            saveQuarterStart(match.id, 'Q1', matchStartedAt);
 
                                             // Dispatch WebSocket event for match start
                                             if (typeof window !== 'undefined') {
@@ -2345,7 +2385,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             const nextQuarter = quarter + 1;
                                             setQuarter(nextQuarter);
                                             setTime(`${quarterDuration}:00`);
-                                            setQuarterStartedAt(Date.now());
+                                            const quarterStartedNow = Date.now();
+                                            setQuarterStartedAt(quarterStartedNow);
+                                            saveQuarterStart(match.id, `Q${nextQuarter}`, quarterStartedNow);
                                             setShowPeriodModal(false);
                                             // Persist the transition -- BasketballLogger never wrote
                                             // currentPeriod at all before this; every basketball match's

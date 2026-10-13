@@ -13,8 +13,9 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // in a separate file. Importing from the shared module closes that gap here
 // too, for free, and removes the duplication.
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
-import { classifyEventPostStatus, describeEventRejection } from '@/lib/event-post-outcome';
+import { classifyEventPostStatus, describeEventRejection, extractErrorCode, scoresForFinalization } from '@/lib/event-post-outcome';
 import { requiresDecisiveResult } from '@/lib/matchRules';
+import { clockCheckpoint } from '@/lib/clock-checkpoint';
 import { getClientErrorMessage } from '@/lib/client-error';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
@@ -181,6 +182,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // BUG-142 fix exactly, same admin-offline-queue.ts module).
     const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
+    // Events the server refused on the live POST this session. They are rolled back
+    // locally, but while any exist the client score tally is not trusted for the
+    // final-whistle PATCH (see finalScoreFields).
+    const rejectedEventCount = useRef(0);
+    // The final-whistle PATCH only carries the client's score when every event was
+    // accepted; otherwise the server's own derived score stands.
+    const finalScoreFields = () => scoresForFinalization(homeScore, awayScore, {
+        pending: queuedOfflineCount,
+        failed: failedQueuedCount,
+        rejected: rejectedEventCount.current,
+    });
 
     // Listen for background-sync completion from sw-admin.js
     useEffect(() => {
@@ -215,14 +227,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     // `sync` can exist yet reject register() (Background Sync disabled by the
                     // browser / privacy mode): fall back to the direct drain message, same as iOS.
                     syncReg.sync.register('sync-match-events').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
                     });
                     syncReg.sync.register('sync-admin-changes').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                     });
-                } else if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                } else if (navigator.serviceWorker.controller ?? reg.active) {
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                 }
             }).catch(() => {});
         };
@@ -624,7 +636,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const { absoluteMinute: minute, second, period } = matchState.clock;
 
         let half = 1;
-        let extraTime = 0;
+        const { minute: cappedMinute, extraTime } = clockCheckpoint(period, minute, matchState.halfDuration);
 
         if (period === 'SECOND_HALF') half = 2;
         else if (period === 'HALF_TIME') half = 1;
@@ -632,12 +644,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         else if (period === 'EXTRA_TIME_2') half = 4;
         else if (period === 'FINISHED') half = 2;
 
-        if (period === 'FIRST_HALF' && minute > 45) extraTime = minute - 45;
-        if (period === 'SECOND_HALF' && minute > 90) extraTime = minute - 90;
-
         const payload = {
             matchId: match.id,
-            minute: minute > 45 && period === 'FIRST_HALF' ? 45 : (minute > 90 && period === 'SECOND_HALF' ? 90 : minute),
+            minute: cappedMinute,
             extraTime,
             half,
             second,
@@ -924,7 +933,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     // score may now be ahead of the saved score until reconciled.
                     const errBody = await res.json().catch(() => ({}));
                     console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
-                    setEventSaveError(describeEventRejection(res.status, event.type));
+                    setEventSaveError(describeEventRejection(res.status, event.type, extractErrorCode(errBody)));
+                    // Take the refused event back out, by id: it is not saved, so it
+                    // must not keep counting towards the local score or the timeline.
+                    rejectedEventCount.current += 1;
+                    if (manager.undoEventById(event.id) && isSocketConnected) {
+                        const afterRollback = manager.getState();
+                        emit('event:undo', {
+                            matchId: match.id,
+                            eventId: event.id,
+                            score: afterRollback.score,
+                            stats: afterRollback.stats,
+                            lineups: afterRollback.lineups,
+                            teamRatings: afterRollback.teamRatings,
+                        });
+                    }
                 }
             } catch (e) {
                 // Network failure — server never received the event. Queue for background sync.
@@ -1135,7 +1158,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
         persistMatchPatch(
             isFinalWhistle
-                ? { currentPeriod: nextPeriod, status: 'FINISHED', homeScore, awayScore, stats: matchState?.stats }
+                ? { currentPeriod: nextPeriod, status: 'FINISHED', ...finalScoreFields(), stats: matchState?.stats }
                 : { currentPeriod: nextPeriod },
             isFinalWhistle ? 'match finalization' : `${nextPeriod} transition`
         );
@@ -1306,8 +1329,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 body: JSON.stringify({
                     status: 'FINISHED',
                     currentPeriod: 'FINISHED',
-                    homeScore,
-                    awayScore,
+                    ...finalScoreFields(),
                     stats: matchState?.stats
                 }),
             });
