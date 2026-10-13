@@ -25,6 +25,15 @@ describe('shouldDropPasswordOnGoogleMerge', () => {
         expect(shouldDropPasswordOnGoogleMerge({ password: '$2b$10$hash' })).toBe(true);
     });
 
+    it('drops the password while the email is not yet verified', () => {
+        expect(shouldDropPasswordOnGoogleMerge({ password: '$2b$10$hash', emailVerified: false })).toBe(true);
+        expect(shouldDropPasswordOnGoogleMerge({ password: '$2b$10$hash', emailVerified: null })).toBe(true);
+    });
+
+    it('keeps the password of an account whose email is already verified', () => {
+        expect(shouldDropPasswordOnGoogleMerge({ password: '$2b$10$hash', emailVerified: true })).toBe(false);
+    });
+
     it('leaves password-less accounts and new sign-ups alone', () => {
         expect(shouldDropPasswordOnGoogleMerge({ password: null })).toBe(false);
         expect(shouldDropPasswordOnGoogleMerge({ password: '' })).toBe(false);

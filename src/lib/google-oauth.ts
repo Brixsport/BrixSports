@@ -41,7 +41,11 @@ export function oauthStatesMatch(fromQuery: string | null | undefined, fromCooki
 // victim's address with a password they know. When a Google sign-in (which does
 // prove ownership) lands on an existing account that has a password, that
 // password must stop working before the account is merged, otherwise the
-// pre-registrant keeps access. Accounts without a password are left alone.
-export function shouldDropPasswordOnGoogleMerge(existing: { password: string | null } | undefined | null): boolean {
-    return !!existing && !!existing.password;
+// pre-registrant keeps access. Accounts without a password are left alone, and
+// so are accounts whose email is already verified (a password reset link or an
+// earlier Google sign-in proved ownership, so that password belongs to the owner).
+export function shouldDropPasswordOnGoogleMerge(
+    existing: { password: string | null; emailVerified?: boolean | null } | undefined | null
+): boolean {
+    return !!existing && !!existing.password && !existing.emailVerified;
 }
