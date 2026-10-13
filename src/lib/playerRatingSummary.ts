@@ -1,6 +1,7 @@
 import { db } from '@/db';
 import { playerRatings } from '@/db/schema-ratings';
-import { inArray, sql } from 'drizzle-orm';
+import { matches } from '@/db/schema';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 // BACKLOG-253 (Ratings Redesign Phase 3): the one place the
 // COALESCE(finalRating, autoRating)/AVG logic lives, sourced from
@@ -26,7 +27,9 @@ export async function getPlayerRatingSummaries(playerIds: string[]): Promise<Map
             motmCount: sql<number>`SUM(CASE WHEN ${playerRatings.isMotM} = 1 THEN 1 ELSE 0 END)`,
         })
         .from(playerRatings)
-        .where(inArray(playerRatings.playerId, playerIds))
+        // Only finished matches count towards a career average.
+        .innerJoin(matches, eq(matches.id, playerRatings.matchId))
+        .where(and(inArray(playerRatings.playerId, playerIds), eq(matches.status, 'FINISHED')))
         .groupBy(playerRatings.playerId);
 
     for (const row of rows) {

@@ -337,3 +337,30 @@ export async function calculateAndSaveRatings(matchId: string) {
         teamRatings: updatedTeamRatings
     };
 }
+
+/**
+ * Recomputes the automatic ratings for a match from its current events and lineups.
+ * Call it after a finished match's events change. Ratings an admin has already
+ * adjusted keep their final rating; only the automatic rating is refreshed.
+ */
+export async function recalculateRatingsForMatch(matchId: string) {
+    return calculateAndSaveRatings(matchId);
+}
+
+/**
+ * Removes every player and team rating row for a match. Call it when a finished
+ * match is reopened so stale ratings no longer show up anywhere.
+ */
+export async function clearRatingsForMatch(matchId: string) {
+    return db.transaction(async (tx) => {
+        const removedPlayers = await tx
+            .delete(playerRatings)
+            .where(eq(playerRatings.matchId, matchId))
+            .returning({ id: playerRatings.id });
+        const removedTeams = await tx
+            .delete(teamRatings)
+            .where(eq(teamRatings.matchId, matchId))
+            .returning({ id: teamRatings.id });
+        return { playerRatingsRemoved: removedPlayers.length, teamRatingsRemoved: removedTeams.length };
+    });
+}

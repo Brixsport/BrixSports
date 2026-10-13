@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { playerRatings, players, teams } from '@/db/schema';
+import { playerRatings, players, teams, matches } from '@/db/schema';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { toPublicRatedPlayer, toPublicRatedTeam } from '@/lib/public-ratings';
@@ -23,6 +23,9 @@ const publicTeamColumns = {
     shortName: teams.shortName,
     logo: teams.logo,
 };
+
+// Ratings from matches that are not finished (upcoming, live, or reopened) never count towards aggregates.
+const finishedMatchesOnly = eq(matches.status, 'FINISHED');
 
 function clampLimit(raw: string | null, fallback: number, max: number) {
     return Math.min(Math.max(1, parseInt(raw || String(fallback), 10) || fallback), max);
@@ -94,9 +97,10 @@ async function getPlayerAverageRating(playerId: string | null) {
             player: publicPlayerColumns
         })
         .from(playerRatings)
+        .innerJoin(matches, eq(matches.id, playerRatings.matchId))
         .leftJoin(players, eq(playerRatings.playerId, players.id))
         .leftJoin(teams, eq(players.teamId, teams.id))
-        .where(eq(playerRatings.playerId, playerId))
+        .where(and(eq(playerRatings.playerId, playerId), finishedMatchesOnly))
         .groupBy(playerRatings.playerId)
         .limit(1);
 
@@ -125,8 +129,10 @@ async function getBestRatedPlayers(limit: number, position: string | null) {
             player: publicPlayerColumns
         })
         .from(playerRatings)
+        .innerJoin(matches, eq(matches.id, playerRatings.matchId))
         .leftJoin(players, eq(playerRatings.playerId, players.id))
         .leftJoin(teams, eq(players.teamId, teams.id))
+        .where(finishedMatchesOnly)
         .groupBy(playerRatings.playerId)
         .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`))
         .limit(limit);
@@ -154,7 +160,9 @@ async function getPositionComparison() {
             totalMatches: sql<number>`COUNT(*)`
         })
         .from(playerRatings)
+        .innerJoin(matches, eq(matches.id, playerRatings.matchId))
         .leftJoin(players, eq(playerRatings.playerId, players.id))
+        .where(finishedMatchesOnly)
         .groupBy(players.position)
         .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`))
         .limit(50);
@@ -182,7 +190,9 @@ async function getTeamAverageRatings(teamId: string | null, limit: number) {
                 team: publicTeamColumns
             })
             .from(playerRatings)
+            .innerJoin(matches, eq(matches.id, playerRatings.matchId))
             .leftJoin(teams, eq(playerRatings.teamId, teams.id))
+            .where(finishedMatchesOnly)
             .groupBy(playerRatings.teamId)
             .orderBy(desc(sql`AVG(COALESCE(${playerRatings.finalRating}, ${playerRatings.autoRating}))`))
             .limit(limit);
@@ -207,8 +217,9 @@ async function getTeamAverageRatings(teamId: string | null, limit: number) {
                 team: publicTeamColumns
             })
             .from(playerRatings)
+            .innerJoin(matches, eq(matches.id, playerRatings.matchId))
             .leftJoin(teams, eq(playerRatings.teamId, teams.id))
-            .where(eq(playerRatings.teamId, teamId))
+            .where(and(eq(playerRatings.teamId, teamId), finishedMatchesOnly))
             .groupBy(playerRatings.teamId)
             .limit(1);
 
