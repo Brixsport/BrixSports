@@ -189,6 +189,43 @@ export interface MatchState {
 export type StateListener = (state: MatchState) => void;
 export type EventListener = (event: MatchEvent) => void;
 
+// ========== CLOCK SEEDING ==========
+
+const PERIOD_RANK: Partial<Record<MatchPeriod, number>> = {
+    NOT_STARTED: 0,
+    FIRST_HALF: 1,
+    HALF_TIME: 2,
+    SECOND_HALF: 3,
+    EXTRA_TIME_1: 4,
+    EXTRA_TIME_2: 5,
+    PENALTY_SHOOTOUT: 6,
+    FINISHED: 7,
+};
+
+/**
+ * Chooses the clock to start from when both a locally saved clock and a clock
+ * seeded from the server exist. The server seed used to win unconditionally, so
+ * a seed fetched before the match advanced (or before queued period writes
+ * landed) could drag a live match back to NOT_STARTED. The more advanced period
+ * wins; within the same period the later minute wins.
+ */
+export function pickAdvancedClock(
+    saved?: Partial<MatchClock> | null,
+    seed?: Partial<MatchClock> | null
+): Partial<MatchClock> {
+    if (!saved) return { ...seed };
+    if (!seed) return { ...saved };
+    const savedRank = saved.period !== undefined ? PERIOD_RANK[saved.period] : undefined;
+    const seedRank = seed.period !== undefined ? PERIOD_RANK[seed.period] : undefined;
+    if (savedRank === undefined || seedRank === undefined) return { ...saved, ...seed };
+    if (savedRank > seedRank) return { ...saved };
+    if (savedRank < seedRank) return { ...saved, ...seed };
+    if ((saved.absoluteMinute ?? 0) > (seed.absoluteMinute ?? 0)) {
+        return { ...seed, absoluteMinute: saved.absoluteMinute, displayMinute: saved.displayMinute, second: saved.second };
+    }
+    return { ...saved, ...seed };
+}
+
 // ========== SINGLETON REGISTRY ==========
 
 const managerRegistry = new Map<string, MatchStateManager>();
@@ -1249,8 +1286,7 @@ export class MatchStateManager {
             period: 'NOT_STARTED' as const,
             isRunning: false,
             startTimestamp: null,
-            ...saved?.clock,
-            ...initial?.clock,
+            ...pickAdvancedClock(saved?.clock, initial?.clock),
             announcedStoppage: null,
             periodEndTriggered: false,
         };
