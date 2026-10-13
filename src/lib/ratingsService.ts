@@ -1,7 +1,8 @@
 import { db } from '@/db';
 import { playerRatings, teamRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { getEnteredPlayerIds, didPlayerPlay } from '@/lib/ratings/participation';
 import { RatingCalculator, type PlayerStats } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
 import { calculateBasketballStatsFromEvents, calculateBasketballRating, type BasketballPlayerStats } from '@/lib/ratings/basketball';
@@ -60,11 +61,11 @@ export async function calculateAndSaveRatings(matchId: string) {
         throw new Error('No lineups found for this match');
     }
 
-    const getPlayersFromTeam = (teamLineup: any) => {
+    const getPlayersFromTeam = (teamLineup: any): any[] => {
         if (!teamLineup) return [];
 
         if (Array.isArray(teamLineup)) {
-            return teamLineup;
+            return teamLineup.map((p: any) => ({ ...p, isSubstitute: false }));
         }
 
         if (teamLineup.starters || teamLineup.substitutes) {
@@ -72,8 +73,8 @@ export async function calculateAndSaveRatings(matchId: string) {
             // published lineups key the second array `substitutes`, never
             // `bench`.
             return [
-                ...(teamLineup.starters || []),
-                ...(teamLineup.substitutes || [])
+                ...(teamLineup.starters || []).map((p: any) => ({ ...p, isSubstitute: false })),
+                ...(teamLineup.substitutes || []).map((p: any) => ({ ...p, isSubstitute: true }))
             ];
         }
 
@@ -82,7 +83,22 @@ export async function calculateAndSaveRatings(matchId: string) {
 
     const homePlayers = getPlayersFromTeam(lineups.home).map((p: any) => ({ ...p, team: 'home' }));
     const awayPlayers = getPlayersFromTeam(lineups.away).map((p: any) => ({ ...p, team: 'away' }));
-    const allPlayers = [...homePlayers, ...awayPlayers];
+    const lineupPlayers = [...homePlayers, ...awayPlayers];
+
+    // Substitutes who never came on are not rated, and any rating row they
+    // already have is removed below.
+    const enteredPlayerIds = getEnteredPlayerIds(events);
+    const allPlayers = lineupPlayers.filter(
+        (p) => !p.playerId || didPlayerPlay({ playerId: p.playerId, isSubstitute: p.isSubstitute }, enteredPlayerIds)
+    );
+    const ratedLineupIds = new Set(allPlayers.map((p) => p.playerId));
+    const unusedSubstituteIds = [
+        ...new Set(
+            lineupPlayers
+                .map((p) => p.playerId as string | undefined)
+                .filter((id): id is string => Boolean(id) && !ratedLineupIds.has(id))
+        ),
+    ];
 
     const playerIds = allPlayers.map(p => p.playerId).filter(Boolean);
     const playersList = playerIds.length > 0
@@ -235,6 +251,12 @@ export async function calculateAndSaveRatings(matchId: string) {
     // no rollback (CLAUDE.md: "Write operations that affect match state must
     // be atomic or handle partial failure explicitly").
     await db.transaction(async (tx) => {
+        if (unusedSubstituteIds.length > 0) {
+            await tx
+                .delete(playerRatings)
+                .where(and(eq(playerRatings.matchId, matchId), inArray(playerRatings.playerId, unusedSubstituteIds)));
+        }
+
         for (const [playerId, entry] of playerStats.entries()) {
             const { teamId } = entry;
             const { rating, breakdown, scoreMetric } = isBasketball
@@ -314,4 +336,31 @@ export async function calculateAndSaveRatings(matchId: string) {
         ratings: updatedRatings,
         teamRatings: updatedTeamRatings
     };
+}
+
+/**
+ * Recomputes the automatic ratings for a match from its current events and lineups.
+ * Call it after a finished match's events change. Ratings an admin has already
+ * adjusted keep their final rating; only the automatic rating is refreshed.
+ */
+export async function recalculateRatingsForMatch(matchId: string) {
+    return calculateAndSaveRatings(matchId);
+}
+
+/**
+ * Removes every player and team rating row for a match. Call it when a finished
+ * match is reopened so stale ratings no longer show up anywhere.
+ */
+export async function clearRatingsForMatch(matchId: string) {
+    return db.transaction(async (tx) => {
+        const removedPlayers = await tx
+            .delete(playerRatings)
+            .where(eq(playerRatings.matchId, matchId))
+            .returning({ id: playerRatings.id });
+        const removedTeams = await tx
+            .delete(teamRatings)
+            .where(eq(teamRatings.matchId, matchId))
+            .returning({ id: teamRatings.id });
+        return { playerRatingsRemoved: removedPlayers.length, teamRatingsRemoved: removedTeams.length };
+    });
 }

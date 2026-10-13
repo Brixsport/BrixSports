@@ -51,7 +51,12 @@ export const playerRatings = sqliteTable('player_ratings', {
     // Timestamps
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
-});
+}, (table) => ({
+    // One rating row per player per match. The rating upsert in ratingsService.ts
+    // uses this as its conflict target, and it stops two concurrent calculations
+    // from inserting duplicates. The index already exists in the database.
+    matchPlayerUnique: uniqueIndex('player_ratings_match_player_unique').on(table.matchId, table.playerId),
+}));
 
 // Rating History (track changes over time during match)
 export const ratingHistory = sqliteTable('rating_history', {
@@ -84,20 +89,11 @@ export const teamRatings = sqliteTable('team_ratings', {
     // Timestamps
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
-});
-
-// BACKLOG-255 follow-up (code review CRITICAL finding): without these, two
-// concurrent calculateAndSaveRatings() calls for the same match (the FINISHED-
-// transition trigger racing the GET-route auto-calc fallback) could both INSERT
-// instead of one inserting and one updating -- confirmed live on real staging
-// data (84 duplicate player_ratings rows, 4 duplicate team_ratings rows found
-// and cleaned up, dev/migrate-backlog255-ratings-unique-index.mjs). Also the
-// onConflictDoUpdate target in ratingsService.ts.
-export const playerRatingsMatchPlayerUnique = uniqueIndex('player_ratings_match_player_unique')
-    .on(playerRatings.matchId, playerRatings.playerId);
-
-export const teamRatingsMatchTeamUnique = uniqueIndex('team_ratings_match_team_unique')
-    .on(teamRatings.matchId, teamRatings.teamId);
+}, (table) => ({
+    // One team rating row per team per match; conflict target of the team rating
+    // upsert in ratingsService.ts. The index already exists in the database.
+    matchTeamUnique: uniqueIndex('team_ratings_match_team_unique').on(table.matchId, table.teamId),
+}));
 
 // Import matches and players tables
 import { matches } from './schema';

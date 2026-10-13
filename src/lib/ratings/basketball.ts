@@ -63,6 +63,14 @@ export interface BasketballRatingBreakdown {
     eyePoints: number;
 }
 
+/** Whether a shot event's stored value says the shot went in. */
+function isMadeShot(rawValue: string | null | undefined): boolean {
+    const parsedValue = safeParseEventValue(rawValue);
+    return typeof parsedValue === 'string'
+        ? parsedValue.toLowerCase() === 'made'
+        : Number(parsedValue) > 0;
+}
+
 /**
  * Build a basketball player's stat line from their match events.
  * `events` should be every event for the match (not pre-filtered by player) —
@@ -97,10 +105,7 @@ export function calculateBasketballStatsFromEvents(
         // Live-logged shots: value is JSON, the point value on a make (2/3/1),
         // 0 on a miss. Backfilled shots: value is the raw string 'made'/'missed'.
         // safeParseEventValue returns whichever shape is actually there.
-        const parsedValue = safeParseEventValue(e.value);
-        const made = typeof parsedValue === 'string'
-            ? parsedValue.toLowerCase() === 'made'
-            : Number(parsedValue) > 0;
+        const made = isMadeShot(e.value);
 
         switch (e.type) {
             case 'Field Goal':
@@ -150,11 +155,18 @@ export function calculateBasketballStatsFromEvents(
         }
     }
 
-    // Same dual-path convention as BasketballLogger.tsx's own calculateAdvancedStats
-    // (BACKLOG-143): an assist is credited both via the standalone 'Assist' button
-    // above, and via relatedPlayerId set on a teammate's made shot event.
+    // Same dual-path convention as BasketballLogger.tsx's own calculateAdvancedStats:
+    // an assist is credited both via the standalone 'Assist' button above, and
+    // via relatedPlayerId set on a teammate's made shot event. Only a
+    // teammate's made field goal or three-pointer can carry an embedded assist;
+    // any other event type with relatedPlayerId set (including a standalone
+    // 'Assist' event, which is already counted above) must not count again.
     stats.assists += events.filter(
-        (e) => e.relatedPlayerId === playerId && e.type !== 'Substitution'
+        (e) =>
+            e.relatedPlayerId === playerId &&
+            e.playerId !== playerId &&
+            (e.type === 'Field Goal' || e.type === 'Three Pointer') &&
+            isMadeShot(e.value)
     ).length;
 
     stats.eyePoints = playerEvents.filter((e) => e.isEyePoint).length;

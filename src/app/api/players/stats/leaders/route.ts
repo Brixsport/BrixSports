@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
         const limit = parseInt(searchParams.get('limit') || '10');
 
         if (type === 'powerRanking') {
-            const ratingConditions = [];
+            // Only finished matches count towards the power ranking.
+            const ratingConditions = [eq(matches.status, 'FINISHED')];
 
             if (sport) {
                 ratingConditions.push(eq(matches.sport, sport));
@@ -47,8 +48,8 @@ export async function GET(request: NextRequest) {
                 })
                 .from(playerRatings)
                 .leftJoin(players, eq(playerRatings.playerId, players.id))
-                .leftJoin(matches, eq(playerRatings.matchId, matches.id))
-                .where(ratingConditions.length > 0 ? and(...ratingConditions) : undefined)
+                .innerJoin(matches, eq(playerRatings.matchId, matches.id))
+                .where(and(...ratingConditions))
                 .groupBy(playerRatings.playerId)
                 .orderBy(desc(averageRatingExpr), desc(gamesPlayedExpr), desc(motmAwardsExpr))
                 .limit(limit);

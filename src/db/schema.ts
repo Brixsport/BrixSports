@@ -1272,6 +1272,7 @@ export { matchPredictions, predictionLeaderboard, predictionComments } from './s
 export { userXI, userXILikes, userXIComments } from './schema-xi';
 export { userLineups, userLineupLikes, userLineupComments } from './schema-user-lineups';
 export { playerRatings, ratingHistory } from './schema-ratings';
+export { teamRatings } from './schema-ratings';
 export {
     fplGameweeks,
     fplPlayerData,

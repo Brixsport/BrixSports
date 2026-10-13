@@ -1,6 +1,7 @@
 import { db } from '@/db';
 import { systemSettings } from '@/db/schema';
 import { inArray } from 'drizzle-orm';
+import { resolveRatingBounds } from '@/lib/ratings/bounds';
 
 export interface RatingConfig {
     baseRating: number;
@@ -64,10 +65,15 @@ export async function getRatingConfig(): Promise<RatingConfig> {
             return Number.isFinite(parsed) ? parsed : fallback;
         };
 
+        const bounds = resolveRatingBounds(
+            num(KEYS.minRating, FALLBACK.minRating),
+            num(KEYS.maxRating, FALLBACK.maxRating),
+            FALLBACK
+        );
         const config: RatingConfig = {
             baseRating: num(KEYS.baseRating, FALLBACK.baseRating),
-            maxRating: num(KEYS.maxRating, FALLBACK.maxRating),
-            minRating: num(KEYS.minRating, FALLBACK.minRating),
+            maxRating: bounds.maxRating,
+            minRating: bounds.minRating,
             eyePointWeight: num(KEYS.eyePointWeight, FALLBACK.eyePointWeight),
         };
 
