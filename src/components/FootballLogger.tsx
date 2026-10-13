@@ -15,6 +15,7 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
 import { classifyEventPostStatus, describeEventRejection, scoresForFinalization } from '@/lib/event-post-outcome';
 import { requiresDecisiveResult } from '@/lib/matchRules';
+import { clockCheckpoint } from '@/lib/clock-checkpoint';
 import { getClientErrorMessage } from '@/lib/client-error';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
@@ -226,14 +227,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     // `sync` can exist yet reject register() (Background Sync disabled by the
                     // browser / privacy mode): fall back to the direct drain message, same as iOS.
                     syncReg.sync.register('sync-match-events').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
                     });
                     syncReg.sync.register('sync-admin-changes').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                     });
-                } else if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                } else if (navigator.serviceWorker.controller ?? reg.active) {
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                 }
             }).catch(() => {});
         };
@@ -635,7 +636,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const { absoluteMinute: minute, second, period } = matchState.clock;
 
         let half = 1;
-        let extraTime = 0;
+        const { minute: cappedMinute, extraTime } = clockCheckpoint(period, minute, matchState.halfDuration);
 
         if (period === 'SECOND_HALF') half = 2;
         else if (period === 'HALF_TIME') half = 1;
@@ -643,12 +644,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         else if (period === 'EXTRA_TIME_2') half = 4;
         else if (period === 'FINISHED') half = 2;
 
-        if (period === 'FIRST_HALF' && minute > 45) extraTime = minute - 45;
-        if (period === 'SECOND_HALF' && minute > 90) extraTime = minute - 90;
-
         const payload = {
             matchId: match.id,
-            minute: minute > 45 && period === 'FIRST_HALF' ? 45 : (minute > 90 && period === 'SECOND_HALF' ? 90 : minute),
+            minute: cappedMinute,
             extraTime,
             half,
             second,

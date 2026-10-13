@@ -251,14 +251,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     // `sync` can exist yet reject register() (Background Sync disabled by the
                     // browser / privacy mode): fall back to the direct drain message, same as iOS.
                     syncReg.sync.register('sync-match-events').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
                     });
                     syncReg.sync.register('sync-admin-changes').catch(() => {
-                        navigator.serviceWorker.controller?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                     });
-                } else if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                } else if (navigator.serviceWorker.controller ?? reg.active) {
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                 }
             }).catch(() => {});
         };
