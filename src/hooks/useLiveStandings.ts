@@ -107,11 +107,16 @@ export function useLiveStandings({
 
         socket.emit('join-competition', competitionId);
 
-        const handleStandingsUpdate = (data: { standings: StandingRow[] }) => {
+        // The shared socket also carries other competitions' updates; ignore a payload that names a
+        // different competition (a payload without an id is applied as before).
+        const handleStandingsUpdate = (data: { competitionId?: string; standings: StandingRow[] }) => {
+            if (data.competitionId !== undefined && data.competitionId !== competitionId) return;
+            if (!Array.isArray(data.standings)) return;
             setStandings(data.standings);
         };
 
-        const handleLiveMatches = (data: { matches: string[] }) => {
+        const handleLiveMatches = (data: { competitionId?: string; matches: string[] }) => {
+            if (data.competitionId !== undefined && data.competitionId !== competitionId) return;
             setLiveMatches(data.matches);
         };
 

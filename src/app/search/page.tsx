@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from 'lucide-react';
@@ -68,7 +68,11 @@ function SearchContent() {
         }
     };
 
+    // Only the latest search may write results; a slower earlier response is ignored.
+    const searchRequestId = useRef(0);
+
     const performSearch = async () => {
+        const requestId = ++searchRequestId.current;
         setLoading(true);
         setLoadFailed(false);
         try {
@@ -82,8 +86,10 @@ function SearchContent() {
             }
 
             const response = await fetch(`/api/search?${params}`);
+            if (requestId !== searchRequestId.current) return;
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
+            if (requestId !== searchRequestId.current) return;
             const r = data?.results;
             if (!r || typeof r !== 'object') throw new Error('Unexpected search response shape');
             setResults({
@@ -93,11 +99,12 @@ function SearchContent() {
                 competitions: Array.isArray(r.competitions) ? r.competitions : [],
             });
         } catch (error) {
+            if (requestId !== searchRequestId.current) return;
             console.error('Search error:', error);
             setResults(null);
             setLoadFailed(true);
         } finally {
-            setLoading(false);
+            if (requestId === searchRequestId.current) setLoading(false);
         }
     };
 
