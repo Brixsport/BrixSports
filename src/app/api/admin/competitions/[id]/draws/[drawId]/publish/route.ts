@@ -81,6 +81,7 @@ export async function POST(
 
         // Idempotent-retry: if this draw was already published, its prior
         // matches must all still be UPCOMING before we touch them.
+        let priorMatchIdsToDelete: string[] = [];
         if (draw.publishedMatchIds) {
             const priorIds: string[] = JSON.parse(draw.publishedMatchIds);
             if (priorIds.length > 0) {
@@ -97,9 +98,7 @@ export async function POST(
                     }, { status: 409 });
                 }
 
-                if (priorMatches.length > 0) {
-                    await db.delete(matches).where(inArray(matches.id, priorMatches.map(m => m.id)));
-                }
+                priorMatchIdsToDelete = priorMatches.map(m => m.id);
             }
         }
 
@@ -122,16 +121,28 @@ export async function POST(
             groupName: null,
         }));
 
-        // Single batched insert -- one atomic statement.
-        const inserted = await db.insert(matches).values(newMatches).returning({ id: matches.id });
-        const newIds = inserted.map(m => m.id);
+        // Delete the prior matches, insert the new ones and flip the draw status in
+        // one transaction so a failed insert cannot leave the draw published with
+        // its matches gone.
+        const newIds = await db.transaction(async (tx) => {
+            if (priorMatchIdsToDelete.length > 0) {
+                await tx.delete(matches).where(inArray(matches.id, priorMatchIdsToDelete));
+            }
+            const inserted = await tx.insert(matches).values(newMatches).returning({ id: matches.id });
+            const ids = inserted.map(m => m.id);
+            await tx.update(competitionDraws).set({
+                status: 'PUBLISHED',
+                publishedMatchIds: JSON.stringify(ids),
+                updatedAt: now,
+            }).where(eq(competitionDraws.id, draw.id));
+            return ids;
+        });
 
         const updated = {
             status: 'PUBLISHED',
             publishedMatchIds: JSON.stringify(newIds),
             updatedAt: now,
         };
-        await db.update(competitionDraws).set(updated).where(eq(competitionDraws.id, draw.id));
 
         return NextResponse.json({ draw: toDrawDTO({ ...draw, ...updated }), matchIds: newIds, matchCount: newIds.length });
     } catch (err) {
@@ -163,6 +174,7 @@ export async function DELETE(
         }
 
         const matchIds: string[] = draw.publishedMatchIds ? JSON.parse(draw.publishedMatchIds) : [];
+        let existingIds: string[] = [];
         if (matchIds.length > 0) {
             const existing = await db
                 .select({ id: matches.id, status: matches.status })
@@ -177,13 +189,16 @@ export async function DELETE(
                 }, { status: 409 });
             }
 
-            if (existing.length > 0) {
-                await db.delete(matches).where(inArray(matches.id, existing.map(m => m.id)));
-            }
+            existingIds = existing.map(m => m.id);
         }
 
         const updated = { status: 'DRAFT', publishedMatchIds: null, updatedAt: new Date() };
-        await db.update(competitionDraws).set(updated).where(eq(competitionDraws.id, draw.id));
+        await db.transaction(async (tx) => {
+            if (existingIds.length > 0) {
+                await tx.delete(matches).where(inArray(matches.id, existingIds));
+            }
+            await tx.update(competitionDraws).set(updated).where(eq(competitionDraws.id, draw.id));
+        });
 
         return NextResponse.json({ draw: toDrawDTO({ ...draw, ...updated }) });
     } catch (err) {
