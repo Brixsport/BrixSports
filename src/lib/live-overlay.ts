@@ -75,3 +75,49 @@ export function mergeLiveScores<T extends PatchableMatch>(current: T[], live: Li
 
     return { next: changed ? next : current, changed, needsFullRefresh };
 }
+
+/** Minimum gap between overlay-triggered reloads of the heavy lists. */
+export const FULL_REFRESH_COOLDOWN_MS = 10000;
+/** A live snapshot older than this is not trusted to patch a freshly loaded list. */
+export const LIVE_SNAPSHOT_MAX_AGE_MS = 15000;
+
+export interface FullRefreshGate {
+    needsFullRefresh: boolean;
+    /** True while a load of the full lists is already running. */
+    inFlight: boolean;
+    /** When the last overlay-triggered reload started (ms), or null if none yet. */
+    lastRunAt: number | null;
+    now: number;
+    cooldownMs?: number;
+}
+
+/**
+ * Whether the overlay should reload the full lists now. A match that ended stays LIVE in the edge-cached
+ * lists for a while, so `needsFullRefresh` keeps coming back true on every tick; the gate stops that from
+ * turning into a heavy reload every few seconds.
+ */
+export function shouldRunFullRefresh(gate: FullRefreshGate): boolean {
+    if (!gate.needsFullRefresh || gate.inFlight) return false;
+    if (gate.lastRunAt === null) return true;
+    return gate.now - gate.lastRunAt >= (gate.cooldownMs ?? FULL_REFRESH_COOLDOWN_MS);
+}
+
+export interface LiveSnapshot {
+    live: LiveOverlayInput[];
+    /** When the snapshot was received (ms). */
+    at: number;
+}
+
+/**
+ * Re-applies the latest live snapshot onto a freshly loaded full list, so a slow list response (which lags
+ * the live endpoint) cannot flip a score back. Returns the list untouched when there is no usable snapshot.
+ */
+export function applyLiveSnapshot<T extends PatchableMatch>(
+    current: T[],
+    snapshot: LiveSnapshot | null,
+    now: number,
+    maxAgeMs: number = LIVE_SNAPSHOT_MAX_AGE_MS
+): T[] {
+    if (!snapshot || now - snapshot.at > maxAgeMs) return current;
+    return mergeLiveScores(current, snapshot.live).next;
+}

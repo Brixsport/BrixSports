@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { mergeLiveScores } from '@/lib/live-overlay';
+import {
+    mergeLiveScores,
+    shouldRunFullRefresh,
+    applyLiveSnapshot,
+    FULL_REFRESH_COOLDOWN_MS,
+    LIVE_SNAPSHOT_MAX_AGE_MS,
+} from '@/lib/live-overlay';
 
 const m = (over: Record<string, any> = {}) => ({
     id: 'm1', status: 'LIVE', homeScore: 0, awayScore: 0, currentPeriod: 'FIRST_HALF',
@@ -55,5 +61,68 @@ describe('mergeLiveScores', () => {
         const res = mergeLiveScores([finished], []);
         expect(res.next[0]).toBe(finished);
         expect(res.needsFullRefresh).toBe(false);
+    });
+});
+
+describe('shouldRunFullRefresh', () => {
+    const base = { needsFullRefresh: true, inFlight: false, lastRunAt: null as number | null, now: 100000 };
+
+    it('runs when needed, idle and never run before', () => {
+        expect(shouldRunFullRefresh(base)).toBe(true);
+    });
+
+    it('does not run when no refresh is needed', () => {
+        expect(shouldRunFullRefresh({ ...base, needsFullRefresh: false })).toBe(false);
+    });
+
+    it('does not run while a load is already in flight', () => {
+        expect(shouldRunFullRefresh({ ...base, inFlight: true })).toBe(false);
+    });
+
+    it('holds off during the cooldown and runs once it has elapsed', () => {
+        expect(shouldRunFullRefresh({ ...base, lastRunAt: 100000 - (FULL_REFRESH_COOLDOWN_MS - 1) })).toBe(false);
+        expect(shouldRunFullRefresh({ ...base, lastRunAt: 100000 - FULL_REFRESH_COOLDOWN_MS })).toBe(true);
+    });
+
+    it('honours a custom cooldown', () => {
+        expect(shouldRunFullRefresh({ ...base, lastRunAt: 99000, cooldownMs: 500 })).toBe(true);
+    });
+
+    it('a finished match that stays LIVE in the cached list triggers at most one reload per cooldown window', () => {
+        let lastRunAt: number | null = null;
+        let runs = 0;
+        for (let t = 0; t < 30000; t += 3000) {
+            const { needsFullRefresh } = mergeLiveScores([m()], []);
+            if (shouldRunFullRefresh({ needsFullRefresh, inFlight: false, lastRunAt, now: t })) {
+                runs++;
+                lastRunAt = t;
+            }
+        }
+        expect(runs).toBe(3);
+    });
+});
+
+describe('applyLiveSnapshot', () => {
+    const snap = (at: number) => ({ live: [{ id: 'm1', status: 'LIVE', homeScore: 2, awayScore: 0, currentPeriod: 'FIRST_HALF' }], at });
+
+    it('re-applies a fresh snapshot so a lagging list cannot flip the score back', () => {
+        const stale = [m({ homeScore: 1 })];
+        const out = applyLiveSnapshot(stale, snap(1000), 3000);
+        expect(out[0]).toMatchObject({ homeScore: 2, awayScore: 0 });
+    });
+
+    it('returns the list untouched when there is no snapshot', () => {
+        const list = [m()];
+        expect(applyLiveSnapshot(list, null, 3000)).toBe(list);
+    });
+
+    it('ignores a snapshot older than the max age', () => {
+        const list = [m({ homeScore: 1 })];
+        expect(applyLiveSnapshot(list, snap(0), LIVE_SNAPSHOT_MAX_AGE_MS + 1)).toBe(list);
+    });
+
+    it('leaves matches missing from the snapshot alone', () => {
+        const list = [m({ id: 'other', homeScore: 5 })];
+        expect(applyLiveSnapshot(list, snap(1000), 2000)[0]).toMatchObject({ id: 'other', homeScore: 5 });
     });
 });

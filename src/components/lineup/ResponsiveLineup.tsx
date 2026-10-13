@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Player } from '@/types';
 import { useScreenSize } from '@/hooks/useScreenSize';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 import { FullPitchLineups } from '@/components/FullPitchLineups';
 
 interface TeamData {
@@ -87,9 +88,9 @@ function BenchSection({
                                     <span className={`text-sm font-medium truncate block ${subEvent ? 'text-green-400' : 'text-foreground'}`}>
                                         {player.jerseyName || player.name}
                                     </span>
-                                    {subEvent && (
+                                    {subEvent && hasKnownMinute(subEvent.minute) && (
                                         <span className="text-[10px] bg-green-500/20 text-green-400 px-1 rounded font-bold">
-                                            {subEvent.minute}'
+                                            {formatEventMinute(subEvent.minute)}
                                         </span>
                                     )}
                                 </div>
@@ -188,9 +189,9 @@ function ListView({
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <h4 className="font-bold text-foreground text-sm">{player.jerseyName || player.name}</h4>
-                                        {subOutEvent && (
+                                        {subOutEvent && hasKnownMinute(subOutEvent.minute) && (
                                             <span className="text-[10px] bg-red-500/20 text-red-400 px-1 rounded font-bold">
-                                                {subOutEvent.minute}'
+                                                {formatEventMinute(subOutEvent.minute)}
                                             </span>
                                         )}
                                     </div>

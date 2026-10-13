@@ -9,6 +9,7 @@ import {
 import { useState } from 'react';
 import { MatchEvent } from '@/db/schema';
 import { safeParseEventValue } from '@/lib/eventValue';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 
 interface MatchTimelineProps {
     events: (MatchEvent & {
@@ -338,8 +339,8 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                                         {/* Time */}
                                         <div className="flex-shrink-0 w-16 text-center">
                                             <div className="text-sm font-bold text-primary">
-                                                {event.minute}'
-                                                {event.second ? <span className="text-xs">:{event.second}</span> : ''}
+                                                {formatEventMinute(event.minute)}
+                                                {hasKnownMinute(event.minute) && event.second ? <span className="text-xs">:{event.second}</span> : ''}
                                             </div>
                                         </div>
 

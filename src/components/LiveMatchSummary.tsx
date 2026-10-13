@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { MatchEvent } from '@/db/schema';
 import { useMatchEvents } from '@/hooks/useWebSocket';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 
 interface LiveMatchSummaryProps {
     matchId: string;
@@ -59,7 +60,7 @@ export default function LiveMatchSummary({
     }, [events]);
 
     const formatEvent = (event: MatchEvent): EventDisplay => {
-        const timeDisplay = `${event.minute}'${event.second ? `:${event.second}` : ''}`;
+        const timeDisplay = `${formatEventMinute(event.minute)}${hasKnownMinute(event.minute) && event.second ? `:${event.second}` : ''}`;
         const isHomeTeam = event.teamId === homeTeamName; // This should use teamId comparison
         const teamColor = isHomeTeam ? homeTeamColor : awayTeamColor;
         const teamName = isHomeTeam ? homeTeamName : awayTeamName;
@@ -375,7 +376,7 @@ export default function LiveMatchSummary({
                                                 border: `2px solid ${event.teamColor}60`,
                                             }}
                                         >
-                                            {event.minute}'
+                                            {formatEventMinute(event.minute)}
                                         </div>
                                     </div>
 

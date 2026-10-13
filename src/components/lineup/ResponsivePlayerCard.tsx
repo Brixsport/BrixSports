@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Player } from '@/types';
 import { useState } from 'react';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 
 interface ResponsivePlayerCardProps {
     player: Player;
@@ -135,9 +136,11 @@ export function ResponsivePlayerCard({
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-3 h-3 text-white font-bold" strokeWidth="4">
                         <path d="M12 5v14M19 12l-7 7-7-7" />
                     </svg>
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-[8px] px-1 rounded font-bold border border-white">
-                        {subInfo.minute}'
-                    </div>
+                    {hasKnownMinute(subInfo.minute) && (
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-[8px] px-1 rounded font-bold border border-white">
+                            {formatEventMinute(subInfo.minute)}
+                        </div>
+                    )}
                 </div>
             )}
         </motion.div>

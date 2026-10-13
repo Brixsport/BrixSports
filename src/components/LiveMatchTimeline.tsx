@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 import { format } from 'date-fns';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 
 interface Event {
     id: string;
@@ -681,7 +682,9 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
     const displayRows = [...rows].reverse();
 
     const minuteLabel = (event: Event) =>
-        sport?.toLowerCase() === 'basketball' ? `${event.period ?? ''} ${event.minute}`.trim() : `${event.minute}'`;
+        sport?.toLowerCase() === 'basketball'
+            ? `${event.period ?? ''} ${hasKnownMinute(event.minute) ? event.minute : ''}`.trim()
+            : formatEventMinute(event.minute);
 
     return (
         <div className="space-y-4">

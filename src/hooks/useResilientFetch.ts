@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startVisiblePolling } from '@/lib/visible-poll';
+import { shouldSkipPollTick } from '@/lib/request-gate';
 
 export type ResilientLoadError = 'not-found' | 'load-failed';
 
@@ -26,8 +27,16 @@ export function useResilientFetch<T>(url: string, options: UseResilientFetchOpti
     const validateRef = useRef(validate);
     validateRef.current = validate;
 
-    const load = useCallback(async () => {
+    // Start time of the request currently running, or null when idle.
+    const inFlightSince = useRef<number | null>(null);
+
+    // A poll tick (`fromPoll`) is skipped while the previous request is still running, so a response that
+    // takes longer than the poll interval is applied instead of being superseded by the next tick forever.
+    // Every other caller (first load, retry, back online, url change) always starts a fresh request.
+    const load = useCallback(async (fromPoll = false) => {
+        if (fromPoll && shouldSkipPollTick(inFlightSince.current, Date.now())) return;
         const id = ++requestId.current;
+        inFlightSince.current = Date.now();
         try {
             const response = await fetch(url);
             if (id !== requestId.current) return;
@@ -57,7 +66,10 @@ export function useResilientFetch<T>(url: string, options: UseResilientFetchOpti
             if (hasData.current) setIsStale(true);
             else setLoadError('load-failed');
         } finally {
-            if (id === requestId.current) setIsLoading(false);
+            if (id === requestId.current) {
+                inFlightSince.current = null;
+                setIsLoading(false);
+            }
         }
     }, [url]);
 
@@ -70,12 +82,13 @@ export function useResilientFetch<T>(url: string, options: UseResilientFetchOpti
 
         load();
         // Jittered, paused while the tab is hidden, immediate refetch when it becomes visible again.
-        const stopPolling = pollMs ? startVisiblePolling(load, pollMs) : undefined;
+        const stopPolling = pollMs ? startVisiblePolling(() => { load(true); }, pollMs) : undefined;
         const onOnline = () => { load(); };
         window.addEventListener('online', onOnline);
 
         return () => {
             requestId.current++;
+            inFlightSince.current = null;
             if (stopPolling) stopPolling();
             window.removeEventListener('online', onOnline);
         };

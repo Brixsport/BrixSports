@@ -20,7 +20,8 @@ import AdBanner from '@/components/ads/AdBanner';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { startVisiblePolling } from '@/lib/visible-poll';
-import { mergeLiveScores } from '@/lib/live-overlay';
+import { mergeLiveScores, applyLiveSnapshot, shouldRunFullRefresh, type LiveSnapshot } from '@/lib/live-overlay';
+import { safeToLocale } from '@/lib/safe-date';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
@@ -60,6 +61,11 @@ export default function Home() {
   const hasLiveRef = useRef(false);
   // Mirror of `matches` for the overlay poll, which merges into the latest list without re-subscribing.
   const matchesRef = useRef<Match[]>([]);
+  // Latest /api/live-matches response, re-applied on top of every full list load.
+  const lastLiveRef = useRef<LiveSnapshot | null>(null);
+  // Number of full-list loads running, and when the overlay last asked for one (cooldown).
+  const fullLoadsInFlight = useRef(0);
+  const lastOverlayRefreshAt = useRef<number | null>(null);
 
   // Date Filter
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -87,6 +93,7 @@ export default function Home() {
   // shared fetcher (was duplicated 2x) and polled on an interval, matching the
   // same stopgap pattern /live/page.tsx already uses (BUG-020).
   const fetchAllMatches = useCallback(async (showLoadingState: boolean) => {
+    fullLoadsInFlight.current += 1;
     try {
       if (showLoadingState) setLoading(true);
 
@@ -199,27 +206,38 @@ export default function Home() {
 
       // Add OTHER matches
       if (otherData.success && otherData.matches) {
-        const otherMatches = otherData.matches.map((match: any) => ({
-          ...match,
-          stats: typeof match.stats === 'string' ? JSON.parse(match.stats || '{}') : (match.stats || {})
-        }));
+        const otherMatches = otherData.matches.map((match: any) => {
+          // A malformed stats string must not fail the whole load.
+          let dbStats = {};
+          try {
+            dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats || '{}') : (match.stats || {});
+          } catch (e) {
+            console.error('Error parsing match stats:', e);
+          }
+          return { ...match, stats: dbStats };
+        });
         allMatches.push(...otherMatches);
       }
 
-      setMatches(allMatches);
-      matchesRef.current = allMatches;
-      hasLiveRef.current = allMatches.some((m: any) => m.status === 'LIVE');
+      // The heavy lists lag /api/live-matches, so put the latest live snapshot back on top of them;
+      // otherwise a slow list response flips a live score back until the next overlay tick.
+      const merged = applyLiveSnapshot(allMatches as any[], lastLiveRef.current, Date.now()) as Match[];
+
+      setMatches(merged);
+      matchesRef.current = merged;
+      hasLiveRef.current = merged.some((m: any) => m.status === 'LIVE');
       hasLoaded.current = true;
       setLoadFailed(false);
       setIsStale(false);
-      matchesCache = { matches: allMatches, timestamp: Date.now() };
-      return allMatches;
+      matchesCache = { matches: merged, timestamp: Date.now() };
+      return merged;
     } catch (error) {
       console.error('Error fetching matches:', error);
       if (hasLoaded.current) setIsStale(true);
       else setLoadFailed(true);
       return null;
     } finally {
+      fullLoadsInFlight.current -= 1;
       if (showLoadingState) setLoading(false);
     }
   }, []);
@@ -236,12 +254,24 @@ export default function Home() {
       if (!res.ok) return;
       const live = await res.json();
       if (!Array.isArray(live)) return;
+      const now = Date.now();
+      lastLiveRef.current = { live, at: now };
       const { next, changed, needsFullRefresh } = mergeLiveScores(matchesRef.current as any[], live);
       if (changed) {
         matchesRef.current = next as Match[];
         setMatches(next as Match[]);
       }
-      if (needsFullRefresh) fetchAllMatches(false);
+      // A match that just ended stays LIVE in the cached lists for a while, so this keeps coming back
+      // true: reload at most once per cooldown and never on top of a load that is still running.
+      if (shouldRunFullRefresh({
+        needsFullRefresh,
+        inFlight: fullLoadsInFlight.current > 0,
+        lastRunAt: lastOverlayRefreshAt.current,
+        now,
+      })) {
+        lastOverlayRefreshAt.current = now;
+        fetchAllMatches(false);
+      }
     } catch {
       // The 15s full poll is the source of truth; an overlay failure must never surface as an error.
     }
@@ -678,11 +708,11 @@ export default function Home() {
                       {/* Show actual date for basketball rounds */}
                       {date.startsWith('Round') && dateMatches.length > 0 && (
                         <span className="text-xs text-foreground/40">
-                          {new Date(dateMatches[0].startTime).toLocaleDateString('en-US', {
+                          {safeToLocale(dateMatches[0].startTime, 'date', {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric'
-                          })}
+                          }, 'TBD', 'en-US')}
                         </span>
                       )}
                       <div className="flex-1 h-px bg-border"></div>
@@ -789,7 +819,7 @@ export default function Home() {
                                       <span className="text-xs text-foreground/40 font-bold">FT</span>
                                     ) : (
                                       <span className="text-xs text-foreground/60">
-                                        {new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                        {safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, 'TBD', 'en-US')}
                                       </span>
                                     )}
                                     {match.round && (

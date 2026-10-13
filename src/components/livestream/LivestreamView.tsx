@@ -16,7 +16,7 @@ import { ArrowLeft, Share2, TrendingUp, Users, Clock, Play } from 'lucide-react'
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { displayMinute } from '@/lib/eventMinute';
+import { formatEventMinute } from '@/lib/eventMinute';
 
 interface Match {
     id: string;
@@ -302,7 +302,7 @@ export function LivestreamView({ match, livestream, onExit }: LivestreamViewProp
                                                         {/* Label only -- the seek-to-timestamp calculation above still uses the raw
                                                             minute, unclamped, since a video seek position shouldn't be faked for a
                                                             match with unknown timing (BACKLOG-337's -1 "unknown minute" sentinel). */}
-                                                        <span className="text-sm font-semibold">{displayMinute(event.minute)}'</span>
+                                                        <span className="text-sm font-semibold">{formatEventMinute(event.minute)}</span>
                                                         <Play size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                                                     </div>
                                                     <span className="text-2xl">{getEventIcon(event.type)}</span>

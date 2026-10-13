@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { formatEventMinute } from '@/lib/eventMinute';
 import { Activity, Trophy, AlertCircle } from 'lucide-react';
 
 interface LiveUpdatesProps {
@@ -70,7 +71,7 @@ export function LiveUpdates({ matchId }: LiveUpdatesProps) {
                             className="flex items-start gap-3 p-3 bg-muted rounded-lg border border-border hover:border-primary/30 transition-all"
                         >
                             <div className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-xs font-bold tabular-nums flex-shrink-0">
-                                {event.minute}'
+                                {formatEventMinute(event.minute)}
                             </div>
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
