@@ -26,6 +26,7 @@ import {
     CheckCircle,
 } from 'lucide-react';
 import Link from 'next/link';
+import { BackButton } from '@/components/ui/BackButton';
 import dynamic from 'next/dynamic';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { useAutoSave } from '@/hooks/useAutoSave';
@@ -350,6 +351,7 @@ function AdminNewsPageContent() {
                 <div className="max-w-7xl mx-auto px-4 md:px-6 py-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-3 md:gap-4">
+                            <BackButton fallbackHref="/admin" forceShow />
                             <Link href="/admin" className="text-white/40 hover:text-white transition-colors text-sm md:text-base">
                                 ← Back
                             </Link>
@@ -663,8 +665,8 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
 }
 
 function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditing, entityId, isSaving, lastSaved, autoSaveEnabled, onToggleAutoSave }: {
-    formData: any;
-    setFormData: (data: any) => void;
+    formData: FormData;
+    setFormData: React.Dispatch<React.SetStateAction<FormData>>;
     onSubmit: (e: React.FormEvent) => void;
     onClose: () => void;
     isEditing: boolean;
@@ -782,7 +784,6 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                             <ImageUpload
                                 value={formData.imageUrl}
                                 onChange={(url) => setFormData({ ...formData, imageUrl: url })}
-                                onRemove={() => setFormData({ ...formData, imageUrl: '' })}
                                 folder="brixsports/news/images"
                                 publicId={entityId}
                                 tags={['news-image']}

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { MatchEvent } from '@/db/schema';
 import { useMatchEvents } from '@/hooks/useWebSocket';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 
 interface LiveMatchSummaryProps {
     matchId: string;
@@ -59,7 +60,7 @@ export default function LiveMatchSummary({
     }, [events]);
 
     const formatEvent = (event: MatchEvent): EventDisplay => {
-        const timeDisplay = `${event.minute}'${event.second ? `:${event.second}` : ''}`;
+        const timeDisplay = `${formatEventMinute(event.minute)}${hasKnownMinute(event.minute) && event.second ? `:${event.second}` : ''}`;
         const isHomeTeam = event.teamId === homeTeamName; // This should use teamId comparison
         const teamColor = isHomeTeam ? homeTeamColor : awayTeamColor;
         const teamName = isHomeTeam ? homeTeamName : awayTeamName;
@@ -270,19 +271,19 @@ export default function LiveMatchSummary({
         : displayEvents;
 
     return (
-        <div className="w-full h-full bg-gradient-to-br from-[#050505] via-[#0a0a0a] to-[#050505] rounded-2xl border border-white/10 overflow-hidden">
+        <div className="w-full h-full bg-card rounded-2xl border border-border overflow-hidden">
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-xl border-b border-white/10 p-4">
+            <div className="sticky top-0 z-10 bg-card/80 backdrop-blur-xl border-b border-border p-4">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white/5 rounded-lg">
-                            <Activity className="w-5 h-5 text-white" />
+                        <div className="p-2 bg-muted rounded-lg">
+                            <Activity className="w-5 h-5 text-foreground" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">
+                            <h2 className="text-xl font-bold text-foreground uppercase tracking-wider">
                                 Live Commentary
                             </h2>
-                            <p className="text-sm text-white/50">
+                            <p className="text-sm text-foreground/50">
                                 {isConnected ? (
                                     <span className="flex items-center gap-2">
                                         <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
@@ -303,8 +304,8 @@ export default function LiveMatchSummary({
                         <button
                             onClick={() => setFilter('all')}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === 'all'
-                                    ? 'bg-white/10 text-white'
-                                    : 'bg-white/5 text-white/50 hover:bg-white/10'
+                                    ? 'bg-muted text-foreground'
+                                    : 'bg-muted/50 text-foreground/50 hover:bg-muted'
                                 }`}
                         >
                             All Events
@@ -312,8 +313,8 @@ export default function LiveMatchSummary({
                         <button
                             onClick={() => setFilter('important')}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === 'important'
-                                    ? 'bg-white/10 text-white'
-                                    : 'bg-white/5 text-white/50 hover:bg-white/10'
+                                    ? 'bg-muted text-foreground'
+                                    : 'bg-muted/50 text-foreground/50 hover:bg-muted'
                                 }`}
                         >
                             Key Events
@@ -322,7 +323,7 @@ export default function LiveMatchSummary({
                 </div>
 
                 {/* Event Count */}
-                <div className="text-sm text-white/50">
+                <div className="text-sm text-foreground/50">
                     {filteredEvents.length} {filter === 'important' ? 'key' : ''} event{filteredEvents.length !== 1 ? 's' : ''}
                 </div>
             </div>
@@ -336,8 +337,8 @@ export default function LiveMatchSummary({
                             animate={{ opacity: 1 }}
                             className="text-center py-12"
                         >
-                            <Activity className="w-12 h-12 text-white/20 mx-auto mb-4" />
-                            <p className="text-white/50">No events yet. Waiting for match to start...</p>
+                            <Activity className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
+                            <p className="text-foreground/50">No events yet. Waiting for match to start...</p>
                         </motion.div>
                     ) : (
                         filteredEvents.map((event, index) => (
@@ -357,8 +358,8 @@ export default function LiveMatchSummary({
 
                                 <div
                                     className={`relative flex gap-4 p-4 rounded-xl transition-all ${event.isImportant
-                                            ? 'bg-gradient-to-r from-white/10 to-transparent border border-white/20'
-                                            : 'bg-white/5 hover:bg-white/10'
+                                            ? 'bg-gradient-to-r from-muted to-transparent border border-border'
+                                            : 'bg-muted/50 hover:bg-muted'
                                         }`}
                                     style={{
                                         borderLeftColor: event.isImportant ? event.teamColor : 'transparent',
@@ -375,7 +376,7 @@ export default function LiveMatchSummary({
                                                 border: `2px solid ${event.teamColor}60`,
                                             }}
                                         >
-                                            {event.minute}'
+                                            {formatEventMinute(event.minute)}
                                         </div>
                                     </div>
 
@@ -399,7 +400,7 @@ export default function LiveMatchSummary({
                                                 >
                                                     {event.title}
                                                 </h3>
-                                                <p className="text-white/70 text-sm leading-relaxed">
+                                                <p className="text-foreground/70 text-sm leading-relaxed">
                                                     {event.description}
                                                 </p>
                                             </div>
@@ -409,7 +410,7 @@ export default function LiveMatchSummary({
                                         {event.isImportant && (
                                             <div className="mt-2 flex items-center gap-2">
                                                 <div className="h-px flex-1 bg-gradient-to-r from-white/20 to-transparent" />
-                                                <span className="text-xs text-white/40 uppercase tracking-wider">
+                                                <span className="text-xs text-foreground/40 uppercase tracking-wider">
                                                     Key Event
                                                 </span>
                                                 <div className="h-px flex-1 bg-gradient-to-l from-white/20 to-transparent" />

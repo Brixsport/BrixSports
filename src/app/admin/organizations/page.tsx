@@ -124,7 +124,12 @@ export default function AdminOrganizationsPage() {
     const loadOrganizations = async () => {
         try {
             setErrorMessage('');
-            const response = await fetch('/api/admin/organizations');
+            // BACKLOG-283: this page renders a parent/child hierarchy tree
+            // client-side across the full org set -- a "Load More" model
+            // would silently break tree resolution if a parent loaded on a
+            // later page than its children. Single bounded fetch at the
+            // route's cap instead (see BACKLOG.md for the tradeoff).
+            const response = await fetch('/api/admin/organizations?limit=200');
             const data = await response.json();
 
             if (!response.ok) {

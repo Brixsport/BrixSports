@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teamRegistrations, registeredPlayers } from '@/db/schema';
+import { teamRegistrations, registeredPlayers, competitions } from '@/db/schema';
+import { and, eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRegistrationOpen, parseRegistrationInput } from '@/lib/registration-input';
 
 // PUBLIC: intentional — teams self-register for competitions without an account.
 export async function POST(request: NextRequest) {
     try {
         // Tighter than the public-GET default (item 10) -- a write endpoint with no
         // account requirement, real registration-spam risk, not just a scrape target.
-        const rl = checkRateLimit(request, { max: 10, windowMs: 60 * 1000 });
+        const rl = await checkRateLimit(request, { max: 10, windowMs: 60 * 1000, distributed: true });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
@@ -17,61 +19,97 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const body = await request.json();
-        const { competitionId, teamInfo, players } = body;
-
-        // Validate required fields
-        if (!competitionId || !teamInfo || !players) {
-            return NextResponse.json(
-                { error: 'Missing required fields' },
-                { status: 400 }
-            );
+        let body: any;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
         }
 
-        // Create team registration
-        const registrationId = nanoid();
-        await db.insert(teamRegistrations).values({
-            id: registrationId,
-            competitionId,
-            teamName: teamInfo.teamName,
-            schoolName: teamInfo.schoolName,
-            shortName: teamInfo.shortName,
-            logo: teamInfo.logo || null,
-            color: teamInfo.color,
-            contactName: teamInfo.contactName,
-            contactEmail: teamInfo.contactEmail,
-            contactPhone: teamInfo.contactPhone,
-            status: 'pending',
-            playersSubmitted: players.length > 0,
-            numberOfPlayers: players.length,
-            notes: teamInfo.notes || null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        });
+        const competitionId = body?.competitionId;
+        if (typeof competitionId !== 'string' || competitionId.trim() === '') {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
 
-        // Create registered players
-        if (players.length > 0) {
-            const playerRecords = players.map((player: any) => ({
-                id: nanoid(),
-                registrationId,
-                name: player.name,
-                jerseyName: player.jerseyName || null,
-                number: player.number,
-                position: player.position,
-                age: player.age || null,
-                height: player.height || null,
-                weight: player.weight || null,
-                nationality: player.nationality || 'Nigeria',
-                university: player.university || teamInfo.schoolName || null, // Player's university affiliation
-                college: player.college || null,
-                department: player.department || null,
-                image: player.image || null,
+        const parsed = parseRegistrationInput(body);
+        if (!parsed.ok) {
+            return NextResponse.json({ error: parsed.error }, { status: 422 });
+        }
+        const { teamInfo, players } = parsed;
+
+        const competition = await db
+            .select({
+                id: competitions.id,
+                sport: competitions.sport,
+                registrationOpen: competitions.registrationOpen,
+                registrationDeadline: competitions.registrationDeadline,
+                maxTeams: competitions.maxTeams,
+            })
+            .from(competitions)
+            .where(eq(competitions.id, competitionId))
+            .get();
+        if (!competition) {
+            return NextResponse.json({ error: 'Competition not found' }, { status: 404 });
+        }
+
+        const activeRows = await db
+            .select({ id: teamRegistrations.id })
+            .from(teamRegistrations)
+            .where(and(
+                eq(teamRegistrations.competitionId, competition.id),
+                inArray(teamRegistrations.status, ['pending', 'approved'])
+            ))
+            .limit(1000);
+
+        const closedReason = checkRegistrationOpen(competition, activeRows.length, new Date());
+        if (closedReason) {
+            return NextResponse.json({ error: closedReason }, { status: 422 });
+        }
+
+        // Create the registration and its players together
+        const registrationId = nanoid();
+        await db.transaction(async (tx) => {
+            await tx.insert(teamRegistrations).values({
+                id: registrationId,
+                competitionId: competition.id,
+                teamName: teamInfo.teamName,
+                schoolName: teamInfo.schoolName,
+                shortName: teamInfo.shortName,
+                logo: teamInfo.logo,
+                color: teamInfo.color,
+                contactName: teamInfo.contactName,
+                contactEmail: teamInfo.contactEmail,
+                contactPhone: teamInfo.contactPhone,
+                status: 'pending',
+                playersSubmitted: players.length > 0,
+                numberOfPlayers: players.length,
+                notes: teamInfo.notes,
                 createdAt: new Date(),
                 updatedAt: new Date(),
-            }));
+            });
 
-            await db.insert(registeredPlayers).values(playerRecords);
-        }
+            if (players.length > 0) {
+                await tx.insert(registeredPlayers).values(players.map((player) => ({
+                    id: nanoid(),
+                    registrationId,
+                    name: player.name,
+                    jerseyName: player.jerseyName,
+                    number: player.number,
+                    position: player.position,
+                    sport: competition.sport || 'Football',
+                    age: player.age,
+                    height: player.height,
+                    weight: player.weight,
+                    nationality: player.nationality,
+                    university: player.university || teamInfo.schoolName, // Player's university affiliation
+                    college: player.college,
+                    department: player.department,
+                    image: player.image,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                })));
+            }
+        });
 
         return NextResponse.json({
             success: true,

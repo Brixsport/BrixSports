@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { RatingCalculator } from '@/lib/ratingCalculator';
+import { selectChangedAdjustments, MAX_ADJUSTMENT_NOTES_LENGTH } from '@/lib/ratings/adjustments';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Save, AlertCircle, RefreshCw, Star, Info, Filter, X } from 'lucide-react';
 import Image from 'next/image';
@@ -186,12 +187,29 @@ export default function MatchRatingsAdjustPage() {
         setError(null);
 
         try {
-            const ratingsToSubmit = Array.from(adjustedRatings.entries()).map(([playerId, data]) => ({
-                playerId,
-                finalRating: data.rating,
-                notes: data.notes,
-                isMotM: data.isMotM
-            }));
+            // Send only the rows the admin actually changed. Sending the whole
+            // roster would freeze every player's rating and credit the admin with
+            // reviews they did not do.
+            const storedByPlayerId = new Map(ratings.map((r) => [r.playerId, {
+                autoRating: r.autoRating,
+                finalRating: r.finalRating,
+                adjustmentNotes: r.adjustmentNotes,
+                isMotM: r.isMotM
+            }]));
+            const ratingsToSubmit = selectChangedAdjustments(
+                Array.from(adjustedRatings.entries()).map(([playerId, data]) => ({
+                    playerId,
+                    finalRating: data.rating,
+                    notes: data.notes,
+                    isMotM: data.isMotM
+                })),
+                storedByPlayerId
+            );
+
+            if (ratingsToSubmit.length === 0) {
+                setError('No ratings have been changed, so there is nothing to publish.');
+                return;
+            }
 
             console.log('[Publish Ratings] Submitting', ratingsToSubmit.length, 'ratings for match', matchId);
             console.log('[Publish Ratings] Payload:', ratingsToSubmit);
@@ -246,7 +264,7 @@ export default function MatchRatingsAdjustPage() {
             router.push(`/admin/match-ratings`);
 
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to save ratings';
+            const errorMessage = getClientErrorMessage(err, 'Failed to save ratings');
             console.error('[Publish Ratings] Error:', err);
             setError(errorMessage);
         } finally {
@@ -343,10 +361,10 @@ export default function MatchRatingsAdjustPage() {
                         <ChevronLeft className="w-6 h-6" />
                     </button>
 
-                    <div className="flex items-center gap-12 bg-white/5 backdrop-blur-md px-12 py-6 rounded-3xl border border-white/10 shadow-lg">
+                    <div className="flex items-center gap-3 md:gap-12 bg-white/5 backdrop-blur-md px-4 py-4 md:px-12 md:py-6 rounded-3xl border border-white/10 shadow-lg max-w-full">
                         {/* Home Team */}
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="w-20 h-20 relative">
+                        <div className="flex flex-col items-center gap-3 shrink-0">
+                            <div className="w-12 h-12 md:w-20 md:h-20 relative">
                                 <Image
                                     src={match.homeTeam.logo}
                                     alt={match.homeTeam.name}
@@ -358,9 +376,9 @@ export default function MatchRatingsAdjustPage() {
                         </div>
 
                         {/* Valid Score */}
-                        <div className="text-center">
-                            <div className="text-xs text-white/40 font-bold tracking-widest uppercase mb-2">{match.competition}</div>
-                            <div className="text-5xl font-black font-mono tracking-tighter flex items-center gap-4">
+                        <div className="text-center min-w-0">
+                            <div className="text-xs text-white/40 font-bold tracking-widest uppercase mb-2 truncate">{match.competition}</div>
+                            <div className="text-3xl md:text-5xl font-black font-mono tracking-tighter flex items-center gap-2 md:gap-4">
                                 <span>{match.homeScore}</span>
                                 <span className="text-white/20">-</span>
                                 <span>{match.awayScore}</span>
@@ -371,8 +389,8 @@ export default function MatchRatingsAdjustPage() {
                         </div>
 
                         {/* Away Team */}
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="w-20 h-20 relative">
+                        <div className="flex flex-col items-center gap-3 shrink-0">
+                            <div className="w-12 h-12 md:w-20 md:h-20 relative">
                                 <Image
                                     src={match.awayTeam.logo}
                                     alt={match.awayTeam.name}
@@ -531,6 +549,7 @@ export default function MatchRatingsAdjustPage() {
                                                 <input
                                                     type="text"
                                                     value={adjusted.notes}
+                                                    maxLength={MAX_ADJUSTMENT_NOTES_LENGTH}
                                                     onChange={(e) => handleNotesChange(rating.playerId, e.target.value)}
                                                     placeholder="Stats/Notes..."
                                                     className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"

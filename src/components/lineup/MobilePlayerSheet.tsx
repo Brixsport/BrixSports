@@ -19,9 +19,9 @@ interface StatCardProps {
 
 function StatCard({ label, value }: StatCardProps) {
     return (
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-            <p className="text-white/60 text-xs mb-1">{label}</p>
-            <p className="text-white text-xl font-bold">{value}</p>
+        <div className="bg-muted rounded-xl p-4 border border-border">
+            <p className="text-foreground/60 text-xs mb-1">{label}</p>
+            <p className="text-foreground text-xl font-bold">{value}</p>
         </div>
     );
 }
@@ -48,7 +48,7 @@ export function MobilePlayerSheet({ player, isOpen, onClose, rating, teamColor =
                         animate={{ y: 0 }}
                         exit={{ y: '100%' }}
                         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                        className="fixed bottom-0 left-0 right-0 bg-[#1a1a1a] rounded-t-3xl z-50 max-h-[80vh] overflow-y-auto"
+                        className="fixed bottom-0 left-0 right-0 bg-card rounded-t-3xl z-50 max-h-[80vh] overflow-y-auto"
                         drag="y"
                         dragConstraints={{ top: 0, bottom: 0 }}
                         dragElastic={0.2}
@@ -60,15 +60,15 @@ export function MobilePlayerSheet({ player, isOpen, onClose, rating, teamColor =
                     >
                         {/* Drag Handle */}
                         <div className="flex justify-center pt-3 pb-2">
-                            <div className="w-10 h-1 bg-white/20 rounded-full" />
+                            <div className="w-10 h-1 bg-foreground/20 rounded-full" />
                         </div>
 
                         {/* Close Button */}
                         <button
                             onClick={onClose}
-                            className="absolute top-4 right-4 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors"
+                            className="absolute top-4 right-4 p-2 bg-muted rounded-full hover:bg-muted/70 transition-colors"
                         >
-                            <X className="w-5 h-5 text-white/60" />
+                            <X className="w-5 h-5 text-foreground/60" />
                         </button>
 
                         {/* Player Details */}
@@ -81,8 +81,8 @@ export function MobilePlayerSheet({ player, isOpen, onClose, rating, teamColor =
                                     <span className="text-white">{player.number}</span>
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">{player.name}</h3>
-                                    <p className="text-white/60">{player.position}</p>
+                                    <h3 className="text-xl font-bold text-foreground">{player.name}</h3>
+                                    <p className="text-foreground/60">{player.position}</p>
                                 </div>
                             </div>
 
@@ -96,18 +96,18 @@ export function MobilePlayerSheet({ player, isOpen, onClose, rating, teamColor =
                             {/* Additional Info */}
                             <div className="space-y-3">
                                 {player.jerseyName && (
-                                    <div className="flex justify-between items-center py-2 border-b border-white/10">
-                                        <span className="text-white/60">Jersey Name</span>
-                                        <span className="text-white font-semibold">{player.jerseyName}</span>
+                                    <div className="flex justify-between items-center py-2 border-b border-border">
+                                        <span className="text-foreground/60">Jersey Name</span>
+                                        <span className="text-foreground font-semibold">{player.jerseyName}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between items-center py-2 border-b border-white/10">
-                                    <span className="text-white/60">Number</span>
-                                    <span className="text-white font-semibold">#{player.number}</span>
+                                <div className="flex justify-between items-center py-2 border-b border-border">
+                                    <span className="text-foreground/60">Number</span>
+                                    <span className="text-foreground font-semibold">#{player.number}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-2">
-                                    <span className="text-white/60">Position</span>
-                                    <span className="text-white font-semibold">{player.position}</span>
+                                    <span className="text-foreground/60">Position</span>
+                                    <span className="text-foreground font-semibold">{player.position}</span>
                                 </div>
                             </div>
                         </div>

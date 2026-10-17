@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, players } from '@/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { and, eq, desc, inArray } from 'drizzle-orm';
+import { playerRatings } from '@/db/schema-ratings';
 
 export async function GET(
     request: NextRequest,
@@ -35,37 +36,50 @@ export async function GET(
             );
         }
 
-        // Get all matches where player participated
+        // Get all matches where player participated. BACKLOG-315: was missing
+        // a .limit() (CLAUDE.md-mandatory on every list query).
         const playerEvents = await db
             .select()
             .from(matchEvents)
             .where(eq(matchEvents.playerId, playerId))
-            .orderBy(desc(matchEvents.createdAt));
+            .orderBy(desc(matchEvents.createdAt))
+            .limit(1000);
 
         // Group events by match
         const matchIds = [...new Set(playerEvents.map(e => e.matchId))];
 
-        // Fetch match details
-        const matchDetails = await Promise.all(
-            matchIds.map(async (matchId) => {
-                const [match] = await db
-                    .select()
-                    .from(matches)
-                    .where(eq(matches.id, matchId))
-                    .limit(1);
-                return match;
-            })
-        );
+        // BACKLOG-315: was N+1 (one query per match inside Promise.all) -- one
+        // batched query instead.
+        const matchDetails = matchIds.length > 0
+            ? await db.select().from(matches).where(inArray(matches.id, matchIds))
+            : [];
 
         // Filter by timeframe
-        const recentMatches = matchDetails.filter(m =>
-            m && new Date(m.startTime) >= thresholdDate
+        const recentMatches = matchDetails.filter(m => new Date(m.startTime) >= thresholdDate);
+
+        // BACKLOG-315: real per-match ratings from playerRatings, batched --
+        // this route used to run every match through calculatePlayerRating(),
+        // a hardcoded formula (base 5.0 +/- made-up weights per event type)
+        // with zero relationship to the real ratings pipeline shown everywhere
+        // else on the platform. Never fabricate a plausible-looking number:
+        // null means genuinely not yet rated, same rule as BACKLOG-250/254.
+        const recentMatchIds = recentMatches.map(m => m.id);
+        const ratingRows = recentMatchIds.length > 0
+            ? await db
+                .select({
+                    matchId: playerRatings.matchId,
+                    finalRating: playerRatings.finalRating,
+                    autoRating: playerRatings.autoRating,
+                })
+                .from(playerRatings)
+                .where(and(inArray(playerRatings.matchId, recentMatchIds), eq(playerRatings.playerId, playerId)))
+            : [];
+        const ratingByMatchId = new Map(
+            ratingRows.map(r => [r.matchId, r.finalRating ?? r.autoRating])
         );
 
         // Calculate performance for each match
         const performance = recentMatches.map(match => {
-            if (!match) return null;
-
             const matchPlayerEvents = playerEvents.filter(e => e.matchId === match.id);
 
             // Calculate statistics based on sport
@@ -87,14 +101,7 @@ export async function GET(
                 return sum;
             }, 0);
 
-            // Calculate rating (0-10 scale)
-            const rating = calculatePlayerRating({
-                goals,
-                assists,
-                fouls,
-                points,
-                sport: match.sport || 'Football',
-            });
+            const rating = ratingByMatchId.get(match.id) ?? null;
 
             // Estimate minutes played (simplified)
             const minutesPlayed = matchPlayerEvents.length > 0 ? 90 : 0; // Placeholder
@@ -111,11 +118,11 @@ export async function GET(
                 minutesPlayed,
                 sport: match.sport,
             };
-        }).filter(p => p !== null);
+        });
 
         // Sort by date
         performance.sort((a, b) =>
-            new Date(a!.date).getTime() - new Date(b!.date).getTime()
+            new Date(a.date).getTime() - new Date(b.date).getTime()
         );
 
         return NextResponse.json(performance);
@@ -126,38 +133,4 @@ export async function GET(
             { status: 500 }
         );
     }
-}
-
-/**
- * Calculate player rating based on performance
- */
-function calculatePlayerRating({
-    goals,
-    assists,
-    fouls,
-    points,
-    sport,
-}: {
-    goals: number;
-    assists: number;
-    fouls: number;
-    points: number;
-    sport: string;
-}): number {
-    let rating = 5.0; // Base rating
-
-    if (sport === 'Basketball') {
-        // Basketball rating
-        rating += points * 0.1; // +0.1 per point
-        rating += assists * 0.3; // +0.3 per assist
-        rating -= fouls * 0.2; // -0.2 per foul
-    } else {
-        // Football rating
-        rating += goals * 1.5; // +1.5 per goal
-        rating += assists * 1.0; // +1.0 per assist
-        rating -= fouls * 0.1; // -0.1 per foul
-    }
-
-    // Clamp between 0 and 10
-    return Math.max(0, Math.min(10, rating));
 }

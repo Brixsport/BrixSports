@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { advertisements } from '@/db/schema';
-import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, gte, lte, desc } from 'drizzle-orm';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const position = searchParams.get('position') || 'inline';
 
-    // Get current timestamp
-    const now = Date.now();
+    if (!(await isFeatureEnabled('features.ads.enabled'))) {
+      return NextResponse.json({ success: false, message: 'No active ads found' });
+    }
+
+    // The date columns use timestamp mode, so compare against a Date and let
+    // Drizzle convert it to the stored unit.
+    const now = new Date();
 
     // Find active ads for this position
     // Active means: status = 'active', (startDate is null OR startDate <= now), (endDate is null OR endDate >= now)
@@ -20,8 +26,8 @@ export async function GET(request: NextRequest) {
         and(
           eq(advertisements.position, position),
           eq(advertisements.status, 'active'),
-          sql`start_date IS NULL OR start_date <= ${now}`,
-          sql`end_date IS NULL OR end_date >= ${now}`
+          or(isNull(advertisements.startDate), lte(advertisements.startDate, now)),
+          or(isNull(advertisements.endDate), gte(advertisements.endDate, now))
         )
       )
       .orderBy(desc(advertisements.priority))
@@ -37,7 +43,7 @@ export async function GET(request: NextRequest) {
     await db
       .update(advertisements)
       .set({
-        impressions: ad.impressions + 1,
+        impressions: (ad.impressions ?? 0) + 1,
       })
       .where(eq(advertisements.id, ad.id));
 

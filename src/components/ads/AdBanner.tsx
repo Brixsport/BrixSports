@@ -64,18 +64,18 @@ export default function AdBanner({ position, className = '' }: AdBannerProps) {
   }
 
   const positionClasses = {
-    top: 'fixed top-0 left-0 right-0 z-40 bg-black/95 backdrop-blur-sm',
-    bottom: 'fixed bottom-[72px] left-0 right-0 z-40 bg-black/95 backdrop-blur-sm',
+    top: 'fixed top-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-sm',
+    bottom: 'fixed bottom-[72px] left-0 right-0 z-40 bg-card/95 backdrop-blur-sm',
     sidebar: 'sticky top-20 hidden lg:block',
     inline: 'my-4',
   };
 
   return (
     <div className={`${positionClasses[position]} ${className}`}>
-      <div className="relative mx-auto overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
+      <div className="relative mx-auto overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <button
           onClick={handleDismiss}
-          className="absolute top-1 right-1 z-10 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+          className="absolute top-1 right-1 z-10 p-1 rounded-full bg-card/70 text-foreground hover:bg-card/90 transition-colors"
           aria-label="Dismiss ad"
         >
           <X className="w-3 h-3" />
@@ -96,7 +96,7 @@ export default function AdBanner({ position, className = '' }: AdBannerProps) {
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-            <span className="absolute bottom-1 left-2 text-[10px] text-white/80 bg-black/50 px-1.5 py-0.5 rounded">
+            <span className="absolute bottom-1 left-2 text-[10px] text-foreground/80 bg-card/70 px-1.5 py-0.5 rounded">
               Ad
             </span>
           </div>

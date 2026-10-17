@@ -1,13 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matches, matchEvents, teams } from '@/db/schema';
-import { eq, and, inArray, or, desc } from 'drizzle-orm'; // inArray kept for teams fetch
+import { matches, teams, matchLoggerAssignments } from '@/db/schema';
+import { eq, and, or, inArray, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { validateMatchTeams } from '@/lib/match-bulk-input';
+import { playerRatings } from '@/db/schema-ratings';
+
+// BACKLOG-258: explicit allow-list, not `db.select()` (full row). Every
+// matches column except the CLAUDE.md-banned four (approvalStatus,
+// managerNotes, approvedBy, approvedAt) plus lineups (dropped from the list
+// response separately -- no list consumer reads it, and it can be a large
+// JSON blob). loggerId is selected here and conditionally stripped per-request
+// below (admin-only), same behavior as before this change, just moved out of
+// the JS destructure and into the query itself -- also retires BACKLOG-174's
+// fragility concern for this file: a newly added sensitive column is absent
+// by default instead of leaking until someone remembers to exclude it.
+const MATCH_LIST_FIELDS = {
+    id: matches.id,
+    sport: matches.sport,
+    homeTeamId: matches.homeTeamId,
+    awayTeamId: matches.awayTeamId,
+    homeScore: matches.homeScore,
+    awayScore: matches.awayScore,
+    status: matches.status,
+    startTime: matches.startTime,
+    venue: matches.venue,
+    competition: matches.competition,
+    competitionId: matches.competitionId,
+    matchType: matches.matchType,
+    competitionLevel: matches.competitionLevel,
+    friendlyType: matches.friendlyType,
+    friendlyDescription: matches.friendlyDescription,
+    loggerId: matches.loggerId,
+    stats: matches.stats,
+    highlightsUrl: matches.highlightsUrl,
+    livestreamUrl: matches.livestreamUrl,
+    livestreamType: matches.livestreamType,
+    livestreamEnabled: matches.livestreamEnabled,
+    livestreamStartTime: matches.livestreamStartTime,
+    round: matches.round,
+    matchday: matches.matchday,
+    groupName: matches.groupName,
+    livestreamEndTime: matches.livestreamEndTime,
+    livestreamViewers: matches.livestreamViewers,
+    livestreamChatEnabled: matches.livestreamChatEnabled,
+    livestreamChatUrl: matches.livestreamChatUrl,
+    penaltiesEnabledOverride: matches.penaltiesEnabledOverride,
+    allowDrawsOverride: matches.allowDrawsOverride,
+    extraTimeEnabledOverride: matches.extraTimeEnabledOverride,
+    currentPeriod: matches.currentPeriod,
+    minute: matches.minute,
+    extraTime: matches.extraTime,
+    shootoutHomeScore: matches.shootoutHomeScore,
+    shootoutAwayScore: matches.shootoutAwayScore,
+    createdAt: matches.createdAt,
+    updatedAt: matches.updatedAt,
+};
 
 export async function GET(request: NextRequest) {
     try {
-        const rl = checkRateLimit(request);
+        const rl = await checkRateLimit(request);
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
@@ -19,31 +72,77 @@ export async function GET(request: NextRequest) {
         const isAdmin = authUser?.role === 'admin';
 
         const { searchParams } = new URL(request.url);
+        const includeRatingsStatus = searchParams.get('includeRatingsStatus') === '1';
         const sport = searchParams.get('sport');
         const loggerId = searchParams.get('loggerId');
         const status = searchParams.get('status');
         const competitionId = searchParams.get('competitionId');
         const competition = searchParams.get('competition');
+        const matchday = searchParams.get('matchday');
+        const round = searchParams.get('round');
+        // BACKLOG-276: the generic default-50-most-recent window can push a
+        // specific competition's own matches out entirely once other
+        // competitions are active -- matchday/round let a caller ask for an
+        // exact slice instead of relying on recency. Clamp pattern matches
+        // the rest of the codebase (BACKLOG-169).
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
-        let query = db.select().from(matches);
+        let query = db.select(MATCH_LIST_FIELDS).from(matches);
+        let countQuery = db.select({ count: sql<number>`count(*)` }).from(matches);
 
         const conditions = [];
 
         if (sport) conditions.push(eq(matches.sport, sport));
-        if (loggerId) conditions.push(eq(matches.loggerId, loggerId));
+        if (loggerId) {
+            // BACKLOG-416: matches.loggerId is the pre-multi-logger legacy
+            // column (see src/db/migrations/add-multi-logger-support.ts) --
+            // assignments made via the current POST /assign-logger endpoint
+            // only ever write matchLoggerAssignments, never this column, so
+            // filtering on it alone silently misses every match assigned
+            // through the current flow. OR in an active-assignment subquery
+            // so both the legacy column (if ever populated) and the current
+            // assignment table are honored.
+            conditions.push(
+                or(
+                    eq(matches.loggerId, loggerId),
+                    inArray(
+                        matches.id,
+                        db
+                            .select({ matchId: matchLoggerAssignments.matchId })
+                            .from(matchLoggerAssignments)
+                            .where(
+                                and(
+                                    eq(matchLoggerAssignments.loggerId, loggerId),
+                                    eq(matchLoggerAssignments.status, 'active')
+                                )
+                            )
+                    )
+                )!
+            );
+        }
         if (status) conditions.push(eq(matches.status, status));
+        if (matchday) conditions.push(eq(matches.matchday, parseInt(matchday, 10)));
+        if (round) conditions.push(eq(matches.round, round));
 
+        // competitionId is authoritative when present -- see BACKLOG-335.
         if (competitionId) {
-            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+            conditions.push(eq(matches.competitionId, competitionId));
         } else if (competition) {
             conditions.push(eq(matches.competition, competition));
         }
 
         if (conditions.length > 0) {
             query = query.where(and(...conditions)) as typeof query;
+            countQuery = countQuery.where(and(...conditions)) as typeof countQuery;
         }
 
-        const allMatches = await query.orderBy(desc(matches.createdAt)).limit(50);
+        // Total count for pagination UI -- a separate lightweight query rather
+        // than changing the response body shape (many admin pages consume this
+        // route as a bare array today; a header keeps them working unchanged).
+        const [{ count: totalCount }] = await countQuery;
+
+        const allMatches = await query.orderBy(desc(matches.createdAt)).limit(limit).offset(offset);
 
         // Collect all unique team IDs
         const teamIds = new Set<string>();
@@ -61,48 +160,96 @@ export async function GET(request: NextRequest) {
         // Create a map for quick access
         const teamsMap = new Map(teamsList.map(t => [t.id, t]));
 
-        // Fetch events for each match
-        const matchesWithDetails = await Promise.all(
-            allMatches.map(async (match) => {
-                const events = await db.select().from(matchEvents).where(eq(matchEvents.matchId, match.id)).limit(200);
-                const homeTeam = teamsMap.get(match.homeTeamId);
-                const awayTeam = teamsMap.get(match.awayTeamId);
+        // BACKLOG-254: admin/match-ratings/page.tsx's hasRatings/ratingsCount badge
+        // was always false -- no route ever set those fields. Admin-only, opt-in
+        // (not part of every /api/matches response) to keep this generic list route's
+        // default shape unchanged for its many other consumers.
+        let ratingsCountByMatchId = new Map<string, number>();
+        if (includeRatingsStatus && isAdmin && allMatches.length > 0) {
+            const ratingRows = await db
+                .select({
+                    matchId: playerRatings.matchId,
+                    count: sql<number>`count(*)`,
+                })
+                .from(playerRatings)
+                .where(inArray(playerRatings.matchId, allMatches.map(m => m.id)))
+                .groupBy(playerRatings.matchId);
+            ratingsCountByMatchId = new Map(ratingRows.map(r => [r.matchId, Number(r.count)]));
+        }
 
-                const {
-                    loggerId,
-                    approvalStatus: _as,
-                    managerNotes: _mn,
-                    approvedBy: _ab,
-                    approvedAt: _aa,
-                    ...publicMatch
-                } = match;
+        // BACKLOG-258: no per-match events fetch here anymore -- no list
+        // consumer read the `events` key (grep-confirmed; LiveUpdates.tsx
+        // actually calls /api/matches/[id]/events, a different route), and it
+        // was up to 200 rows fetched and serialized per match in the list.
+        // Same for `lineups`: no list consumer reads it either.
+        const matchesWithDetails = allMatches.map((match) => {
+            const homeTeam = teamsMap.get(match.homeTeamId);
+            const awayTeam = teamsMap.get(match.awayTeamId);
 
-                return {
-                    ...publicMatch,
-                    ...(isAdmin && { loggerId }),
-                    events,
-                    stats: match.stats ? JSON.parse(match.stats) : {},
-                    lineups: match.lineups ? JSON.parse(match.lineups) : null,
-                    homeTeam: homeTeam ? {
-                        name: homeTeam.name,
-                        shortName: homeTeam.shortName,
-                        logo: homeTeam.logo
-                    } : null,
-                    awayTeam: awayTeam ? {
-                        name: awayTeam.name,
-                        shortName: awayTeam.shortName,
-                        logo: awayTeam.logo
-                    } : null,
-                };
-            })
-        );
+            const { loggerId, ...publicMatch } = match;
 
-        return NextResponse.json(matchesWithDetails);
+            // Same crash class as BACKLOG-312 -- an uncaught JSON.parse here would
+            // 500 the whole list (this route backs the public /live page, Flow C)
+            // for every match, not just the one with malformed stats.
+            let parsedStats: Record<string, unknown> = {};
+            if (match.stats) {
+                try {
+                    parsedStats = JSON.parse(match.stats);
+                } catch (e) {
+                    console.error(`Error parsing stats for match ${match.id}:`, e);
+                }
+            }
+
+            return {
+                ...publicMatch,
+                ...(isAdmin && { loggerId }),
+                ...(includeRatingsStatus && isAdmin && {
+                    hasRatings: (ratingsCountByMatchId.get(match.id) ?? 0) > 0,
+                    ratingsCount: ratingsCountByMatchId.get(match.id) ?? 0,
+                }),
+                stats: parsedStats,
+                homeTeam: homeTeam ? {
+                    name: homeTeam.name,
+                    shortName: homeTeam.shortName,
+                    logo: homeTeam.logo
+                } : null,
+                awayTeam: awayTeam ? {
+                    name: awayTeam.name,
+                    shortName: awayTeam.shortName,
+                    logo: awayTeam.logo
+                } : null,
+            };
+        });
+
+        return NextResponse.json(matchesWithDetails, {
+            headers: {
+                'X-Total-Count': String(totalCount),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
+        });
     } catch (error) {
         console.error('Error fetching matches:', error);
         return NextResponse.json({ error: 'Failed to fetch matches' }, { status: 500 });
     }
 }
+
+// BACKLOG-397: explicit allow-list, not a raw `...matchData` spread -- an
+// unbounded spread let any field including approvalStatus/managerNotes/
+// approvedBy/loggerId be set at creation, bypassing both the admin-only
+// approval gate on PATCH and the assign-logger transaction's own validation.
+// Mirrors MATCH_LIST_FIELDS above: creation-time fields only, never the
+// admin-approval fields, never loggerId (assigned via its own endpoint),
+// never score/period/shootout fields (event-driven or PATCH-only).
+const MATCH_CREATE_FIELDS = [
+    'id', 'sport', 'homeTeamId', 'awayTeamId', 'status', 'startTime', 'venue',
+    'competition', 'competitionId', 'matchType', 'competitionLevel',
+    'friendlyType', 'friendlyDescription', 'highlightsUrl', 'livestreamUrl',
+    'livestreamType', 'livestreamEnabled', 'livestreamStartTime', 'round',
+    'matchday', 'groupName', 'livestreamEndTime', 'livestreamChatEnabled',
+    'livestreamChatUrl', 'penaltiesEnabledOverride', 'allowDrawsOverride',
+    'extraTimeEnabledOverride',
+] as const;
 
 export async function POST(request: NextRequest) {
     try {
@@ -112,13 +259,22 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { stats, lineups, ...matchData } = body;
+        const { stats, lineups } = body;
+        const matchData: Record<string, unknown> = {};
+        for (const field of MATCH_CREATE_FIELDS) {
+            if (body[field] !== undefined) matchData[field] = body[field];
+        }
+
+        const teamsError = validateMatchTeams(matchData.homeTeamId, matchData.awayTeamId);
+        if (teamsError) {
+            return NextResponse.json({ error: teamsError }, { status: 422 });
+        }
 
         // Ensure competition is never null/empty (database requires NOT NULL)
         // For friendly matches, use friendlyDescription or default to 'Friendly'
-        const competition = matchData.competition?.trim() ||
+        const competition = (matchData.competition as string | undefined)?.trim() ||
             (matchData.matchType === 'friendly'
-                ? (matchData.friendlyDescription?.trim() || 'Friendly')
+                ? ((matchData.friendlyDescription as string | undefined)?.trim() || 'Friendly')
                 : 'Unknown');
 
         matchData.competitionId = matchData.competitionId || null;
@@ -128,7 +284,7 @@ export async function POST(request: NextRequest) {
             competition,
             stats: stats ? JSON.stringify(stats) : null,
             lineups: lineups ? JSON.stringify(lineups) : null,
-        }).returning();
+        } as typeof matches.$inferInsert).returning();
 
         return NextResponse.json(newMatch[0], { status: 201 });
     } catch (error) {

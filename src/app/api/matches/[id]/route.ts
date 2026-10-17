@@ -4,17 +4,32 @@
  */
 
 import { NextRequest, NextResponse, after } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
-import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHead } from '@/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
-import { playerRatings } from '@/db/schema-ratings';
+import { matches, teams, bracketNodes, teamForm, headToHead, matchEvents } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { loadMatchDetail } from '@/lib/match-detail';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
+import { toPublicMatchUpdate } from '@/lib/ws-public-payload';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
-import { recalculateStandingsForMatch } from '@/lib/standingsService';
+import { shouldSendPeriodNotification } from '@/lib/notifications/send-gate';
+import { recalculateStandingsForMatch, recalculateStandingsForTeams } from '@/lib/standingsService';
+import { isPeriodRegression } from '@/lib/period-order';
+import { planMatchPatchEffects, canWriteMatchStats } from '@/lib/match-patch-effects';
+import { getEventStatEffects, mergeStatEffects } from '@/lib/player-stats-key';
+import { revertEventStats } from '@/lib/playerStatsService';
+import { safeParseEventValue } from '@/lib/eventValue';
+import { advanceBracketForMatch } from '@/lib/bracketService';
+import { calculateAndSaveRatings } from '@/lib/ratingsService';
+import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { isFinishedLockViolation } from '@/lib/match-finished-lock';
+
+// Upper bound on the events read to reverse a deleted match's player stats.
+const MATCH_DELETE_EVENT_LIMIT = 5000;
 
 export async function GET(
     request: NextRequest,
@@ -29,7 +44,7 @@ export async function GET(
         // real WS outage would already be at the limit. 600/min covers roughly 100
         // concurrent same-IP fallback-polling viewers while still catching anything
         // polling faster than the fallback's own 10s interval, which no real viewer does.
-        const rl = checkRateLimit(request, { max: 600 });
+        const rl = await checkRateLimit(request, { max: 600 });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
@@ -39,465 +54,22 @@ export async function GET(
 
         const { id: matchId } = await params;
 
-        // Logger identity (loggerId/loggerName on events) is visible to admin/logger sessions only.
-        // No token -> getAuthUser returns null without a DB lookup, so anonymous polling stays cheap.
-        const viewer = await getAuthUser(request).catch(() => null);
-        const canSeeLoggerIdentity = viewer?.role === 'admin' || viewer?.role === 'logger';
+        // Logger identity (loggerName on events) and draft lineups are visible to admin/logger
+        // sessions only. Resolved alongside the database reads rather than before them; with no
+        // token getAuthUser returns null without a lookup, so anonymous polling stays cheap.
+        const isStaff = getAuthUser(request)
+            .then((viewer) => viewer?.role === 'admin' || viewer?.role === 'logger')
+            .catch(() => false);
 
-        // Fetch match with team details
-        const [match] = await db
-            .select({
-                match: matches,
-                homeTeam: {
-                    id: teams.id,
-                    name: teams.name,
-                    shortName: teams.shortName,
-                    logo: teams.logo,
-                    university: teams.university,
-                    color: teams.color,
-                },
-            })
-            .from(matches)
-            .leftJoin(teams, eq(matches.homeTeamId, teams.id))
-            .where(eq(matches.id, matchId));
-
-        if (!match) {
+        const detail = await loadMatchDetail(matchId, isStaff);
+        if (!detail) {
             return NextResponse.json(
                 { error: 'Match not found' },
                 { status: 404 }
             );
         }
 
-        // Get away team separately
-        const [awayTeam] = await db
-            .select({
-                id: teams.id,
-                name: teams.name,
-                shortName: teams.shortName,
-                logo: teams.logo,
-                university: teams.university,
-                color: teams.color,
-            })
-            .from(teams)
-            .where(eq(teams.id, match.match.awayTeamId));
-
-        // Competition is stored as text field in matches table
-        const competition = match.match.competition;
-
-        // Fetch match events with player and team details
-        const eventsData = await db
-            .select({
-                event: matchEvents,
-                player: players,
-                team: {
-                    id: teams.id,
-                    name: teams.name,
-                    shortName: teams.shortName,
-                    logo: teams.logo,
-                    color: teams.color,
-                },
-            })
-            .from(matchEvents)
-            .leftJoin(players, eq(matchEvents.playerId, players.id))
-            .leftJoin(teams, eq(matchEvents.teamId, teams.id))
-            .where(eq(matchEvents.matchId, matchId))
-            .orderBy(desc(matchEvents.minute), desc(matchEvents.second))
-            .limit(500);
-
-        // Process events to include related player data
-        const events = await Promise.all(
-            eventsData.map(async (row) => {
-                let relatedPlayer = null;
-                if (row.event.relatedPlayerId) {
-                    const [rp] = await db
-                        .select({
-                            id: players.id,
-                            name: players.name,
-                            jerseyName: players.jerseyName,
-                            number: players.number,
-                            position: players.position,
-                        })
-                        .from(players)
-                        .where(eq(players.id, row.event.relatedPlayerId));
-                    relatedPlayer = rp ?? null;
-                }
-
-                // BUG-018: explicit DTO — loggerId is a banned public field; loggerName
-                // identifies the same person, so both are stripped for non-privileged callers.
-                const { loggerId: _l, loggerName: _ln, ...publicEvent } = row.event;
-                return {
-                    ...publicEvent,
-                    ...(canSeeLoggerIdentity ? { loggerName: _ln } : {}),
-                    player: row.player
-                        ? {
-                            id: row.player.id,
-                            name: row.player.name,
-                            jerseyName: (row.player as any).jerseyName ?? null,
-                            number: row.player.number,
-                            position: row.player.position,
-                        }
-                        : null,
-                    relatedPlayer,
-                    team: row.team,
-                    value: row.event.value ? JSON.parse(row.event.value) : null,
-                };
-            })
-        );
-
-        // Note: Player time tracking and eye points features not yet implemented in schema
-
-        // Parse lineups if available
-        let lineups = null;
-        if (match.match.lineups) {
-            try {
-                lineups = JSON.parse(match.match.lineups);
-            } catch (e) {
-                console.error('Error parsing lineups:', e);
-            }
-        }
-
-        // If lineups are not available for basketball, generate from events
-        if (!lineups && match.match.sport === 'Basketball' && events.length > 0) {
-            console.log('🏀 Generating lineups from', events.length, 'events');
-            const homePlayerStats: any = {};
-            const awayPlayerStats: any = {};
-
-
-            // Calculate player stats from events and track first appearance
-            events.forEach((event: any) => {
-                if (!event.player) return;
-
-                const isHomeTeam = event.teamId === match.match.homeTeamId;
-                const playerMap = isHomeTeam ? homePlayerStats : awayPlayerStats;
-
-                if (!playerMap[event.playerId]) {
-                    playerMap[event.playerId] = {
-                        id: event.playerId,
-                        name: event.player.name,
-                        number: event.player.number,
-                        position: event.player.position,
-                        rating: event.player.rating || 7.0,
-                        firstAppearance: event.minute || 0,
-                        stats: {
-                            points: 0,
-                            rebounds: 0,
-                            assists: 0,
-                            steals: 0,
-                            blocks: 0,
-                        }
-                    };
-                } else {
-                    // Track earliest appearance
-                    if (event.minute < playerMap[event.playerId].firstAppearance) {
-                        playerMap[event.playerId].firstAppearance = event.minute;
-                    }
-                }
-
-                const playerStats = playerMap[event.playerId].stats;
-
-                switch (event.type) {
-                    case '2PT_MADE':
-                        playerStats.points += 2;
-                        break;
-                    case '3PT_MADE':
-                        playerStats.points += 3;
-                        break;
-                    case 'FREE_THROW':
-                        playerStats.points += 1;
-                        break;
-                    case 'REBOUND':
-                        playerStats.rebounds++;
-                        break;
-                    case 'ASSIST':
-                        playerStats.assists++;
-                        break;
-                    case 'STEAL':
-                        playerStats.steals++;
-                        break;
-                    case 'BLOCK':
-                        playerStats.blocks++;
-                        break;
-                }
-            });
-
-            // Sort players: starters first (appeared in first 5 minutes), then by points
-            const sortPlayers = (players: any[]) => {
-                return players.sort((a: any, b: any) => {
-                    const aIsStarter = a.firstAppearance <= 5;
-                    const bIsStarter = b.firstAppearance <= 5;
-
-                    if (aIsStarter && !bIsStarter) return -1;
-                    if (!aIsStarter && bIsStarter) return 1;
-
-                    // Within same group (starters or subs), sort by points
-                    return b.stats.points - a.stats.points;
-                });
-            };
-
-            const homePlayers = sortPlayers(Object.values(homePlayerStats).map((p: any) => ({
-                ...p,
-                points: p.stats.points,
-                rebounds: p.stats.rebounds,
-                assists: p.stats.assists,
-                steals: p.stats.steals,
-                blocks: p.stats.blocks,
-            })));
-
-            const awayPlayers = sortPlayers(Object.values(awayPlayerStats).map((p: any) => ({
-                ...p,
-                points: p.stats.points,
-                rebounds: p.stats.rebounds,
-                assists: p.stats.assists,
-                steals: p.stats.steals,
-                blocks: p.stats.blocks,
-            })));
-
-            lineups = {
-                home: {
-                    starters: homePlayers.filter((p: any) => p.firstAppearance <= 5),
-                    bench: homePlayers.filter((p: any) => p.firstAppearance > 5),
-                },
-                away: {
-                    starters: awayPlayers.filter((p: any) => p.firstAppearance <= 5),
-                    bench: awayPlayers.filter((p: any) => p.firstAppearance > 5),
-                },
-            };
-        }
-
-        // Parse stats if available
-        let stats: any = null;
-        if (match.match.stats) {
-            try {
-                stats = JSON.parse(match.match.stats);
-            } catch (e) {
-                console.error('Error parsing stats:', e);
-            }
-        }
-
-        // If stats are not available and this is a football match, calculate from events
-        const isFootball = !match.match.sport || match.match.sport === 'Football' ||
-            (match.match.sport as string) === '5-a-side' || (match.match.sport as string) === 'Five-a-side';
-        const statsEmpty = !stats || Object.keys(stats).length === 0;
-        // BACKLOG-122: goals-only backfilled matches (no team logsheet) only ever write
-        // Goal/Penalty/Own Goal/Assist/Yellow Card/Red Card events -- every other category
-        // below always computes to a literal 0-0. Worse, and easy to miss: some matches have
-        // ASYMMETRIC coverage (e.g. busa-match-16 -- Hammers has a real full-stat logsheet,
-        // Santos has almost nothing), which produces a fabricated-looking lopsided stat line
-        // (100%-0% possession, 26-0 shots) rather than a neutral 0-0. A per-match "does any
-        // event anywhere have a full-stat type" check misses this entirely, since Hammers'
-        // real events pass it. The real test is per-team: both sides must have logged at
-        // least one full-stat-only event for the comparison to mean anything.
-        const FULL_STAT_ONLY_EVENT_TYPES = new Set([
-            'Shot on Target', 'Shot off Target', 'Corner', 'Foul', 'Push', 'Handball',
-            'Offside', 'Free Kick', 'Save', 'Catch', 'Block', 'Interception', 'Clearance',
-        ]);
-        const homeHasFullStatCoverage = events.some((e: any) => e.teamId === match.match.homeTeamId && FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
-        const awayHasFullStatCoverage = events.some((e: any) => e.teamId !== match.match.homeTeamId && FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
-        const isGoalsOnlyCapture = events.length > 0 && !(homeHasFullStatCoverage && awayHasFullStatCoverage);
-        if (statsEmpty && isFootball && events.length > 0) {
-            const homeIdx = 0; // home = index 0
-            const awayIdx = 1; // away = index 1
-            const s: number[][] = Array.from({ length: 18 }, () => [0, 0]);
-
-            events.forEach((event: any) => {
-                const idx = event.teamId === match.match.homeTeamId ? 0 : 1;
-                switch (event.type) {
-                    case 'Goal': s[0][idx]++; s[2][idx]++; break; // goals, shots
-                    case 'Penalty': s[0][idx]++; s[3][idx]++; break; // goals, penalties
-                    case 'Own Goal': s[0][idx === 0 ? 1 : 0]++; break; // goals for opponent
-                    case 'Shot on Target': s[2][idx]++; s[4][idx]++; break; // shots, shotsOnTarget
-                    case 'Shot off Target': s[2][idx]++; s[5][idx]++; break; // shots, shotsOffTarget
-                    case 'Corner': s[6][idx]++; break;
-                    case 'Foul': case 'Push': case 'Handball': s[7][idx]++; break; // fouls
-                    case 'Yellow Card': s[8][idx]++; break;
-                    case 'Red Card': s[9][idx]++; break;
-                    case 'Offside': s[10][idx]++; break;
-                    case 'Free Kick': s[11][idx]++; break;
-                    case 'Assist': s[12][idx]++; break;
-                    case 'Save': s[13][idx]++; break;
-                    case 'Catch': s[14][idx]++; break;
-                    case 'Block': s[15][idx]++; break;
-                    case 'Interception': s[16][idx]++; break;
-                    case 'Clearance': s[17][idx]++; break;
-                }
-            });
-
-            // Compute possession from attacking events (shots + corners + free kicks)
-            const homePossession = (s[2][0] + s[6][0] + s[11][0]) || 0;
-            const awayPossession = (s[2][1] + s[6][1] + s[11][1]) || 0;
-            const totalPoss = homePossession + awayPossession;
-            const homePct = totalPoss > 0 ? Math.round((homePossession / totalPoss) * 100) : 50;
-            const awayPct = 100 - homePct;
-
-            stats = {
-                shots: [s[2][0], s[2][1]],
-                shotsOnTarget: [s[4][0], s[4][1]],
-                shotsOffTarget: [s[5][0], s[5][1]],
-                goals: [s[0][0], s[0][1]],
-                penalties: [s[3][0], s[3][1]],
-                corners: [s[6][0], s[6][1]],
-                fouls: [s[7][0], s[7][1]],
-                yellowCards: [s[8][0], s[8][1]],
-                redCards: [s[9][0], s[9][1]],
-                offsides: [s[10][0], s[10][1]],
-                freeKicks: [s[11][0], s[11][1]],
-                assists: [s[12][0], s[12][1]],
-                saves: [s[13][0], s[13][1]],
-                catches: [s[14][0], s[14][1]],
-                blocks: [s[15][0], s[15][1]],
-                interceptions: [s[16][0], s[16][1]],
-                clearances: [s[17][0], s[17][1]],
-                possession: [homePct, awayPct],
-                possessionEvents: [homePossession, awayPossession],
-                expectedGoals: [s[0][0], s[0][1]], // xG approx from goals
-                ownGoals: [s[0][1], s[0][0]], // simplified
-                tackles: [0, 0],
-                throwIns: [0, 0],
-                goalKicks: [0, 0],
-                substitutions: [0, 0],
-                statsCaptureMode: isGoalsOnlyCapture ? 'goals-only' : 'full',
-            };
-        }
-
-        // If stats are not available and this is a basketball match, calculate from events.
-        // BACKLOG-139: this switch previously matched on '2PT_MADE'/'3PT_MADE'/'FREE_THROW'/
-        // 'REBOUND'/'ASSIST'/'STEAL'/'BLOCK' -- BasketballLogger.tsx has only ever dispatched
-        // 'Field Goal'/'Three Pointer'/'Free Throw'/'Rebound'/'Assist'/'Steal'/'Block' (see its
-        // own BasketballEventType union). Every case here was dead on arrival, so every
-        // basketball team stat (not just the percentage fields originally filed) was always
-        // zero for every real match. Attempt/made distinction now uses the same convention
-        // already correct in BasketballLogger.tsx's own calculateAdvancedStats: `value` holds
-        // the point value on a make (2/3/1) and 0 on a miss; every shot-type event counts as
-        // an attempt regardless of outcome.
-        if (!stats && match.match.sport === 'Basketball' && events.length > 0) {
-            stats = {
-                homeFieldGoalsMade: 0,
-                awayFieldGoalsMade: 0,
-                homeFieldGoalsAttempted: 0,
-                awayFieldGoalsAttempted: 0,
-                homeThreePointersMade: 0,
-                awayThreePointersMade: 0,
-                homeThreePointersAttempted: 0,
-                awayThreePointersAttempted: 0,
-                homeFreeThrowsMade: 0,
-                awayFreeThrowsMade: 0,
-                homeFreeThrowsAttempted: 0,
-                awayFreeThrowsAttempted: 0,
-                homeRebounds: 0,
-                awayRebounds: 0,
-                homeAssists: 0,
-                awayAssists: 0,
-                homeSteals: 0,
-                awaySteals: 0,
-                homeBlocks: 0,
-                awayBlocks: 0,
-                homeTurnovers: 0,
-                awayTurnovers: 0,
-            };
-
-            // Calculate stats from events
-            events.forEach((event: any) => {
-                const isHomeTeam = event.teamId === match.match.homeTeamId;
-                const prefix = isHomeTeam ? 'home' : 'away';
-                const made = Number(event.value) > 0;
-
-                switch (event.type) {
-                    case 'Field Goal':
-                        stats[`${prefix}FieldGoalsAttempted`]++;
-                        if (made) stats[`${prefix}FieldGoalsMade`]++;
-                        break;
-                    case 'Three Pointer':
-                        stats[`${prefix}FieldGoalsAttempted`]++;
-                        stats[`${prefix}ThreePointersAttempted`]++;
-                        if (made) {
-                            stats[`${prefix}FieldGoalsMade`]++;
-                            stats[`${prefix}ThreePointersMade`]++;
-                        }
-                        break;
-                    case 'Free Throw':
-                        stats[`${prefix}FreeThrowsAttempted`]++;
-                        if (made) stats[`${prefix}FreeThrowsMade`]++;
-                        break;
-                    case 'Rebound':
-                        stats[`${prefix}Rebounds`]++;
-                        break;
-                    case 'Assist':
-                        stats[`${prefix}Assists`]++;
-                        break;
-                    case 'Steal':
-                        stats[`${prefix}Steals`]++;
-                        break;
-                    case 'Block':
-                        stats[`${prefix}Blocks`]++;
-                        break;
-                    case 'Turnover':
-                        stats[`${prefix}Turnovers`]++;
-                        break;
-                }
-            });
-
-            // BACKLOG-139: the actual originally-filed gap -- percentage fields were never
-            // computed at all, so BasketballMatchOverlay.tsx's Field Goal %/3-Point %/Free
-            // Throw % bars always rendered a flat 0% regardless of the (now-fixed) counters
-            // above.
-            const pct = (made: number, attempted: number) => attempted > 0 ? Math.round((made / attempted) * 100) : 0;
-            stats.fieldGoalPercentage = [pct(stats.homeFieldGoalsMade, stats.homeFieldGoalsAttempted), pct(stats.awayFieldGoalsMade, stats.awayFieldGoalsAttempted)];
-            stats.threePointPercentage = [pct(stats.homeThreePointersMade, stats.homeThreePointersAttempted), pct(stats.awayThreePointersMade, stats.awayThreePointersAttempted)];
-            stats.freeThrowPercentage = [pct(stats.homeFreeThrowsMade, stats.homeFreeThrowsAttempted), pct(stats.awayFreeThrowsMade, stats.awayFreeThrowsAttempted)];
-        }
-
-        // Note: Viewer count feature not yet implemented in schema
-
-        // Merge updated ratings into lineups
-        if (lineups) {
-            try {
-                const updatedRatings = await db
-                    .select()
-                    .from(playerRatings)
-                    .where(eq(playerRatings.matchId, matchId))
-                    .limit(100);
-
-                if (updatedRatings.length > 0) {
-                    const ratingMap = new Map();
-                    updatedRatings.forEach(r => {
-                        ratingMap.set(r.playerId, r.finalRating ?? r.autoRating);
-                    });
-
-                    const updatePlayerRatings = (players: any[]) => {
-                        if (!Array.isArray(players)) return players;
-                        return players.map((p: any) => ({
-                            ...p,
-                            rating: ratingMap.has(p.id) ? ratingMap.get(p.id) : p.rating
-                        }));
-                    };
-
-                    if (lineups.home) {
-                        lineups.home = updatePlayerRatings(lineups.home);
-                    }
-                    if (lineups.away) {
-                        lineups.away = updatePlayerRatings(lineups.away);
-                    }
-                }
-            } catch (err) {
-                console.error('Error merging ratings:', err);
-            }
-        }
-
-        // BUG-018: shape a public DTO — banned fields (loggerId, approvalStatus,
-        // managerNotes, approvedBy, approvedAt) are intentionally excluded.
-        const { loggerId, approvalStatus, managerNotes, approvedBy, approvedAt, ...publicMatch } = match.match;
-
-        return NextResponse.json({
-            match: {
-                ...publicMatch,
-                homeTeam: match.homeTeam,
-                awayTeam,
-                competition,
-                lineups,
-                stats,
-            },
-            events,
-        });
+        return NextResponse.json(detail);
     } catch (error) {
         console.error('Error fetching match details:', error);
         return NextResponse.json(
@@ -533,6 +105,28 @@ export async function PATCH(
 
         const body = await request.json();
 
+        // The stored row before this write: drives the finished-lock, the period-order check
+        // and which full-time side effects this request may trigger.
+        const [stored] = await db
+            .select({
+                status: matches.status,
+                currentPeriod: matches.currentPeriod,
+                matchType: matches.matchType,
+                sport: matches.sport,
+                homeScore: matches.homeScore,
+                awayScore: matches.awayScore,
+                homeTeamId: matches.homeTeamId,
+                awayTeamId: matches.awayTeamId,
+                competition: matches.competition,
+                competitionId: matches.competitionId,
+            })
+            .from(matches)
+            .where(eq(matches.id, matchId))
+            .limit(1);
+        if (!stored) {
+            return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+        }
+
         // BUG-051: validate status against allowed enum; restrict loggers to safe transitions only
         const VALID_STATUSES = ['PENDING', 'UPCOMING', 'LIVE', 'FINISHED', 'CANCELLED'] as const;
         const LOGGER_ALLOWED_STATUSES: string[] = ['LIVE', 'FINISHED'];
@@ -542,6 +136,22 @@ export async function PATCH(
             }
             if (authUser.role === 'logger' && !LOGGER_ALLOWED_STATUSES.includes(body.status)) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        }
+
+        // A logger cannot re-open a finished match (write-lock): only an admin can move a
+        // FINISHED match back to LIVE or change its period/clock. Re-sending FINISHED (a
+        // retried finish) stays allowed. See isFinishedLockViolation for the exact rules.
+        if (
+            authUser.role === 'logger' &&
+            (body.status !== undefined || body.currentPeriod !== undefined ||
+                body.minute !== undefined || body.extraTime !== undefined)
+        ) {
+            if (isFinishedLockViolation({ role: authUser.role, currentStatus: stored.status, body })) {
+                return NextResponse.json(
+                    { error: 'Match is finished and locked; only an admin can re-open it', code: 'MATCH_FINISHED_LOCKED' },
+                    { status: 409 }
+                );
             }
         }
 
@@ -616,6 +226,14 @@ export async function PATCH(
             if (!VALID_PERIODS.includes(body.currentPeriod) && !isNumberedOT) {
                 return NextResponse.json({ error: 'Invalid currentPeriod value' }, { status: 422 });
             }
+            // A replayed queued write must not move a match back to an earlier period.
+            // Only an admin may set any period.
+            if (authUser.role !== 'admin' && isPeriodRegression(stored.sport, stored.currentPeriod, body.currentPeriod)) {
+                return NextResponse.json(
+                    { error: 'The match is already past this period', code: 'PERIOD_REGRESSION' },
+                    { status: 409 }
+                );
+            }
             updateData.currentPeriod = body.currentPeriod;
         }
         // BUG-109: periodic DB checkpoint of the live clock — assigned logger or admin only
@@ -643,29 +261,97 @@ export async function PATCH(
                 updateData.extraTime = null;
             }
         }
-        if (body.loggerId !== undefined) updateData.loggerId = body.loggerId;
-        if (body.stats) updateData.stats = JSON.stringify(body.stats);
-        if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
+        // BACKLOG-398 medium: was writable by any assigned logger, unlike the
+        // neighboring homeScore/awayScore/approvalStatus fields on this same
+        // route which are correctly admin-gated -- not a privilege-escalation
+        // path (real logging authorization runs through matchLoggerAssignments,
+        // untouched by this field) but a silent data-integrity gap on an
+        // admin-attribution field.
+        if (body.loggerId !== undefined && authUser.role === 'admin') updateData.loggerId = body.loggerId;
+        // On a finished match `stats` is admin-only: a retried or late logger request must not overwrite it.
+        if (body.stats && canWriteMatchStats(authUser.role, stored.status)) updateData.stats = JSON.stringify(body.stats);
 
-        // Additional fields for match details editing
-        if (body.sport) updateData.sport = body.sport;
-        if (body.homeTeamId) updateData.homeTeamId = body.homeTeamId;
-        if (body.awayTeamId) updateData.awayTeamId = body.awayTeamId;
-        if (body.startTime) updateData.startTime = new Date(body.startTime);
-        if (body.venue) updateData.venue = body.venue;
-        if (body.competition) updateData.competition = body.competition;
-        if (body.competitionId) updateData.competitionId = body.competitionId;
-        if (body.competitionLevel) updateData.competitionLevel = body.competitionLevel;
-        if (body.matchType) updateData.matchType = body.matchType;
-        if (body.friendlyType) updateData.friendlyType = body.friendlyType;
-        if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
+        // Structural match fields (teams, sport, competition, match type, lineups, start time,
+        // venue) are admin-only. An assigned logger's PATCH is limited to live state
+        // (status, currentPeriod, minute, extraTime) and `stats` (sent with the FINISH action);
+        // the loggers never send the fields below.
+        if (authUser.role === 'admin') {
+            if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
+            if (body.sport) updateData.sport = body.sport;
+            if (body.homeTeamId) updateData.homeTeamId = body.homeTeamId;
+            if (body.awayTeamId) updateData.awayTeamId = body.awayTeamId;
+            if (body.startTime) updateData.startTime = new Date(body.startTime);
+            if (body.venue) updateData.venue = body.venue;
+            if (body.competition) updateData.competition = body.competition;
+            if (body.competitionId) updateData.competitionId = body.competitionId;
+            if (body.competitionLevel) updateData.competitionLevel = body.competitionLevel;
+            if (body.matchType) updateData.matchType = body.matchType;
+            if (body.friendlyType) updateData.friendlyType = body.friendlyType;
+            if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
+        }
         // Approval fields are admin-only — loggers must not write these
         if (authUser.role === 'admin') {
-            if (body.approvalStatus) updateData.approvalStatus = body.approvalStatus;
+            if (body.approvalStatus) {
+                updateData.approvalStatus = body.approvalStatus;
+                // BACKLOG-397: audit field must always come from the verified session, never the client.
+                updateData.approvedBy = authUser.id;
+            }
             if (body.managerNotes !== undefined) updateData.managerNotes = body.managerNotes;
-            if (body.approvedBy) updateData.approvedBy = body.approvedBy;
             if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
         }
+
+        // BACKLOG-281: knockout-round matches must produce a decisive result,
+        // regardless of the competition's stored allowDraws setting -- checked
+        // here, after status-enum validation, before the write. Reads the
+        // CURRENT DB row for round/scores rather than trusting the body: a
+        // logger's FINISH action only ever sends { status: 'FINISHED' } (scores
+        // arrive earlier via the event-driven path, BUG-052), and shootout
+        // scores are written exclusively by events/route.ts's PEN_SCORED
+        // handler, never this route -- so by the time this PATCH runs, the DB
+        // row already holds the authoritative values. An admin-supplied
+        // homeScore/awayScore in THIS same request (already validated above)
+        // takes precedence as the effective final score if present.
+        if (body.status === 'FINISHED') {
+            const [current] = await db
+                .select({
+                    round: matches.round,
+                    homeScore: matches.homeScore,
+                    awayScore: matches.awayScore,
+                    shootoutHomeScore: matches.shootoutHomeScore,
+                    shootoutAwayScore: matches.shootoutAwayScore,
+                })
+                .from(matches)
+                .where(eq(matches.id, matchId));
+
+            if (current && requiresDecisiveResult(current.round)) {
+                const effectiveHome = updateData.homeScore ?? current.homeScore ?? 0;
+                const effectiveAway = updateData.awayScore ?? current.awayScore ?? 0;
+                if (effectiveHome === effectiveAway) {
+                    const shootoutHome = current.shootoutHomeScore ?? 0;
+                    const shootoutAway = current.shootoutAwayScore ?? 0;
+                    if (shootoutHome === shootoutAway) {
+                        return NextResponse.json({
+                            error: 'This is a knockout-round match and cannot finish level -- use Extra Time or Penalties to reach a decisive result.',
+                            code: 'KNOCKOUT_DRAW_NOT_ALLOWED',
+                        }, { status: 422 });
+                    }
+                }
+            }
+        }
+
+        // Stored period before this write: the period push below fires only on a real change.
+        const previousRow = body.currentPeriod !== undefined
+            ? { currentPeriod: stored.currentPeriod, matchType: stored.matchType }
+            : undefined;
+
+        // Which full-time side effects and standings refresh this write is entitled to.
+        const effects = planMatchPatchEffects({
+            storedStatus: stored.status,
+            bodyStatus: body.status,
+            scoreChanged:
+                (updateData.homeScore !== undefined && updateData.homeScore !== stored.homeScore) ||
+                (updateData.awayScore !== undefined && updateData.awayScore !== stored.awayScore),
+        });
 
         await db
             .update(matches)
@@ -678,17 +364,84 @@ export async function PATCH(
         // handles both cases correctly (local global.io, or HTTP /broadcast on Railway).
         // after() rather than a bare fire-and-forget call — see events/route.ts's POST
         // handler for why (traced root cause of BUG-108/116's multi-second broadcast delay).
-        after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }));
+        // Allow-list, not a spread: updateData can carry admin-only fields (approvedBy, managerNotes, loggerId, ...).
+        after(() => broadcastToMatch(matchId, 'match:updated', toPublicMatchUpdate(matchId, updateData)));
 
         // BACKLOG-097: standings/team-record recalculation, wired into the FINISHED
         // transition — see standingsService.ts for why this is safe to call more than
         // once (fully recomputed from FINISHED matches each time, not incremental).
-        if (body.status === 'FINISHED') {
+        // Only the transition into FINISHED runs these: a retried FINISHED request on a match that
+        // is already finished must not run standings, ratings and bracket advancement again.
+        if (effects.runFullTime) {
             after(async () => {
                 try {
                     await recalculateStandingsForMatch(matchId);
                 } catch (error) {
                     console.error('Error recalculating standings:', error);
+                    Sentry.captureException(error, { tags: { area: 'standings-recalc' }, extra: { matchId } });
+                }
+            });
+
+            // BACKLOG-280: knockout bracket advancement -- own try/catch, own
+            // after() call, deliberately isolated from the standings recalc
+            // above so a bracket failure can never block or break it. No-ops
+            // silently for the overwhelming majority of matches (not part of
+            // any bracket).
+            after(async () => {
+                try {
+                    await advanceBracketForMatch(matchId);
+                } catch (error) {
+                    console.error('Error advancing bracket:', error);
+                    Sentry.captureException(error, { tags: { area: 'bracket-advance' }, extra: { matchId } });
+                }
+            });
+
+            // BACKLOG-255: ratings now recalculate once, here, on the FINISHED
+            // transition -- own try/catch, own after() call, same isolation
+            // pattern as standings/bracket above so a ratings failure can never
+            // block or break either of those. Replaces the old per-live-event
+            // trigger (events/route.ts), which ran calculateAndSaveRatings on
+            // every single event and was a real, unmeasured contributor to Flow
+            // B's ~9.9s latency. No-ops (throws, caught here) for a match with
+            // no published lineups or an unsupported sport (still just
+            // football/basketball -- see ratingsService.ts) -- both pre-existing,
+            // expected conditions, not new failure modes introduced here.
+            after(async () => {
+                try {
+                    await calculateAndSaveRatings(matchId);
+                } catch (error) {
+                    console.error('Error calculating ratings on FINISHED transition:', error);
+                    // BACKLOG-321: "No lineups found"/"no rating model exists for
+                    // sport" are deliberate, developer-authored, EXPECTED outcomes
+                    // for a real fraction of matches (no published lineup, or a
+                    // sport with no rating model yet) -- not exceptional failures.
+                    // Reporting those to Sentry on every occurrence would just be
+                    // alert noise; only genuinely unexpected errors (DB failures,
+                    // etc.) are captured.
+                    const message = error instanceof Error ? error.message : '';
+                    const isExpected = message === 'No lineups found for this match'
+                        || message.startsWith('calculateAndSaveRatings: no rating model exists for sport');
+                    if (!isExpected) {
+                        Sentry.captureException(error, { tags: { area: 'ratings-calc' }, extra: { matchId } });
+                    }
+                }
+            });
+        }
+
+        // A finished match whose score an admin corrected, or that an admin reopened, changes the
+        // standings of both teams. A reopened match is no longer FINISHED, so its teams are
+        // recomputed directly instead of through the match row.
+        if (!effects.runFullTime && effects.standings !== 'none') {
+            after(async () => {
+                try {
+                    if (effects.standings === 'by-teams') {
+                        await recalculateStandingsForTeams(stored);
+                    } else {
+                        await recalculateStandingsForMatch(matchId);
+                    }
+                } catch (error) {
+                    console.error('Error recalculating standings:', error);
+                    Sentry.captureException(error, { tags: { area: 'standings-recalc' }, extra: { matchId } });
                 }
             });
         }
@@ -704,7 +457,11 @@ export async function PATCH(
         // consciously-kept table row rather than an accidental match on a
         // football-shaped if-chain (it was firing unintentionally before Phase 2
         // formalized it — NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md thread 3).
-        if (body.currentPeriod !== undefined) {
+        if (previousRow && shouldSendPeriodNotification({
+            previousPeriod: previousRow.currentPeriod,
+            newPeriod: body.currentPeriod,
+            matchType: previousRow.matchType,
+        })) {
             after(async () => {
                 try {
                     const [current] = await db
@@ -815,27 +572,84 @@ export async function DELETE(
             );
         }
 
-        // Handle constraint: bracketNodes - clear foreign key
-        await db
-            .update(bracketNodes)
-            .set({ matchId: null })
-            .where(eq(bracketNodes.matchId, matchId));
+        // A live match is never deleted by accident: the admin finishes or reopens it first.
+        if (existing.status === 'LIVE') {
+            return NextResponse.json(
+                { error: 'A live match cannot be deleted. Finish or reopen it first.', code: 'MATCH_IS_LIVE' },
+                { status: 409 }
+            );
+        }
 
-        // Handle constraint: headToHead - clear foreign key
-        await db
-            .update(headToHead)
-            .set({ lastMatchId: null })
-            .where(eq(headToHead.lastMatchId, matchId));
+        // The events are cascade-deleted with the match, so work out now which player stats they
+        // produced (competitive matches only; events from a penalty shootout never counted).
+        let statsToRevert: ReturnType<typeof mergeStatEffects> = [];
+        if (existing.matchType !== 'friendly') {
+            const matchEventRows = await db
+                .select({
+                    type: matchEvents.type,
+                    playerId: matchEvents.playerId,
+                    relatedPlayerId: matchEvents.relatedPlayerId,
+                    value: matchEvents.value,
+                    period: matchEvents.period,
+                })
+                .from(matchEvents)
+                .where(eq(matchEvents.matchId, matchId))
+                .limit(MATCH_DELETE_EVENT_LIMIT);
+            statsToRevert = mergeStatEffects(
+                matchEventRows
+                    .filter(e => e.period !== 'PENALTY_SHOOTOUT')
+                    .flatMap(e => {
+                        const value = safeParseEventValue(e.value);
+                        return getEventStatEffects(existing.sport, {
+                            type: e.type,
+                            playerId: e.playerId,
+                            relatedPlayerId: e.relatedPlayerId,
+                            made: typeof value === 'number' && value > 0,
+                        });
+                    })
+            );
+        }
 
-        // Handle constraint: teamForm - delete related records
-        await db
-            .delete(teamForm)
-            .where(eq(teamForm.matchId, matchId));
+        // Unlink and delete in one transaction: a failure part-way leaves the match intact
+        // instead of half-detached from its bracket, form and head-to-head records.
+        await db.transaction(async (tx) => {
+            // Handle constraint: bracketNodes - clear foreign key
+            await tx
+                .update(bracketNodes)
+                .set({ matchId: null })
+                .where(eq(bracketNodes.matchId, matchId));
 
-        // Delete match (events, reminders, ratings, poll_votes, etc. will be cascade deleted)
-        await db
-            .delete(matches)
-            .where(eq(matches.id, matchId));
+            // Handle constraint: headToHead - clear foreign key
+            await tx
+                .update(headToHead)
+                .set({ lastMatchId: null })
+                .where(eq(headToHead.lastMatchId, matchId));
+
+            // Handle constraint: teamForm - delete related records
+            await tx
+                .delete(teamForm)
+                .where(eq(teamForm.matchId, matchId));
+
+            // Delete match (events, reminders, ratings, poll_votes, etc. will be cascade deleted)
+            await tx
+                .delete(matches)
+                .where(eq(matches.id, matchId));
+        });
+
+        // Best effort after the delete has committed; failures are logged, never returned.
+        if (existing.status === 'FINISHED') {
+            after(async () => {
+                try {
+                    await recalculateStandingsForTeams(existing);
+                } catch (error) {
+                    console.error('Error recalculating standings after match delete:', error);
+                    Sentry.captureException(error, { tags: { area: 'standings-recalc' }, extra: { matchId } });
+                }
+            });
+        }
+        if (statsToRevert.length > 0) {
+            after(() => revertEventStats(existing.sport, existing.competitionId, statsToRevert));
+        }
 
         return NextResponse.json({
             success: true,

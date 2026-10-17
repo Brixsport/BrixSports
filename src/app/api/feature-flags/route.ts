@@ -16,6 +16,10 @@ const GATED_KEYS = [
     'features.usermanagement.enabled',
     'features.news.enabled',
     'features.transfers.enabled',
+    // Fan Account Blueprint Phase 3 -- kill switch for the /favourites
+    // first-run coachmark tour. Same fail-open default as every other key
+    // here: unconfigured reads as enabled, never silently hides the tour.
+    'features.onboarding.tour.enabled',
 ];
 
 export async function GET() {

@@ -1,19 +1,32 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { players, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { generateAthleteSchema } from '@/lib/utils/aeo';
 import PlayerDetailClient from './PlayerDetailClient';
+import { serializeJsonLd } from '@/lib/json-ld';
 
 // BACKLOG-189: same fix as matches/[id] -- thin server wrapper for real
 // per-player metadata, original UI unchanged.
+// BACKLOG-403: same crash-on-transient-DB-error fix as matches/[id] -- this
+// is an SEO enhancement path, PlayerDetailClient does its own independent
+// fetching, so a DB hiccup here degrades to generic metadata instead of a
+// hard 500 for the whole page.
 async function getPlayer(id: string) {
-    const [player] = await db.select().from(players).where(eq(players.id, id)).limit(1);
-    if (!player) return null;
-    const team = player.teamId
-        ? await db.select({ name: teams.name, sport: teams.sport }).from(teams).where(eq(teams.id, player.teamId)).get()
-        : null;
-    return { player, team };
+    try {
+        const [player] = await db.select().from(players).where(eq(players.id, id)).limit(1);
+        if (!player) return null;
+        const team = player.teamId
+            ? await db.select({ name: teams.name, sport: teams.sport }).from(teams).where(eq(teams.id, player.teamId)).get()
+            : null;
+        return { player, team };
+    } catch (error) {
+        console.error('getPlayer: DB error, falling back to generic metadata', error);
+        Sentry.captureException(error, { tags: { area: 'player-seo-fallback' }, extra: { playerId: id } });
+        return null;
+    }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -56,10 +69,18 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
             {schema && (
                 <script
                     type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+                    dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema) }}
                 />
             )}
-            <PlayerDetailClient />
+            <Suspense
+                fallback={
+                    <div className="min-h-screen bg-background flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                }
+            >
+                <PlayerDetailClient />
+            </Suspense>
         </>
     );
 }

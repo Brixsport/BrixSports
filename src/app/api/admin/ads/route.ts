@@ -13,10 +13,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    // BACKLOG-395: was unbounded -- no .limit() at all. Configurable/capped
+    // shape matches BACKLOG-283 (admin/users, admin/organizations).
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '200', 10) || 200), 500);
+
     const ads = await db
       .select()
       .from(advertisements)
-      .orderBy(desc(advertisements.priority), desc(advertisements.createdAt));
+      .orderBy(desc(advertisements.priority), desc(advertisements.createdAt))
+      .limit(limit);
 
     return NextResponse.json({ success: true, ads });
   } catch (error) {

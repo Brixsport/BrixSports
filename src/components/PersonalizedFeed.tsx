@@ -35,10 +35,10 @@ export function PersonalizedFeed({
     const displayItems = maxItems ? items.slice(0, maxItems) : items;
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
+        <div className="bg-muted border border-border rounded-[32px] p-6">
             {showHeader && (
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-sm font-black uppercase tracking-widest text-white/60 flex items-center gap-2">
+                    <h2 className="text-sm font-black uppercase tracking-widest text-foreground/60 flex items-center gap-2">
                         <TrendingUp size={16} className="text-primary" />
                         {title}
                     </h2>
@@ -82,7 +82,7 @@ function FeedCard({
             'Competition': 'bg-purple-500/20 border-purple-500/30 text-purple-500',
             'Reminder': 'bg-blue-500/20 border-blue-500/30 text-blue-500',
         };
-        return colors[category] || 'bg-white/10 border-white/20 text-white/60';
+        return colors[category] || 'bg-muted border-border text-foreground/60';
     };
 
     const handleClick = () => {
@@ -99,7 +99,7 @@ function FeedCard({
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay }}
             onClick={handleClick}
-            className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/10 transition-all cursor-pointer group"
+            className="bg-muted border border-border rounded-2xl p-4 hover:bg-muted/80 transition-all cursor-pointer group"
         >
             <div className="flex items-start gap-4">
                 {item.image && (
@@ -114,16 +114,16 @@ function FeedCard({
                         >
                             {item.category}
                         </span>
-                        <span className="text-xs text-white/40">{item.time}</span>
+                        <span className="text-xs text-foreground/40">{item.time}</span>
                     </div>
-                    <h3 className="text-sm font-black text-white mb-1 group-hover:text-primary transition-colors">
+                    <h3 className="text-sm font-black text-foreground mb-1 group-hover:text-primary transition-colors">
                         {item.title}
                     </h3>
-                    <p className="text-xs text-white/60 line-clamp-2">{item.description}</p>
+                    <p className="text-xs text-foreground/60 line-clamp-2">{item.description}</p>
                 </div>
                 <ArrowRight
                     size={16}
-                    className="text-white/40 group-hover:text-primary transition-colors flex-shrink-0"
+                    className="text-foreground/40 group-hover:text-primary transition-colors flex-shrink-0"
                 />
             </div>
         </motion.div>
@@ -133,16 +133,16 @@ function FeedCard({
 function EmptyState() {
     return (
         <div className="text-center py-12">
-            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <TrendingUp size={32} className="text-white/20" />
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <TrendingUp size={32} className="text-foreground/20" />
             </div>
-            <p className="text-sm font-bold text-white/60 mb-1">No updates yet</p>
-            <p className="text-xs text-white/40 mb-4">
+            <p className="text-sm font-bold text-foreground/60 mb-1">No updates yet</p>
+            <p className="text-xs text-foreground/40 mb-4">
                 Follow teams, players, and competitions to see personalized updates
             </p>
             <Link
                 href="/search"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-xl hover:scale-105 transition-all text-sm font-black uppercase tracking-widest"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:scale-105 transition-all text-sm font-black uppercase tracking-widest"
             >
                 Explore
                 <ArrowRight size={14} />

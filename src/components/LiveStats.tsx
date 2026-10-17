@@ -1,26 +1,63 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Target, Shield, Activity, Zap } from 'lucide-react';
+import { TrendingUp, Target, Shield, Activity } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { computeBasketballQuarterStats, type BasketballQuarter } from '@/lib/basketball/matchStats';
 
 interface LiveStatsProps {
     stats: any;
     sport: string;
     homeTeam: any;
     awayTeam: any;
+    // BACKLOG-331: only needed for basketball's quarter-scoped percentage rework --
+    // the football path is untouched and keeps reading `stats` alone.
+    events?: any[];
 }
 
-export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStatsProps) {
+const QUARTER_LABELS: Record<BasketballQuarter, string> = { ALL: 'All', Q1: '1st', Q2: '2nd', Q3: '3rd', Q4: '4th' };
+
+export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: LiveStatsProps) {
+    const [quarter, setQuarter] = useState<BasketballQuarter>('ALL');
+
     if (!stats) {
         return (
             <div className="text-center py-20">
-                <Activity className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white/60 mb-2">No statistics available</h3>
-                <p className="text-white/40">Match statistics will appear here during the game</p>
+                <Activity className="w-16 h-16 text-foreground/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground/60 mb-2">No statistics available</h3>
+                <p className="text-foreground/40">Match statistics will appear here during the game</p>
             </div>
         );
     }
+
+    // BACKLOG-330: Figma only uses the dual-color bar for Possession (disabled,
+    // BACKLOG-192). Every other football category is a plain value each side with
+    // the leading side circled -- no bar, no icon.
+    const StatRow = ({ label, homeValue, awayValue, unit = '' }: any) => {
+        const homeLeads = homeValue > awayValue;
+        const awayLeads = awayValue > homeValue;
+
+        return (
+            <div className="flex items-center justify-between rounded-xl border border-border bg-muted p-4">
+                {homeLeads ? (
+                    <span className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-white font-bold">
+                        {homeValue}{unit}
+                    </span>
+                ) : (
+                    <span className="font-semibold">{homeValue}{unit}</span>
+                )}
+                <span className="text-sm text-foreground/60">{label}</span>
+                {awayLeads ? (
+                    <span className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-white font-bold">
+                        {awayValue}{unit}
+                    </span>
+                ) : (
+                    <span className="font-semibold">{awayValue}{unit}</span>
+                )}
+            </div>
+        );
+    };
 
     const StatBar = ({ label, homeValue, awayValue, max, unit = '', icon }: any) => {
         const homePercentage = (homeValue / max) * 100;
@@ -30,13 +67,13 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                     <span className="font-semibold">{homeValue}{unit}</span>
-                    <div className="flex items-center gap-2 text-white/60">
+                    <div className="flex items-center gap-2 text-foreground/60">
                         {icon}
                         <span>{label}</span>
                     </div>
                     <span className="font-semibold">{awayValue}{unit}</span>
                 </div>
-                <div className="relative h-2 bg-white/10 rounded-full overflow-hidden">
+                <div className="relative h-2 bg-muted rounded-full overflow-hidden">
                     {/* Home Team Bar (from left) */}
                     <motion.div
                         initial={{ width: 0 }}
@@ -95,47 +132,37 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Shots"
                     homeValue={shots[0]}
                     awayValue={shots[1]}
-                    max={Math.max(shots[0], shots[1], 20)}
-                    icon={<Target className="w-4 h-4" />}
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Shots on Target"
                     homeValue={shotsOnTarget[0]}
                     awayValue={shotsOnTarget[1]}
-                    max={Math.max(shotsOnTarget[0], shotsOnTarget[1], 10)}
-                    icon={<Target className="w-4 h-4" />}
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Corners"
                     homeValue={corners[0]}
                     awayValue={corners[1]}
-                    max={Math.max(corners[0], corners[1], 10)}
-                    icon={<Zap className="w-4 h-4" />}
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Fouls"
                     homeValue={fouls[0]}
                     awayValue={fouls[1]}
-                    max={Math.max(fouls[0], fouls[1], 20)}
-                    icon={<Shield className="w-4 h-4" />}
                 />
             )}
-            <StatBar
+            <StatRow
                 label="Yellow Cards"
                 homeValue={yellowCards[0]}
                 awayValue={yellowCards[1]}
-                max={Math.max(yellowCards[0], yellowCards[1], 5)}
-                icon={<div className="w-3 h-4 bg-yellow-500 rounded-sm" />}
             />
             {(redCards[0] > 0 || redCards[1] > 0) && (
                 <StatBar
@@ -159,71 +186,84 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
         );
     };
 
-    const renderBasketballStats = () => (
-        <div className="space-y-6">
-            <StatBar
-                label="Field Goals Made"
-                homeValue={stats.homeFieldGoalsMade || 0}
-                awayValue={stats.awayFieldGoalsMade || 0}
-                max={Math.max(stats.homeFieldGoalsMade || 0, stats.awayFieldGoalsMade || 0, 40)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="3-Pointers Made"
-                homeValue={stats.homeThreePointersMade || 0}
-                awayValue={stats.awayThreePointersMade || 0}
-                max={Math.max(stats.homeThreePointersMade || 0, stats.awayThreePointersMade || 0, 15)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Free Throws Made"
-                homeValue={stats.homeFreeThrowsMade || 0}
-                awayValue={stats.awayFreeThrowsMade || 0}
-                max={Math.max(stats.homeFreeThrowsMade || 0, stats.awayFreeThrowsMade || 0, 20)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Rebounds"
-                homeValue={stats.homeRebounds || 0}
-                awayValue={stats.awayRebounds || 0}
-                max={Math.max(stats.homeRebounds || 0, stats.awayRebounds || 0, 50)}
-                icon={<TrendingUp className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Assists"
-                homeValue={stats.homeAssists || 0}
-                awayValue={stats.awayAssists || 0}
-                max={Math.max(stats.homeAssists || 0, stats.awayAssists || 0, 30)}
-                icon={<Zap className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Steals"
-                homeValue={stats.homeSteals || 0}
-                awayValue={stats.awaySteals || 0}
-                max={Math.max(stats.homeSteals || 0, stats.awaySteals || 0, 15)}
-                icon={<Shield className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Blocks"
-                homeValue={stats.homeBlocks || 0}
-                awayValue={stats.awayBlocks || 0}
-                max={Math.max(stats.homeBlocks || 0, stats.awayBlocks || 0, 10)}
-                icon={<Shield className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Turnovers"
-                homeValue={stats.homeTurnovers || 0}
-                awayValue={stats.awayTurnovers || 0}
-                max={Math.max(stats.homeTurnovers || 0, stats.awayTurnovers || 0, 20)}
-                icon={<Activity className="w-4 h-4" />}
-            />
-        </div>
-    );
+    // BACKLOG-331: Figma's basketball Stats screen is a different data shape
+    // entirely from the raw counts above -- make/attempt percentage splits for
+    // Free Throws/3 Pointers/2 Pointers, share-of-combined-total splits for
+    // Fouls/Rebounds, all quarter-scoped. Derived straight from `events` (same
+    // `event.period` values BasketballLogger.tsx already writes), not from the
+    // `stats` blob, since `stats` has no per-quarter breakdown.
+    //
+    // Assumption made (flagged in BACKLOG-331's audit, unresolved as of this
+    // implementation): Figma's mock also shows a "1 Pointers" row with a split
+    // identical to "Free Throws" -- a free throw already IS a 1-pointer, and the
+    // duplicate split reads as reused placeholder data, not a distinct stat.
+    // Dropped rather than shipped as a literal duplicate; revisit if Richard
+    // confirms it should mean something else.
+    const renderBasketballStats = () => {
+        const bball = computeBasketballQuarterStats(events || [], homeTeam.id, quarter);
+
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                    {(Object.keys(QUARTER_LABELS) as BasketballQuarter[]).map(q => (
+                        <button
+                            key={q}
+                            onClick={() => setQuarter(q)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${quarter === q ? 'bg-primary text-white' : 'bg-muted text-foreground/60 hover:text-foreground'
+                                }`}
+                        >
+                            {QUARTER_LABELS[q]}
+                        </button>
+                    ))}
+                </div>
+                <StatBar
+                    label="Free Throws"
+                    homeValue={bball.freeThrows[0]}
+                    awayValue={bball.freeThrows[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Target className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="3 Pointers"
+                    homeValue={bball.threePointers[0]}
+                    awayValue={bball.threePointers[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Target className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="2 Pointers"
+                    homeValue={bball.twoPointers[0]}
+                    awayValue={bball.twoPointers[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Target className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="Fouls"
+                    homeValue={bball.fouls[0]}
+                    awayValue={bball.fouls[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Shield className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="Rebounds"
+                    homeValue={bball.rebounds[0]}
+                    awayValue={bball.rebounds[1]}
+                    max={100}
+                    unit="%"
+                    icon={<TrendingUp className="w-4 h-4" />}
+                />
+            </div>
+        );
+    };
 
     return (
         <div className="max-w-4xl mx-auto">
             {/* Team Headers */}
-            <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/10">
+            <div className="flex items-center justify-between mb-8 pb-4 border-b border-border">
                 <div className="flex items-center gap-3">
                     <div
                         className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -231,13 +271,18 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                     >
                         <TeamLogo logo={homeTeam.logo} name={homeTeam.name} size="sm" />
                     </div>
-                    <div>
-                        <div className="font-bold">{homeTeam.name}</div>
-                        <div className="text-sm text-white/60">{homeTeam.shortName}</div>
-                    </div>
+                    {/* BACKLOG-330: Figma's football Stats-tab header shows logos only --
+                        name/shortName already appear in the page header above. Basketball's
+                        own Stats reference keeps the text, so scope this to football only. */}
+                    {sport !== 'Football' && (
+                        <div>
+                            <div className="font-bold">{homeTeam.name}</div>
+                            <div className="text-sm text-foreground/60">{homeTeam.shortName}</div>
+                        </div>
+                    )}
                 </div>
 
-                <div className="text-white/60 font-semibold">VS</div>
+                <div className="text-foreground/60 font-semibold">VS</div>
 
                 <div className="flex items-center gap-3 flex-row-reverse">
                     <div
@@ -246,10 +291,12 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                     >
                         <TeamLogo logo={awayTeam.logo} name={awayTeam.name} size="sm" />
                     </div>
-                    <div className="text-right">
-                        <div className="font-bold">{awayTeam.name}</div>
-                        <div className="text-sm text-white/60">{awayTeam.shortName}</div>
-                    </div>
+                    {sport !== 'Football' && (
+                        <div className="text-right">
+                            <div className="font-bold">{awayTeam.name}</div>
+                            <div className="text-sm text-foreground/60">{awayTeam.shortName}</div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -257,7 +304,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
             {sport === 'Football' && renderFootballStats()}
             {sport === 'Basketball' && renderBasketballStats()}
             {sport !== 'Football' && sport !== 'Basketball' && (
-                <div className="text-center py-10 text-white/60">
+                <div className="text-center py-10 text-foreground/60">
                     Statistics for {sport} coming soon
                 </div>
             )}

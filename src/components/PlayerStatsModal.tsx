@@ -78,7 +78,7 @@ export function PlayerStatsModal({
                         initial={{ opacity: 0, scale: 0.9, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                        className="fixed inset-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden z-50 shadow-2xl"
+                        className="fixed inset-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-card border border-border rounded-2xl overflow-hidden z-50 shadow-2xl"
                     >
                         {/* Header with gradient */}
                         <div
@@ -90,7 +90,7 @@ export function PlayerStatsModal({
                             {/* Close button */}
                             <button
                                 onClick={onClose}
-                                className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                                className="absolute top-4 right-4 w-10 h-10 rounded-full bg-muted hover:bg-muted/70 flex items-center justify-center transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -99,7 +99,7 @@ export function PlayerStatsModal({
                             <div className="flex items-start gap-4">
                                 {/* Jersey Number */}
                                 <div
-                                    className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-black border-2 border-white/20"
+                                    className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-black border-2 border-border"
                                     style={{ backgroundColor: teamColor }}
                                 >
                                     {player.number}
@@ -122,16 +122,16 @@ export function PlayerStatsModal({
                                             </div>
                                         )}
                                     </div>
-                                    <div className="text-white/60 text-sm mb-3">{position}</div>
+                                    <div className="text-foreground/60 text-sm mb-3">{position}</div>
 
                                     {/* Rating Badges */}
                                     <div className="flex items-center gap-3">
                                         {/* Average Rating - Primary */}
                                         {displayRating > 0 && (
-                                            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-white/10 to-white/5 border border-white/10">
+                                            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-muted to-muted/50 border border-border">
                                                 <Star className="w-5 h-5 text-yellow-500 fill-current" />
                                                 <div>
-                                                    <div className="text-xs text-white/60">
+                                                    <div className="text-xs text-foreground/60">
                                                         {hasAverageRating ? 'Average Rating' : 'Match Rating'}
                                                     </div>
                                                     <div className={`text-2xl font-bold bg-gradient-to-r ${getRatingColor(displayRating)} bg-clip-text text-transparent`}>
@@ -143,9 +143,9 @@ export function PlayerStatsModal({
 
                                         {/* Current Match Rating - Secondary (only if different from average) */}
                                         {hasAverageRating && rating > 0 && rating !== averageRating && (
-                                            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+                                            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-muted border border-border">
                                                 <div>
-                                                    <div className="text-xs text-white/60">This Match</div>
+                                                    <div className="text-xs text-foreground/60">This Match</div>
                                                     <div className={`text-lg font-bold bg-gradient-to-r ${getRatingColor(rating)} bg-clip-text text-transparent`}>
                                                         {rating.toFixed(1)}
                                                     </div>
@@ -188,7 +188,7 @@ export function PlayerStatsModal({
 
                             {/* Detailed Stats */}
                             <div className="space-y-4">
-                                <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Performance Details</h3>
+                                <h3 className="text-sm font-semibold text-foreground/60 uppercase tracking-wide">Performance Details</h3>
 
                                 <StatBar
                                     label="Pass Accuracy"
@@ -206,7 +206,7 @@ export function PlayerStatsModal({
 
                                 {/* Cards */}
                                 {(playerStats.yellowCards > 0 || playerStats.redCards > 0) && (
-                                    <div className="flex items-center gap-4 pt-4 border-t border-white/10">
+                                    <div className="flex items-center gap-4 pt-4 border-t border-border">
                                         {playerStats.yellowCards > 0 && (
                                             <div className="flex items-center gap-2">
                                                 <div className="w-4 h-6 bg-yellow-500 rounded-sm"></div>
@@ -225,10 +225,10 @@ export function PlayerStatsModal({
                         </div>
 
                         {/* Footer Actions */}
-                        <div className="p-4 border-t border-white/10 bg-white/5">
+                        <div className="p-4 border-t border-border bg-muted">
                             <button
                                 onClick={onClose}
-                                className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 font-semibold transition-colors"
+                                className="w-full py-3 rounded-xl bg-muted hover:bg-muted/70 font-semibold transition-colors"
                             >
                                 Close
                             </button>
@@ -243,10 +243,10 @@ export function PlayerStatsModal({
 // Stat Card Component
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: string }) {
     return (
-        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+        <div className="bg-muted border border-border rounded-xl p-4">
             <div className={`${color} mb-2`}>{icon}</div>
             <div className="text-2xl font-bold mb-1">{value}</div>
-            <div className="text-xs text-white/60">{label}</div>
+            <div className="text-xs text-foreground/60">{label}</div>
         </div>
     );
 }
@@ -255,7 +255,7 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
 function StatRow({ label, value, suffix = '' }: { label: string; value: number; suffix?: string }) {
     return (
         <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-white/80">{label}</span>
+            <span className="text-sm text-foreground/80">{label}</span>
             <span className="font-semibold">{value}{suffix}</span>
         </div>
     );
@@ -268,10 +268,10 @@ function StatBar({ label, value, max, suffix = '', color }: { label: string; val
     return (
         <div>
             <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-white/80">{label}</span>
+                <span className="text-sm text-foreground/80">{label}</span>
                 <span className="font-semibold">{value}{suffix}</span>
             </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-2 bg-border rounded-full overflow-hidden">
                 <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${percentage}%` }}

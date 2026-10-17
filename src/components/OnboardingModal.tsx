@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { getPushService } from "@/lib/notifications/push-service";
+import { env } from "@/lib/env";
 
 interface Team {
     id: string;
@@ -37,8 +38,12 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
     // Step 2: Follow Teams (Multi Select)
     const [followedTeamIds, setFollowedTeamIds] = useState<string[]>([]);
 
-    // Step 3: Profile Picture
+    // Step 3: Profile Picture. `avatar` is the local preview (data URL, for
+    // instant UI feedback only -- never sent to the server); `avatarFile` is
+    // the real File that gets uploaded to Cloudinary on save.
     const [avatar, setAvatar] = useState<string | null>(null);
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Step 4: Push Notifications
@@ -172,6 +177,11 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("Image must be under 5MB");
+                return;
+            }
+            setAvatarFile(file);
             const reader = new FileReader();
             reader.onloadend = () => {
                 setAvatar(reader.result as string);
@@ -180,23 +190,63 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
         }
     };
 
+    // Uploads the real file to Cloudinary (the same unsigned-preset pattern
+    // already used elsewhere in this codebase, e.g. mobile-image-upload.tsx)
+    // and returns the resulting secure_url. Previously this step didn't
+    // exist at all -- handleSaveProfile PATCHed the raw base64 data URL from
+    // handleAvatarChange's FileReader preview straight into users.avatar.
+    const uploadAvatarToCloudinary = async (file: File): Promise<string> => {
+        if (!env.cloudinaryCloud || !env.cloudinaryPreset) {
+            throw new Error("Image uploads are not configured");
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', env.cloudinaryPreset);
+        formData.append('folder', 'brixsports/avatars');
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${env.cloudinaryCloud}/image/upload`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!res.ok) {
+            throw new Error("Upload failed");
+        }
+        const data = await res.json();
+        if (!data.secure_url) {
+            throw new Error("Upload did not return an image URL");
+        }
+        return data.secure_url as string;
+    };
+
     const handleSaveProfile = async () => {
         setIsSubmitting(true);
         try {
-            if (avatar) {
-                await fetch(`/api/users/${userId}`, {
+            if (avatarFile) {
+                setIsUploadingAvatar(true);
+                const secureUrl = await uploadAvatarToCloudinary(avatarFile);
+                setIsUploadingAvatar(false);
+
+                const patchRes = await fetch(`/api/users/${userId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ avatar })
+                    body: JSON.stringify({ avatar: secureUrl })
                 });
+                // BACKLOG-464 item 11: don't advance to step 4 if the save failed;
+                // the catch below shows the error and the user stays on this step.
+                if (!patchRes.ok) {
+                    throw new Error("Failed to save profile picture. Please try again.");
+                }
             }
             setStep(4);
         } catch (error) {
-            toast.error("Failed to save profile picture");
+            console.error('Avatar upload failed:', error);
+            toast.error(error instanceof Error ? error.message : "Failed to save profile picture");
         } finally {
+            setIsUploadingAvatar(false);
             setIsSubmitting(false);
         }
     };
@@ -253,27 +303,27 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl relative"
+                className="w-full max-w-4xl h-[80vh] bg-card border border-border rounded-3xl overflow-hidden flex flex-col shadow-2xl relative"
             >
                 {/* Background Details */}
                 <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
                 <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/5 rounded-full blur-[100px] pointer-events-none" />
 
                 {/* Header */}
-                <div className="p-8 border-b border-white/5 flex items-center justify-between relative z-10">
+                <div className="p-8 border-b border-border flex items-center justify-between relative z-10">
                     <div>
-                        <h2 className="text-2xl font-display uppercase italic text-white mb-1">
+                        <h2 className="text-2xl font-display uppercase italic text-foreground mb-1">
                             {step === 1 ? `Welcome, ${userName}!` : step === 2 ? "Stay Updated" : step === 3 ? "Final Touch" : "Never Miss a Moment"}
                         </h2>
-                        <p className="text-white/40 text-sm">
+                        <p className="text-foreground/40 text-sm">
                             {step === 1 ? "Which team do you support?" : step === 2 ? "Follow other teams for notifications" : step === 3 ? "Upload a profile picture" : "Get live match updates"}
                         </p>
                     </div>
                     <div className="flex gap-2">
-                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 1 ? 'bg-primary' : 'bg-white/10'}`} />
-                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 2 ? 'bg-primary' : 'bg-white/10'}`} />
-                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 3 ? 'bg-primary' : 'bg-white/10'}`} />
-                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 4 ? 'bg-primary' : 'bg-white/10'}`} />
+                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
+                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
+                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 3 ? 'bg-primary' : 'bg-muted'}`} />
+                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 4 ? 'bg-primary' : 'bg-muted'}`} />
                     </div>
                 </div>
 
@@ -293,7 +343,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                         {isSubscribed ? (
                                             <CheckCircle2 size={64} className="text-primary" />
                                         ) : pushPermission === 'denied' ? (
-                                            <Bell size={64} className="text-white/40" />
+                                            <Bell size={64} className="text-foreground/40" />
                                         ) : (
                                             <BellRing size={64} className="text-primary animate-pulse" />
                                         )}
@@ -304,22 +354,22 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                     {isSubscribed ? 'You\'re All Set!' : 'Get Match Alerts'}
                                 </h3>
 
-                                <p className="text-white/60 leading-relaxed mb-8">
+                                <p className="text-foreground/60 leading-relaxed mb-8">
                                     {isSubscribed
                                         ? 'You\'ll now receive instant notifications for goals, match starts, and final scores.'
                                         : 'Enable push notifications to get instant alerts when your teams score, matches start, or big moments happen.'}
                                 </p>
 
                                 <div className="space-y-3 mb-8">
-                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                    <div className="flex items-center gap-3 text-sm text-foreground/60 bg-muted p-3 rounded-xl">
                                         <Smartphone size={18} className="text-primary" />
                                         <span>Works even when the app is closed</span>
                                     </div>
-                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                    <div className="flex items-center gap-3 text-sm text-foreground/60 bg-muted p-3 rounded-xl">
                                         <Trophy size={18} className="text-primary" />
                                         <span>Goal alerts for teams you follow</span>
                                     </div>
-                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                    <div className="flex items-center gap-3 text-sm text-foreground/60 bg-muted p-3 rounded-xl">
                                         <CheckCircle2 size={18} className="text-primary" />
                                         <span>Match start and final score updates</span>
                                     </div>
@@ -335,7 +385,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                     </Button>
                                 ) : pushPermission === 'denied' ? (
                                     <div className="space-y-3">
-                                        <p className="text-sm text-white/40">
+                                        <p className="text-sm text-foreground/40">
                                             Notifications are blocked in your browser settings.
                                         </p>
                                         <Button
@@ -363,7 +413,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                         </Button>
                                         <button
                                             onClick={handleSkipNotifications}
-                                            className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors py-2"
+                                            className="text-foreground/40 hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors py-2"
                                         >
                                             Maybe Later
                                         </button>
@@ -374,10 +424,10 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                     ) : step < 3 ? (
                         <>
                             <div className="relative mb-6">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={20} />
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" size={20} />
                                 <Input
                                     placeholder="Search universities or teams..."
-                                    className="pl-12 bg-white/5 border-white/10 h-12 text-white rounded-xl focus:bg-white/10 transition-all font-medium"
+                                    className="pl-12 bg-muted border-border h-12 text-foreground rounded-xl focus:bg-muted transition-all font-medium"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
@@ -402,23 +452,23 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                                 disabled={step === 2 && isFavorite}
                                                 className={`relative group flex flex-col items-center gap-4 p-6 rounded-2xl border transition-all ${isSelected
                                                         ? 'bg-primary/10 border-primary shadow-[0_0_30px_-10px_rgba(var(--primary-rgb),0.3)]'
-                                                        : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
-                                                    } ${step === 2 && isFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                        : 'bg-muted border-border hover:bg-muted/70 hover:border-border'
+                                                    } ${step === 2 && isFavorite ? 'grayscale cursor-not-allowed' : ''}`}
                                             >
-                                                <div className="w-20 h-20 relative text-white">
+                                                <div className="w-20 h-20 relative text-foreground">
                                                     {team.logo ? (
                                                         <div className="absolute inset-0 bg-contain bg-center bg-no-repeat transition-transform duration-500 group-hover:scale-110 drop-shadow-2xl"
                                                             style={{ backgroundImage: `url(${team.logo})` }}
                                                         />
                                                     ) : (
-                                                        <Trophy size={48} className="text-white/20" />
+                                                        <Trophy size={48} className="text-foreground/20" />
                                                     )}
                                                 </div>
                                                 <div className="text-center">
-                                                    <h3 className={`font-black uppercase text-sm tracking-wide mb-1 ${isSelected ? 'text-primary' : 'text-white'}`}>
+                                                    <h3 className={`font-black uppercase text-sm tracking-wide mb-1 ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                                                         {team.name}
                                                     </h3>
-                                                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
+                                                    <p className="text-[10px] text-foreground/40 font-bold uppercase tracking-widest">
                                                         {team.university || "University"}
                                                     </p>
                                                 </div>
@@ -445,14 +495,14 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                 <motion.div
                                     initial={{ scale: 0.9, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
-                                    className="w-48 h-48 md:w-64 md:h-64 rounded-[40px] bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden relative"
+                                    className="w-48 h-48 md:w-64 md:h-64 rounded-[40px] bg-muted border-2 border-dashed border-border flex items-center justify-center overflow-hidden relative"
                                 >
                                     {avatar ? (
                                         <img src={avatar} alt="Preview" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="text-center p-8">
-                                            <UserIcon size={64} className="mx-auto text-white/10 mb-4" />
-                                            <p className="text-xs font-bold uppercase tracking-widest text-white/40">No photo selected</p>
+                                            <UserIcon size={64} className="mx-auto text-foreground/10 mb-4" />
+                                            <p className="text-xs font-bold uppercase tracking-widest text-foreground/40">No photo selected</p>
                                         </div>
                                     )}
 
@@ -467,7 +517,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
 
                                 {avatar && (
                                     <button
-                                        onClick={() => setAvatar(null)}
+                                        onClick={() => { setAvatar(null); setAvatarFile(null); }}
                                         className="absolute -top-4 -right-4 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 transition-transform"
                                     >
                                         <X size={20} />
@@ -485,7 +535,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
 
                             <div className="mt-12 text-center max-w-sm">
                                 <h3 className="text-xl font-display uppercase italic mb-2">Show them who you are</h3>
-                                <p className="text-sm text-white/40 leading-relaxed">
+                                <p className="text-sm text-foreground/40 leading-relaxed">
                                     Upload a profile picture so other fans and scouts can recognize you in the Brix community.
                                 </p>
                             </div>
@@ -494,7 +544,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                 </div>
 
                 {/* Footer */}
-                <div className="p-8 border-t border-white/5 flex justify-between items-center bg-[#0A0A0A] relative z-20">
+                <div className="p-8 border-t border-border flex justify-between items-center bg-card relative z-20">
                     {step === 4 ? (
                         // Step 4 has its own buttons in content area
                         <div className="w-full" />
@@ -506,7 +556,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                     else if (step === 2) setStep(3);
                                     else setStep(4);
                                 }}
-                                className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors"
+                                className="text-foreground/40 hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors"
                             >
                                 {step === 1 ? "Skip selection" : step === 2 ? "Skip following" : "Skip photo"}
                             </button>
@@ -522,6 +572,8 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                 ) : null}
                                 {step < 3 ? (
                                     <>Next Step <ArrowRight className="ml-2 w-4 h-4" /></>
+                                ) : isUploadingAvatar ? (
+                                    "Uploading..."
                                 ) : (
                                     <>{avatar ? "Save & Continue" : "Continue"} <ArrowRight className="ml-2 w-4 h-4" /></>
                                 )}

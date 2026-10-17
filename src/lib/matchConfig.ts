@@ -131,3 +131,9 @@ export async function getMatchConfig(matchId: string) {
 
     return { config, matchId: match.id, sport: match.sport, match };
 }
+
+// requiresDecisiveResult()/DECISIVE_RESULT_ROUNDS moved to './matchRules'
+// (BACKLOG-310) -- they're pure and were being imported by a client
+// component, which pulled this whole file's '@/db' import (and dotenv's
+// browser-unsafe top-level side effect) into the browser bundle. Import
+// from '@/lib/matchRules' instead.

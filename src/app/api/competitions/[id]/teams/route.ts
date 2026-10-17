@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, matches, competitions, standings, teamRegistrations } from '@/db/schema';
-import { eq, or, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 /**
  * GET teams in a competition
@@ -26,13 +26,19 @@ export async function GET(
         // 2. Collect unique team IDs and their groups from multiple sources
         const teamGroupMap = new Map<string, string | null>();
 
+        // actualId is authoritative when present -- do NOT OR it with a name
+        // fallback (BACKLOG-335: two real competitions can share an exact
+        // name, and OR'ing in a name match even when a real id is known
+        // silently pulls in the other competition's teams too).
+
         // A. From Standings
         const competitionStandings = await db
             .select()
             .from(standings)
             .where(actualId
-                ? or(eq(standings.competitionId, actualId), eq(standings.competition, competitionName))
-                : eq(standings.competition, competitionName));
+                ? eq(standings.competitionId, actualId)
+                : eq(standings.competition, competitionName))
+            .limit(500);
 
         competitionStandings.forEach(s => {
             teamGroupMap.set(s.teamId, s.groupName);
@@ -40,11 +46,16 @@ export async function GET(
 
         // B. From Matches
         const competitionMatches = await db
-            .select()
+            .select({
+                homeTeamId: matches.homeTeamId,
+                awayTeamId: matches.awayTeamId,
+                groupName: matches.groupName,
+            })
             .from(matches)
             .where(actualId
-                ? or(eq(matches.competitionId, actualId), eq(matches.competition, competitionName))
-                : eq(matches.competition, competitionName));
+                ? eq(matches.competitionId, actualId)
+                : eq(matches.competition, competitionName))
+            .limit(5000);
 
         competitionMatches.forEach(match => {
             if (!teamGroupMap.has(match.homeTeamId)) teamGroupMap.set(match.homeTeamId, match.groupName);
@@ -54,9 +65,10 @@ export async function GET(
         // C. From Approved Registrations
         if (actualId) {
             const approvedRegistrations = await db
-                .select()
+                .select({ createdTeamId: teamRegistrations.createdTeamId })
                 .from(teamRegistrations)
-                .where(eq(teamRegistrations.competitionId, actualId));
+                .where(eq(teamRegistrations.competitionId, actualId))
+                .limit(500);
 
             approvedRegistrations.forEach(reg => {
                 if (reg.createdTeamId && !teamGroupMap.has(reg.createdTeamId)) {

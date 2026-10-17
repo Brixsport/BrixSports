@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { headToHead, teams, matches } from '@/db/schema';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { toPublicH2HMatch, toPublicH2HTeam } from '@/lib/public-h2h';
 
 /**
  * GET head-to-head record
@@ -82,20 +83,27 @@ export async function GET(request: NextRequest) {
             stats = recentMatches.length > 0
                 ? calculateH2HStats(team1Id, team2Id, recentMatches)
                 : {
+                    id: `h2h-empty-${team1Id}-${team2Id}`,
+                    team1Id,
+                    team2Id,
+                    competition: null,
+                    competitionId: null,
                     totalMatches: 0,
                     team1Wins: 0,
                     team2Wins: 0,
                     draws: 0,
                     team1GoalsFor: 0,
                     team2GoalsFor: 0,
+                    lastMatchId: null,
+                    updatedAt: null,
                 };
         }
 
         return NextResponse.json({
-            team1,
-            team2,
+            team1: toPublicH2HTeam(team1),
+            team2: toPublicH2HTeam(team2),
             headToHead: stats,
-            recentMatches,
+            recentMatches: recentMatches.map(toPublicH2HMatch),
         });
     } catch (error) {
         console.error('Error fetching head-to-head:', error);
@@ -244,6 +252,7 @@ function calculateH2HStats(team1Id: string, team2Id: string, matches: any[]) {
         team1Id,
         team2Id,
         competition: null,
+        competitionId: null,
         totalMatches: matches.length,
         team1Wins,
         team2Wins,

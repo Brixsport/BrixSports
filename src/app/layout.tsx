@@ -5,20 +5,22 @@ import Script from "next/script";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
-import SessionProvider from "@/components/providers/SessionProvider";
 import { NotificationProvider } from "@/components/Notifications";
 import { GlobalNotificationListener } from "@/components/GlobalNotificationListener";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { FavoritesProvider } from "@/contexts/FavoritesContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { SocketProvider } from "@/hooks/useWebSocket";
 import AdBanner from "@/components/ads/AdBanner";
 import { env } from "@/lib/env";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { isFeatureEnabled } from "@/lib/featureFlags";
+import { serializeJsonLd } from '@/lib/json-ld';
 
 export const metadata: Metadata = {
   // Without this, Next.js resolves relative OG/Twitter image URLs (the root
-  // layout's own "/assets/Logos/BRIX-SPORT-LOGO.png" included) against
+  // layout's own "/assests/Logos/BRIX-SPORT-LOGO.png" included) against
   // "http://localhost:3000" instead of the real domain -- harmless in dev,
   // but wrong for any shared link once deployed (BACKLOG-189, surfaced by a
   // build warning while wiring the new per-page matches/teams/players/news metadata).
@@ -68,7 +70,7 @@ export const metadata: Metadata = {
     description: "Real-time scoring and sports management for Nigerian universities. Follow NUGA, NPUGA, BUSA LEAGUE, BUCS, and campus sports competitions.",
     images: [
       {
-        url: "/assets/Logos/BRIX-SPORT-LOGO.png",
+        url: "/assests/Logos/BRIX-SPORT-LOGO.png",
         width: 1200,
         height: 630,
         alt: "BRIXSPORTS - Nigerian University Sports",
@@ -79,7 +81,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "BRIXSPORTS | Nigerian University Sports Live",
     description: "Real-time scoring and sports management for Nigerian universities.",
-    images: ["/assets/Logos/BRIX-SPORT-LOGO.png"],
+    images: ["/assests/Logos/BRIX-SPORT-LOGO.png"],
     creator: "@brixsports",
   },
   alternates: {
@@ -115,11 +117,17 @@ export const viewport: Viewport = {
   userScalable: true,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // D3/BACKLOG-155: AdBanner renders globally on every page for every viewer
+  // (unlike the other 4 high-volatility features, which only ever ran inside
+  // an admin panel) -- gating just the admin CRUD page at /admin/advertisements
+  // does nothing to stop this from serving live. Server-side check here so a
+  // disabled flag means the component never even mounts, no client fetch/flash.
+  const adsEnabled = await isFeatureEnabled('features.ads.enabled');
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -136,7 +144,7 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: serializeJsonLd({
               "@context": "https://schema.org",
               "@graph": [
                 {
@@ -147,7 +155,7 @@ export default function RootLayout({
                   "url": "https://brixsports.com",
                   "logo": {
                     "@type": "ImageObject",
-                    "url": "https://brixsports.com/assets/Logos/BRIX-SPORT-LOGO.png",
+                    "url": "https://brixsports.com/assests/Logos/BRIX-SPORT-LOGO.png",
                     "width": 512,
                     "height": 512
                   },
@@ -219,10 +227,7 @@ export default function RootLayout({
                     "Player statistics and ratings",
                     "Team management tools",
                     "Interactive lineup builder",
-                    "Match predictions and leaderboards",
-                    "Scout features and talent tracking",
-                    "Push notifications",
-                    "Live match chat"
+                    "Push notifications"
                   ],
                   "url": "https://brixsports.com"
                 }
@@ -255,20 +260,20 @@ export default function RootLayout({
         <ErrorReporter />
         <ThemeProvider>
           <PWAProvider swPath="/sw-user.js">
-            <SessionProvider>
-              <AuthProvider>
+            <AuthProvider>
+              <FavoritesProvider>
                 <NotificationProvider>
                   <SocketProvider>
                     <GlobalNotificationListener />
-                    <AdBanner position="top" />
+                    {adsEnabled && <AdBanner position="top" />}
                     {children}
-                    <AdBanner position="bottom" />
+                    {adsEnabled && <AdBanner position="bottom" />}
                     <BottomNav />
                     <AuthModal />
                   </SocketProvider>
                 </NotificationProvider>
-              </AuthProvider>
-            </SessionProvider>
+              </FavoritesProvider>
+            </AuthProvider>
           </PWAProvider>
         </ThemeProvider>
         {/* Vercel Analytics (pageviews/engagement) + Speed Insights (real-user Core

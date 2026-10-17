@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matchLoggerAssignments } from '@/db/schema';
 import { nanoid } from 'nanoid';
-import { and, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
 /**
@@ -29,37 +28,36 @@ export async function POST(
             );
         }
 
-        // Atomic: check and insert inside a transaction to prevent duplicate
-        // assignments from concurrent requests (race condition guard).
-        const assignment = await db.transaction(async (tx) => {
-            const existing = await tx
-                .select({ id: matchLoggerAssignments.id })
-                .from(matchLoggerAssignments)
-                .where(
-                    and(
-                        eq(matchLoggerAssignments.matchId, matchId),
-                        eq(matchLoggerAssignments.loggerId, loggerId),
-                        eq(matchLoggerAssignments.status, 'active')
-                    )
-                )
-                .limit(1)
-                .get();
+        // BACKLOG-452: the previous version of this guard ran the dedup SELECT
+        // and the INSERT as two statements inside db.transaction(), on the
+        // assumption Turso's transaction gives read-blocks-on-uncommitted-write
+        // isolation the way a local SQLite file connection would. It doesn't
+        // (proven by BACKLOG-436's events/route.ts finding) -- two concurrent
+        // assign-logger calls for the same (matchId, loggerId) could both pass
+        // the SELECT before either committed. Fixed the same way: one atomic
+        // INSERT ... SELECT ... WHERE NOT EXISTS statement.
+        const newId = nanoid();
+        const assignedAtSeconds = Math.floor(Date.now() / 1000);
+        const result: any = await db.run(sql`
+            INSERT INTO match_logger_assignments (id, match_id, logger_id, role, assigned_at, assigned_by, status)
+            SELECT ${newId}, ${matchId}, ${loggerId}, ${role}, ${assignedAtSeconds}, ${authUser.id}, 'active'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM match_logger_assignments
+                WHERE match_id = ${matchId} AND logger_id = ${loggerId} AND status = 'active'
+            )
+        `);
 
-            if (existing) {
-                return null; // signal duplicate to caller
-            }
-
-            const [row] = await tx.insert(matchLoggerAssignments).values({
-                id: nanoid(),
+        const assignment = (result.rowsAffected ?? 0) > 0
+            ? {
+                id: newId,
                 matchId,
                 loggerId,
                 role,
+                assignedAt: new Date(assignedAtSeconds * 1000),
                 assignedBy: authUser.id,
                 status: 'active',
-            }).returning();
-
-            return row;
-        });
+            }
+            : null;
 
         if (!assignment) {
             return NextResponse.json(

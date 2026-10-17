@@ -24,6 +24,7 @@ import {
 import { toast } from 'sonner';
 import MobileImageUpload from '@/components/ui/mobile-image-upload';
 import { FeatureGate } from '@/components/admin/FeatureGate';
+import { BackButton } from '@/components/ui/BackButton';
 
 // Payment tiers with allowed positions and sizes
 const PAYMENT_TIERS = {
@@ -287,10 +288,18 @@ function AdvertisementsAdminContent() {
 
   return (
     <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Advertisements</h1>
-          <p className="text-muted-foreground">Manage banner ads across the platform</p>
+      {/* BACKLOG-350: this header row had no wrap/shrink handling -- "Add
+          Advertisement" (a longer label than most other admin pages' create
+          buttons) pushed the page past a 375px viewport with no escape
+          hatch. Stacks vertically below sm:, matches the header pattern
+          already used elsewhere in this admin section. */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <div className="flex items-center gap-2">
+          <BackButton fallbackHref="/admin" forceShow />
+          <div>
+            <h1 className="text-2xl font-bold">Advertisements</h1>
+            <p className="text-muted-foreground">Manage banner ads across the platform</p>
+          </div>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -564,9 +573,16 @@ function AdvertisementsAdminContent() {
                     )}
                   </div>
                   
+                  {/* BACKLOG-350: the title/description block below was a plain
+                      (non-shrinkable) div sharing a justify-between row with the
+                      3 icon buttons -- truncate on the h3/p never actually
+                      engaged because nothing above them was allowed to shrink,
+                      so a real ad title/description pushed the icon buttons
+                      (and the whole card) past a 375px viewport. min-w-0+flex-1
+                      here lets it shrink; icon-button row is shrink-0. */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
                         <h3 className="font-semibold truncate">{ad.title}</h3>
                         {ad.description && (
                           <p className="text-sm text-muted-foreground truncate">
@@ -574,7 +590,7 @@ function AdvertisementsAdminContent() {
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -602,7 +618,7 @@ function AdvertisementsAdminContent() {
                         </Button>
                       </div>
                     </div>
-                    
+
                     <div className="flex flex-wrap gap-2 mt-2">
                       <span className="text-xs px-2 py-1 bg-gray-100 rounded">
                         {positionLabels[ad.position]}
@@ -624,7 +640,7 @@ function AdvertisementsAdminContent() {
                       )}
                     </div>
                     
-                    <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-muted-foreground">
                       <span>Impressions: {ad.impressions.toLocaleString()}</span>
                       <span>Clicks: {ad.clicks.toLocaleString()}</span>
                       {ad.startDate && (

@@ -9,7 +9,9 @@ import { players, teams, matchEvents, matches, playerStats, basketballPlayerStat
 import { eq, desc, and, sql, ne, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
-import { CURRENT_SEASON } from '@/lib/rosterService';
+import { getCurrentSeason } from '@/lib/rosterService';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
+import { playerRatings } from '@/db/schema-ratings';
 
 interface RouteParams {
     params: {
@@ -39,6 +41,11 @@ export async function GET(
                 { status: 404 }
             );
         }
+
+        // BACKLOG-253: real career rating, sourced from playerRatings via the
+        // shared accessor -- players.rating is a frozen/legacy default (7.0),
+        // never updated by the real ratings pipeline.
+        const ownRatingSummary = (await getPlayerRatingSummaries([id])).get(id) ?? null;
 
         // Get player's active memberships and primary team
         let team = null;
@@ -182,8 +189,27 @@ export async function GET(
             ? await db.select({ id: teams.id, name: teams.name, shortName: teams.shortName }).from(teams).where(inArray(teams.id, recentTeamIds))
             : [];
         const teamById = new Map(recentTeams.map(t => [t.id, t]));
+
+        // BACKLOG-254: PlayerProfileOverlay.tsx's per-match "recent performances"
+        // badge had no per-match rating source at all and was showing the frozen
+        // career-wide players.rating (BACKLOG-253) for every row. Real per-match
+        // ratings, batched over just these <=5 matches.
+        const recentMatchIds = [...seenMatchIds];
+        const recentMatchRatings = recentMatchIds.length > 0
+            ? await db
+                .select({
+                    matchId: playerRatings.matchId,
+                    finalRating: playerRatings.finalRating,
+                    autoRating: playerRatings.autoRating,
+                })
+                .from(playerRatings)
+                .where(and(eq(playerRatings.playerId, id), inArray(playerRatings.matchId, recentMatchIds)))
+            : [];
+        const ratingByMatchId = new Map(recentMatchRatings.map(r => [r.matchId, r.finalRating ?? r.autoRating]));
+
         const recentMatchesWithTeams = recentMatchesWithEvents.map(m => ({
             ...m,
+            rating: m.match?.id ? ratingByMatchId.get(m.match.id) ?? null : null,
             match: m.match ? {
                 ...m.match,
                 homeTeam: m.match.homeTeamId ? teamById.get(m.match.homeTeamId) ?? null : null,
@@ -213,9 +239,10 @@ export async function GET(
         // regression caught by checking real data before trusting the first
         // version of this fix. Falls back to whichever season the most recently
         // updated row belongs to, rather than going empty or blending seasons.
+        const currentSeason = await getCurrentSeason();
         function pickEffectiveSeasonRows<T extends { season: string; updatedAt: Date | null }>(rows: T[]): T[] {
             if (rows.length === 0) return [];
-            const currentSeasonRows = rows.filter((r) => r.season === CURRENT_SEASON);
+            const currentSeasonRows = rows.filter((r) => r.season === currentSeason);
             if (currentSeasonRows.length > 0) return currentSeasonRows;
             const latestSeason = [...rows].sort(
                 (a, b) => (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0)
@@ -322,7 +349,9 @@ export async function GET(
             redCards: footballSeasonStats ? (footballSeasonStats.redCards || 0) : redCards,
 
             // Calculated averages
-            rating: player.rating || 0,
+            rating: ownRatingSummary?.averageRating ?? null,
+            matchesRated: ownRatingSummary?.matchesRated ?? 0,
+            motmCount: ownRatingSummary?.motmCount ?? 0,
             pointsPerGame: basketballSeasonStats
                 ? ((basketballSeasonStats.gamesPlayed || 0) > 0 ? ((basketballSeasonStats.totalPoints || 0) / basketballSeasonStats.gamesPlayed).toFixed(1) : '0.0')
                 : (totalStats.totalAppearances > 0 ? (totalStats.totalPoints / totalStats.totalAppearances).toFixed(1) : '0.0'),
@@ -357,12 +386,11 @@ export async function GET(
         // Check for related profiles (Multi-sport)
         const relatedProfiles = [];
         if (player.profileId) {
-            const relatedPlayers = await db
+            const relatedPlayersRaw = await db
                 .select({
                     id: players.id,
                     name: players.name,
                     position: players.position,
-                    rating: players.rating,
                     teamName: teams.name,
                     teamId: teams.id,
                     sport: teams.sport
@@ -376,11 +404,36 @@ export async function GET(
                     )
                 );
 
+            // BACKLOG-253: real rating per related profile, same accessor as
+            // the main player above -- batched, not one query per profile.
+            const relatedRatingSummaries = await getPlayerRatingSummaries(relatedPlayersRaw.map((p) => p.id));
+            const relatedPlayers = relatedPlayersRaw.map((p) => ({
+                ...p,
+                rating: relatedRatingSummaries.get(p.id)?.averageRating ?? null,
+            }));
+
             relatedProfiles.push(...relatedPlayers);
         }
 
         const { email: _email, profileId: _profileId, ...playerPublic } = player;
         const playerPayload = isAdmin ? player : playerPublic;
+
+        // Public, curated subset of affiliationHistory -- team, sport, season,
+        // and date range only. No role/status/nicknames/internal affiliation id
+        // (those stay admin-only via the raw affiliationHistory field below).
+        // Deliberately public per Richard's call, session 56: nothing in this
+        // shape is on CLAUDE.md's banned-fields list -- it's the same "which
+        // club, which season" info a fixture card already shows.
+        const careerHistory = affiliationHistory.map((h) => ({
+            teamId: h.team.id,
+            teamName: h.team.name,
+            sport: h.team.sport,
+            affiliationType: h.affiliation.affiliationType,
+            season: h.affiliation.season,
+            startDate: h.affiliation.startDate,
+            endDate: h.affiliation.endDate,
+            isActive: h.affiliation.isActive,
+        }));
 
         return NextResponse.json({
             player: {
@@ -389,7 +442,9 @@ export async function GET(
                     ...team,
                     sport: playerSport,
                 },
-                // memberships, organizationAffiliations, and affiliationHistory are
+                careerHistory,
+                // memberships, organizationAffiliations, and the raw
+                // affiliationHistory (role/status/nicknames included) stay
                 // admin-only (CLAUDE.md banned public fields)
                 ...(isAdmin ? { memberships, organizationAffiliations, affiliationHistory } : {}),
                 relatedProfiles,
@@ -427,9 +482,13 @@ export async function PATCH(
 
         // Whitelist only valid players table columns to avoid passing unknown fields to Drizzle
         // (players table has no updatedAt column — only createdAt)
+        // BACKLOG-248/253: 'rating' removed -- players.rating is a frozen
+        // legacy field, real rating now lives in playerRatings (see
+        // playerRatingSummary.ts). An admin edit here used to silently write
+        // a value every real reader now ignores.
         const allowedFields = [
             'name', 'jerseyName', 'number', 'teamId', 'position',
-            'rating', 'eyePoints', 'age', 'height', 'weight',
+            'eyePoints', 'age', 'height', 'weight',
             'nationality', 'college', 'department', 'university',
             'image', 'marketValue', 'profileId', 'email', 'attributes',
         ] as const;
@@ -466,6 +525,12 @@ export async function PATCH(
 
         if (updated.length === 0) {
             return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+        }
+
+        // Identity-linking fields: record who changed them (field names only, no values)
+        const changedIdentityFields = (['profileId', 'email'] as const).filter((f) => updateData[f] !== undefined);
+        if (changedIdentityFields.length > 0) {
+            console.info(`[admin-audit] player identity fields changed: player=${id} fields=${changedIdentityFields.join(',')} by=${user.id}`);
         }
 
         if (body.teamId) {
@@ -510,7 +575,7 @@ export async function PATCH(
                     startDate: updated[0].createdAt || new Date(),
                     jerseyNumber: updated[0].number,
                     position: updated[0].position,
-                    season: CURRENT_SEASON,
+                    season: await getCurrentSeason(),
                     createdAt: updated[0].createdAt || new Date(),
                 });
             }

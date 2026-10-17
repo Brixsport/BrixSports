@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
         hostname: '**',
       },
     ],
+    // Hosts stay open (logos and avatars come from arbitrary URLs stored in the
+    // database), so bound what the optimiser can be made to do: one output
+    // format, no 2K/4K device widths, a week-long cache so repeat requests do
+    // not re-run transformations, and SVG pass-through stays off.
+    formats: ['image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    minimumCacheTTL: 60 * 60 * 24 * 7,
+    dangerouslyAllowSVG: false,
   },
 
   typescript: {
@@ -66,22 +74,20 @@ const nextConfig: NextConfig = {
       {
         // Service worker files must never be cached by CDN or browser
         // Stale SW files prevent cache invalidation after deploys (BUG-026)
-        source: '/sw:path*.js',
-        headers: [
-          { key: 'Cache-Control', value: 'no-store, max-age=0' },
-        ],
-      },
-      {
-        // Service worker files must never be cached by CDN or browser
-        // Stale SW files prevent cache invalidation after deploys (BUG-026)
-        source: '/sw:path*.js',
+        // BACKLOG-439: was '/sw:path*.js' -- a repeating :param* with no
+        // prefix/suffix, which path-to-regexp (bumped in Next 15.5) rejects at
+        // config load ("Can not repeat "path" without a prefix and suffix"),
+        // failing every build. Same match (any root-level sw*.js), expressed
+        // as a single named param with a custom regex instead.
+        source: '/:swfile(sw[^/]*\\.js)',
         headers: [
           { key: 'Cache-Control', value: 'no-store, max-age=0' },
         ],
       },
       {
         // Specific headers for llms.txt files
-        source: '/llms:suffix*.txt',
+        // BACKLOG-439: was '/llms:suffix*.txt', same invalid-repeat pattern as above.
+        source: '/:llmsfile(llms[^/]*\\.txt)',
         headers: [
           {
             key: 'Content-Type',

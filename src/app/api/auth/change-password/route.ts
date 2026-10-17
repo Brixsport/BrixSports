@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { getAuthUser } from '@/lib/auth';
+import { getAuthUser, generateToken, normalizeUserRole } from '@/lib/auth';
+import { setAuthCookie } from '@/lib/auth-cookie';
 
 export async function POST(request: NextRequest) {
     try {
@@ -68,16 +69,38 @@ export async function POST(request: NextRequest) {
         // 5. Hash new password
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        // 6. Update database
-        await db
+        // 6. Update database. Bumping the token version ends every other session
+        // signed with the old password.
+        const [updated] = await db
             .update(users)
-            .set({ password: hashedPassword, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
+            .set({
+                password: hashedPassword,
+                tokenVersion: sql`${users.tokenVersion} + 1`,
+                updatedAt: new Date(),
+            })
+            .where(eq(users.id, user.id))
+            .returning({ tokenVersion: users.tokenVersion });
 
-        return NextResponse.json({
+        if (!updated) {
+            return NextResponse.json(
+                { error: 'User not found' },
+                { status: 404 }
+            );
+        }
+
+        // The bump also ended this device's own token; hand back a fresh one so the
+        // person who just changed their password stays signed in here.
+        const token = generateToken(dbUser.id, dbUser.email, normalizeUserRole(dbUser.role), updated.tokenVersion);
+
+        const response = NextResponse.json({
             success: true,
-            message: 'Password updated successfully'
+            message: 'Password updated successfully',
+            token,
         });
+
+        setAuthCookie(response, request, token);
+
+        return response;
 
     } catch (error) {
         console.error('Change password error:', error);

@@ -1,0 +1,195 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import {
+    Trophy,
+    Heart,
+    Eye,
+    MessageCircle,
+    Share2,
+    ArrowLeft,
+    Clock,
+} from 'lucide-react';
+import Link from 'next/link';
+import { FeatureGate } from '@/components/admin/FeatureGate';
+
+interface UserXI {
+    id: string;
+    userId: string | null;
+    name: string;
+    formation: string;
+    players: string;
+    isPublic: boolean;
+    likes: number;
+    views: number;
+    createdAt: string;
+}
+
+export default function LineupBuilderGalleryPage() {
+    return (
+        <FeatureGate flagKey="features.lineupbuilder.enabled" featureName="Lineup Builder">
+            <LineupBuilderGalleryPageContent />
+        </FeatureGate>
+    );
+}
+
+// Same split as lineup-builder/page.tsx -- FeatureGate above the hooks, not
+// inside their JSX, so a disabled flag skips the gallery's own data fetch too.
+function LineupBuilderGalleryPageContent() {
+    const [teams, setTeams] = useState<UserXI[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [sortBy, setSortBy] = useState('recent');
+
+    useEffect(() => {
+        fetchTeams();
+    }, [sortBy]);
+
+    const fetchTeams = async () => {
+        setLoading(true);
+        try {
+            const response = await fetch('/api/user/xi?public=true');
+            const data = await response.json();
+            let sortedTeams = data.teams || [];
+
+            if (sortBy === 'popular') {
+                sortedTeams.sort((a: UserXI, b: UserXI) => b.likes - a.likes);
+            } else if (sortBy === 'views') {
+                sortedTeams.sort((a: UserXI, b: UserXI) => b.views - a.views);
+            }
+
+            setTeams(sortedTeams);
+        } catch (error) {
+            console.error('Error fetching teams:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-background">
+            {/* Header */}
+            <div className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-40">
+                <div className="max-w-7xl mx-auto px-6 py-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <Link
+                                href="/lineup-builder"
+                                className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
+                            >
+                                <ArrowLeft className="w-5 h-5" />
+                                Back to Builder
+                            </Link>
+                            <div className="h-6 w-px bg-border" />
+                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
+                                Lineup Gallery
+                            </h1>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                className="px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            >
+                                <option value="recent">Most Recent</option>
+                                <option value="popular">Most Popular</option>
+                                <option value="views">Most Viewed</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="max-w-7xl mx-auto px-6 py-12">
+                {loading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {[...Array(6)].map((_, i) => (
+                            <div key={i} className="animate-pulse bg-muted rounded-2xl h-80" />
+                        ))}
+                    </div>
+                ) : teams.length === 0 ? (
+                    <div className="text-center py-20">
+                        <Trophy className="w-16 h-16 text-foreground/30 mx-auto mb-4" />
+                        <h3 className="text-2xl font-bold text-foreground/60 mb-2">No teams yet</h3>
+                        <p className="text-foreground/40 mb-6">Be the first to create and share your dream team!</p>
+                        <Link
+                            href="/lineup-builder"
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transition-all"
+                        >
+                            <Trophy className="w-5 h-5" />
+                            Build Your XI
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {teams.map((team, index) => (
+                            <TeamCard key={team.id} team={team} index={index} />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function TeamCard({ team, index }: { team: UserXI; index: number }) {
+    const players = JSON.parse(team.players);
+    const filledSlots = players.filter((p: any) => p.playerId).length;
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className="bg-muted backdrop-blur-sm border border-border rounded-2xl overflow-hidden hover:border-cyan-500/50 transition-all group"
+        >
+            {/* Team Preview */}
+            <div className="relative h-48 bg-gradient-to-br from-blue-900 to-blue-800 p-4">
+                <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-full bg-white" />
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-white rounded-full" />
+                </div>
+                <div className="relative">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold backdrop-blur-sm">
+                            {team.formation}
+                        </span>
+                        <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-bold backdrop-blur-sm border border-cyan-500/20">
+                            {filledSlots} placed
+                        </span>
+                    </div>
+                    <h3 className="text-white font-bold text-lg mb-1 line-clamp-2">{team.name}</h3>
+                </div>
+            </div>
+
+            {/* Team Info */}
+            <div className="p-4">
+                <div className="flex items-center justify-between text-sm text-foreground/60 mb-4">
+                    <span className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {new Date(team.createdAt).toLocaleDateString()}
+                    </span>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-red-500/20 hover:text-red-400 transition-all">
+                        <Heart className="w-4 h-4" />
+                        <span className="font-semibold">{team.likes}</span>
+                    </button>
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-background transition-colors">
+                        <Eye className="w-4 h-4" />
+                        <span className="font-semibold">{team.views}</span>
+                    </button>
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-background transition-colors">
+                        <MessageCircle className="w-4 h-4" />
+                    </button>
+                    <button className="ml-auto p-2 rounded-lg bg-background/50 text-foreground/70 hover:bg-background transition-colors">
+                        <Share2 className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        </motion.div>
+    );
+}

@@ -18,6 +18,10 @@ interface Competition {
     scope: 'external' | 'internal';
     level: 'inter-university' | 'busa-league' | 'college' | 'department' | 'year-level';
     format: 'league' | 'knockout' | 'group-knockout';
+    // BACKLOG-302: the real, code-consumed shape -- distinct from `format`
+    // above (decorative, no code consumers, confirmed wrong for 2 of 8 real
+    // competitions in a live audit). Empty string / null means unclassified.
+    structure?: 'pure-league' | 'group-knockout' | 'final-only-ko' | 'swiss-top8' | '' | null;
     season: string;
     status: 'upcoming' | 'ongoing' | 'completed';
     numberOfTeams?: number;
@@ -26,6 +30,16 @@ interface Competition {
     isMultiSport?: boolean;
     description?: string;
     logo?: string;
+    stats?: { matchesCount: number; teamsCount: number; standingsCount: number };
+}
+
+// BACKLOG-272: soft visibility only, no hard cap enforced anywhere -- a real
+// season setup legitimately needs to add/drop teams before it's final.
+function teamCountColor(assigned: number, target?: number): string {
+    if (!target) return 'text-white';
+    if (assigned < target) return 'text-amber-400';
+    if (assigned > target) return 'text-red-400';
+    return 'text-green-400';
 }
 
 const defaultFormData = {
@@ -34,6 +48,7 @@ const defaultFormData = {
     scope: 'internal',
     level: 'busa-league',
     format: 'league',
+    structure: '',
     season: '2026/2027',
     status: 'upcoming',
     numberOfTeams: 0,
@@ -206,6 +221,24 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
                                 <option value="knockout">Knockout</option>
                                 <option value="league-knockout">League + Knockout</option>
                                 <option value="group-knockout">Group + Knockout</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">
+                                Structure
+                                <span className="text-white/30 normal-case font-normal tracking-normal ml-1">(drives Draw/Knockout admin tools — see BACKLOG-302)</span>
+                            </label>
+                            <select
+                                value={form.structure}
+                                onChange={(e) => setForm({ ...form, structure: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            >
+                                <option value="">Not set</option>
+                                <option value="pure-league">Pure League (no knockout stage)</option>
+                                <option value="group-knockout">Groups + Knockout</option>
+                                <option value="final-only-ko">Round-robin + Final only</option>
+                                <option value="swiss-top8">Swiss-format + Top-8 Knockout</option>
                             </select>
                         </div>
 
@@ -447,11 +480,15 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
     );
 }
 
+const COMPETITIONS_PAGE_SIZE = 50;
+
 function AdminCompetitionsPageContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [competitions, setCompetitions] = useState<Competition[]>([]);
+    const [totalCompetitionCount, setTotalCompetitionCount] = useState(0);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const { toasts, removeToast, success, error } = useToast();
 
     const [deleteDialog, setDeleteDialog] = useState({
@@ -472,7 +509,7 @@ function AdminCompetitionsPageContent() {
     const fetchCompetitions = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch('/api/competitions?includeStats=true');
+            const response = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=0`);
 
             if (!response.ok) {
                 throw new Error('Failed to fetch competitions');
@@ -484,11 +521,37 @@ function AdminCompetitionsPageContent() {
                 scope: c.level === 'inter-university' ? 'external' : 'internal'
             }));
             setCompetitions(mappedCompetitions);
+            setTotalCompetitionCount(data.total ?? mappedCompetitions.length);
         } catch (err) {
             error('Failed to load competitions. Please try again.');
             console.error('Error fetching competitions:', err);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // BACKLOG-283: previously fetched a bare `/api/competitions?includeStats=true`
+    // (no limit/offset), silently capped at the API's default of 50 with no
+    // indication more existed. Not a live issue today (8 real rows), but
+    // matches the /admin/matches pagination pattern for when that changes.
+    const loadMoreCompetitions = async () => {
+        setIsLoadingMore(true);
+        try {
+            const res = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=${competitions.length}`);
+            if (res.ok) {
+                const data = await res.json();
+                const nextPage = data.competitions.map((c: any) => ({
+                    ...c,
+                    scope: c.level === 'inter-university' ? 'external' : 'internal'
+                }));
+                setCompetitions(prev => [...prev, ...nextPage]);
+                setTotalCompetitionCount(data.total ?? competitions.length + nextPage.length);
+            }
+        } catch (err) {
+            error('Failed to load more competitions. Please try again.');
+            console.error('Error loading more competitions:', err);
+        } finally {
+            setIsLoadingMore(false);
         }
     };
 
@@ -671,7 +734,7 @@ function AdminCompetitionsPageContent() {
                                 <Trophy className="text-primary" size={24} />
                                 <span className="text-white/60 text-sm">Total Competitions</span>
                             </div>
-                            <p className="text-3xl font-bold">{competitions.length}</p>
+                            <p className="text-3xl font-bold">{totalCompetitionCount}</p>
                         </div>
                         <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                             <div className="flex items-center gap-3 mb-2">
@@ -709,9 +772,18 @@ function AdminCompetitionsPageContent() {
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-white/5 rounded-2xl p-6 border border-white/10 hover:border-primary/50 transition-all"
                             >
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
+                                {/* BACKLOG-344 (renumbered from BACKLOG-342 in the commit history --
+                                    that number collided with a concurrent session's match-detail
+                                    entry, BACKLOG-342 "Timeline All Tab: Restore Team-Side Mirroring"):
+                                    was `flex items-start justify-between` with no wrap --
+                                    on mobile the info block and the Manage Teams/Edit/Delete action
+                                    column competed for the same row and pushed scrollWidth to ~496px
+                                    against a 375px viewport. Stack on mobile, restore the side-by-side
+                                    row from sm: up (matches this codebase's existing flex-col sm:flex-row
+                                    card-header convention, e.g. admin/teams/[id], admin/roster-transfers). */}
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex flex-wrap items-center gap-3 mb-2">
                                             <h3 className="text-xl font-bold">{competition.name}</h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${competition.status === 'ongoing' ? 'bg-blue-500/20 text-blue-500' :
                                                 competition.status === 'upcoming' ? 'bg-blue-500/20 text-blue-500' :
@@ -743,12 +815,14 @@ function AdminCompetitionsPageContent() {
                                                 <p className="font-semibold">{competition.season}</p>
                                             </div>
                                         </div>
-                                        {competition.numberOfTeams && (
+                                        {!!competition.numberOfTeams && (
                                             <div className="flex items-center gap-6 mt-4 text-sm">
                                                 <span className="text-white/60">
-                                                    <span className="font-bold text-white">{competition.numberOfTeams}</span> teams
+                                                    <span className={`font-bold ${teamCountColor(competition.stats?.teamsCount ?? 0, competition.numberOfTeams)}`}>
+                                                        {competition.stats?.teamsCount ?? 0}/{competition.numberOfTeams}
+                                                    </span> teams
                                                 </span>
-                                                {competition.numberOfGroups && (
+                                                {!!competition.numberOfGroups && (
                                                     <span className="text-white/60">
                                                         <span className="font-bold text-white">{competition.numberOfGroups}</span> groups
                                                     </span>
@@ -789,6 +863,21 @@ function AdminCompetitionsPageContent() {
                             <p className="text-white/20">Create your first competition to get started</p>
                         </div>
                     )}
+
+                    {!isLoading && competitions.length < totalCompetitionCount && (
+                        <div className="flex flex-col items-center gap-3 py-8">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                Showing {competitions.length} of {totalCompetitionCount}
+                            </p>
+                            <button
+                                onClick={loadMoreCompetitions}
+                                disabled={isLoadingMore}
+                                className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors disabled:opacity-50"
+                            >
+                                {isLoadingMore ? 'Loading...' : 'Load More'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -815,6 +904,7 @@ function AdminCompetitionsPageContent() {
                         scope: editingCompetition.scope || 'internal',
                         level: editingCompetition.level || 'busa-league',
                         format: editingCompetition.format || 'league',
+                        structure: editingCompetition.structure || '',
                         season: editingCompetition.season || '2024/2025',
                         status: editingCompetition.status || 'upcoming',
                         numberOfTeams: editingCompetition.numberOfTeams || 0,

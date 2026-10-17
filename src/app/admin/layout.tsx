@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
@@ -42,7 +42,20 @@ export default async function AdminLayout({
 
         const { payload } = await jwtVerify(token, secret);
 
-        if (payload.role !== 'admin' && payload.role !== 'logger_manager') {
+        // BACKLOG-317: this layout runs an independent auth check on top of
+        // middleware.ts (defense-in-depth) -- it had no carve-out for a real
+        // logger reaching /admin/match-ratings/[id] via the "Adjust Ratings"
+        // link on their own dashboard (src/app/logger/page.tsx), even though
+        // that page and all 3 API routes it calls explicitly allow
+        // role === 'logger'. middleware.ts threads the current pathname
+        // through via the x-pathname header since a layout has no other way
+        // to know it.
+        const pathname = (await headers()).get('x-pathname') ?? '';
+        const isScopedRatingsLogger =
+            payload.role === 'logger' &&
+            (pathname === '/admin/match-ratings' || pathname.startsWith('/admin/match-ratings/'));
+
+        if (payload.role !== 'admin' && payload.role !== 'logger_manager' && !isScopedRatingsLogger) {
             redirect('/');
         }
     } catch (error) {

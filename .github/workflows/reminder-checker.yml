@@ -10,22 +10,18 @@ jobs:
   check-reminders:
     runs-on: ubuntu-latest
     steps:
+      # BACKLOG-468 item 8: this workflow used to POST first to
+      # /api/notifications/match-reminders, a route that does not exist (404
+      # every 5 minutes, hidden by `curl -s`). /api/reminders/check is the real
+      # handler: it runs the user-opt-in reminders, the lineup-not-published
+      # admin warning and the 30-minute match-starting-soon broadcast.
+      # `-f` makes an HTTP error status fail the job; `-S` keeps the error
+      # message visible while `-s` stays quiet on success.
       - name: Call Reminder Checker API
         run: |
-          curl -X POST ${{ secrets.APP_URL }}/api/notifications/match-reminders \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            -s
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-
-      - name: Call General Reminder Checker
-        run: |
-          curl -X POST ${{ secrets.APP_URL }}/api/reminders/check \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            -s
+          curl -fsS -X POST "$APP_URL/api/reminders/check" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json"
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

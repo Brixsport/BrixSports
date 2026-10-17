@@ -5,18 +5,27 @@ import { users, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
+import { isTokenVersionCurrent } from '@/lib/token-version';
 
 // GET /api/auth/me - Get current authenticated user
 export async function GET(request: NextRequest) {
     try {
-        // Use cookies() from next/headers for server-side cookie access
+        // BACKLOG-371: this route used to read the cookie only, ignoring any
+        // Authorization header entirely -- which silently broke AuthContext's
+        // own documented cookie-fails-try-localStorage fallback (checkAuth()
+        // retries this exact endpoint with `Authorization: Bearer <token>`
+        // when the cookie attempt 401s). That fallback existed in the client
+        // but could never actually succeed against this route. Same
+        // header-first, cookie-fallback order as verifyAuth() in auth.ts.
+        const authHeader = request.headers.get('authorization');
         const cookieStore = await cookies();
-        const authToken = cookieStore.get('authToken')?.value;
-        
-        console.log(`[Auth/Me] Request received, cookie present: ${!!authToken}`);
-        
+        const cookieToken = cookieStore.get('authToken')?.value;
+        const authToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : cookieToken;
+
+        console.log(`[Auth/Me] Request received, header present: ${!!authHeader}, cookie present: ${!!cookieToken}`);
+
         if (!authToken) {
-            console.log(`[Auth/Me] No authToken cookie found`);
+            console.log(`[Auth/Me] No authToken found in header or cookie`);
             return NextResponse.json(
                 { error: 'Unauthorized' },
                 { status: 401 }
@@ -28,10 +37,26 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
         }
         const secret = new TextEncoder().encode(env.jwtSecret);
-        const { payload } = await jwtVerify(authToken, secret);
-        
-        console.log(`[Auth/Me] Token verified for userId: ${payload.userId}`);
-        
+        // BACKLOG-464 item 8: only a JWT failure (invalid/expired/malformed) is a
+        // 401. Anything else below (DB errors) must surface as 500 so AuthContext's
+        // BUG-217 logic leaves auth state alone instead of treating an outage as a logout.
+        let payload;
+        try {
+            ({ payload } = await jwtVerify(authToken, secret));
+        } catch (verifyError) {
+            console.warn('[Auth/Me] Token verification failed:', verifyError instanceof Error ? verifyError.name : 'unknown');
+            return NextResponse.json(
+                { error: 'Invalid or expired token' },
+                { status: 401 }
+            );
+        }
+
+        // Token without a user id (e.g. a logger-shaped { id } token) is not a valid
+        // /me credential -- keep it a 401 rather than letting the query throw into the 500 path.
+        if (typeof payload.userId !== 'string' || !payload.userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         // Get user from database directly
         const userResult = await db
             .select()
@@ -48,8 +73,14 @@ export async function GET(request: NextRequest) {
                 { status: 401 }
             );
         }
-        
-        console.log(`[Auth/Me] User found: ${user.email}`);
+
+        // Session ended by a password change/reset since this token was signed.
+        if (!isTokenVersionCurrent(payload.tv, user.tokenVersion)) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
 
         let favoriteTeam = null;
         if (user.favoriteTeamId) {
@@ -83,10 +114,11 @@ export async function GET(request: NextRequest) {
             }
         });
     } catch (error) {
-        console.error('[Auth/Me] Auth verification error:', error);
+        // Non-JWT failure (DB/query error): server fault, not an auth rejection.
+        console.error('[Auth/Me] Unexpected error resolving current user:', error);
         return NextResponse.json(
-            { error: 'Authentication failed' },
-            { status: 401 }
+            { error: 'Internal server error' },
+            { status: 500 }
         );
     }
 }

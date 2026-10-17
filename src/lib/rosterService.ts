@@ -1,15 +1,33 @@
 import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '@/db';
-import { organizations, teams, players, playerTeamAffiliations } from '@/db/schema';
+import { organizations, teams, players, playerTeamAffiliations, systemSettings } from '@/db/schema';
 
-// BACKLOG-126: single source of truth for "the upcoming season new roster writes
-// belong to." '2026/2027' confirmed directly (Richard, session 53) — the season
-// about to start, distinct from '2025/2026' (the last real completed season,
-// which is what every pre-existing playerTeamAffiliations row was backfilled to on
-// both staging and prod — see the two migrate-season-readiness-*-53.mjs scripts).
-// Update this at the start of each new season.
-export const CURRENT_SEASON = '2026/2027';
+// BACKLOG-126 / BACKLOG-228 (session 56): single source of truth for "the
+// season new roster writes belong to." Originally a hardcoded constant —
+// changing it required a code edit + redeploy. Now DB-backed via the existing
+// admin Settings infra (system_settings, key 'system.season.current'), so an
+// admin can roll the season forward from /admin/settings without a deploy.
+// FALLBACK_SEASON is only used if that setting row doesn't exist yet (matches
+// /api/admin/settings' own seed-default-on-first-read pattern) — keep it in
+// sync with that route's DEFAULT_SETTINGS entry.
+const SEASON_SETTING_KEY = 'system.season.current';
+const FALLBACK_SEASON = '2026/2027';
+const SEASON_CACHE_TTL_MS = 60_000;
+let cachedSeason: { value: string; expiresAt: number } | null = null;
+
+export async function getCurrentSeason(): Promise<string> {
+    if (cachedSeason && cachedSeason.expiresAt > Date.now()) {
+        return cachedSeason.value;
+    }
+    const row = await db.query.systemSettings.findFirst({
+        where: eq(systemSettings.key, SEASON_SETTING_KEY),
+        columns: { value: true },
+    });
+    const value = row?.value || FALLBACK_SEASON;
+    cachedSeason = { value, expiresAt: Date.now() + SEASON_CACHE_TTL_MS };
+    return value;
+}
 
 // Shared with src/app/api/admin/teams/[teamId]/roster/route.ts, which had its own
 // identical inline copy before this file existed.
@@ -64,6 +82,7 @@ export async function transferPlayerToTeam(
     if (!newTeam) throw new TransferError('Team not found', 404);
 
     const affiliationType = await resolveAffiliationType(newTeamId);
+    const currentSeason = await getCurrentSeason();
 
     // pta_player_team_season_unique is (playerId, teamId, season) — check for a
     // pre-existing row on this exact triple (e.g. rejoining a team left earlier
@@ -74,7 +93,7 @@ export async function transferPlayerToTeam(
         .where(and(
             eq(playerTeamAffiliations.playerId, playerId),
             eq(playerTeamAffiliations.teamId, newTeamId),
-            eq(playerTeamAffiliations.season, CURRENT_SEASON),
+            eq(playerTeamAffiliations.season, currentSeason),
         ))
         .get();
 
@@ -135,7 +154,7 @@ export async function transferPlayerToTeam(
                 isPrimary: true,
                 isActive: true,
                 startDate: now,
-                season: CURRENT_SEASON,
+                season: currentSeason,
                 jerseyNumber: options.jerseyNumber ?? null,
                 position: options.position ?? null,
                 nicknames: '[]',
@@ -152,7 +171,7 @@ export async function transferPlayerToTeam(
         toTeamId: newTeamId,
         toTeamName: newTeam.name,
         affiliationType,
-        season: CURRENT_SEASON,
+        season: currentSeason,
         newAffiliationId,
     };
 }

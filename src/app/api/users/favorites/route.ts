@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { userFavorites, teams, players, matches } from '@/db/schema';
+import { userFavorites, teams, players, matches, competitions } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
@@ -57,8 +57,16 @@ export async function GET(request: NextRequest) {
 
                 switch (fav.favoriteType) {
                     case 'competition':
-                        // Competitions are text fields, return the name
-                        details = { name: fav.favoriteId, type: 'competition' };
+                        // BACKLOG-301: was echoing the raw favoriteId back as "name"
+                        // instead of looking it up -- a competition favorite always
+                        // showed its own ID, never a real name/sport, unlike every
+                        // other favorite type here.
+                        const competitionData = await db
+                            .select()
+                            .from(competitions)
+                            .where(eq(competitions.id, fav.favoriteId))
+                            .limit(1);
+                        details = competitionData[0] || null;
                         break;
                     case 'team':
                         const teamData = await db
@@ -168,6 +176,61 @@ export async function POST(request: NextRequest) {
         console.error('Error adding favorite:', error);
         return NextResponse.json(
             { error: 'Failed to add favorite' },
+            { status: 500 }
+        );
+    }
+}
+
+/**
+ * UPDATE a favorite's notification preference
+ * PATCH /api/users/favorites
+ * Fan Account Blueprint, ADR-001 Decision 1 -- the per-team alert toggle on
+ * /favourites. Scoped to (userId, favoriteType, favoriteId), same identity
+ * triple POST/DELETE already key on -- never trusts a client-passed row id.
+ */
+export async function PATCH(request: NextRequest) {
+    try {
+        const user = await getAuthUser(request);
+
+        if (!user) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
+        const effectiveId = await resolveEffectiveUserId(user);
+        const body = await request.json();
+        const { favoriteType, favoriteId, notificationsEnabled } = body;
+
+        if (!favoriteType || !favoriteId || typeof notificationsEnabled !== 'boolean') {
+            return NextResponse.json(
+                { error: 'Missing required fields' },
+                { status: 400 }
+            );
+        }
+
+        const scope = and(
+            eq(userFavorites.userId, effectiveId),
+            eq(userFavorites.favoriteType, favoriteType),
+            eq(userFavorites.favoriteId, favoriteId)
+        );
+
+        const existing = await db.select({ id: userFavorites.id }).from(userFavorites).where(scope).limit(1);
+        if (existing.length === 0) {
+            return NextResponse.json(
+                { error: 'Favorite not found' },
+                { status: 404 }
+            );
+        }
+
+        await db.update(userFavorites).set({ notificationsEnabled }).where(scope);
+
+        return NextResponse.json({ success: true, notificationsEnabled });
+    } catch (error) {
+        console.error('Error updating favorite notification preference:', error);
+        return NextResponse.json(
+            { error: 'Failed to update favorite' },
             { status: 500 }
         );
     }

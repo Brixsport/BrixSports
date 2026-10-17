@@ -1,23 +1,30 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLeft, Play } from 'lucide-react';
+import { Trophy, Calendar, User, Users, Search, Bell, Menu, ChevronRight, ChevronLeft, Play, ListChecks, Newspaper } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
+import { BrandMark } from '@/components/BrandMark';
 import { useNotifications } from '@/components/Notifications';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 import { LiveNowSection } from '@/components/livestream';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
 import AdBanner from '@/components/ads/AdBanner';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
+import { TeamLogo } from '@/lib/utils/team-logo';
+import { startVisiblePolling } from '@/lib/visible-poll';
+import { mergeLiveScores, applyLiveSnapshot, shouldRunFullRefresh, type LiveSnapshot } from '@/lib/live-overlay';
+import { safeToLocale } from '@/lib/safe-date';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
 
 // Lazy load heavy overlay components
 const MatchOverlay = dynamic(() => import('@/components/MatchOverlay').then(mod => mod.MatchOverlay), { ssr: false });
@@ -26,12 +33,14 @@ const PlayerProfileOverlay = dynamic(() => import('@/components/PlayerProfileOve
 const SettingsOverlay = dynamic(() => import('@/components/SettingsOverlay').then(mod => mod.SettingsOverlay), { ssr: false });
 const TeamProfileOverlay = dynamic(() => import('@/components/TeamProfileOverlay').then(mod => mod.TeamProfileOverlay), { ssr: false });
 
-// Helper function to validate image paths
-const isValidImagePath = (path: string | undefined): boolean => {
-  if (!path || path.trim() === '') return false;
-  // Check if it's a valid path (starts with / or http)
-  return path.startsWith('/') || path.startsWith('http');
-};
+// BACKLOG-387: module-level stale-while-revalidate cache for the homepage's
+// matches fetch. Survives component unmount/remount (a client-side nav away
+// and back), so tapping into a match then hitting back doesn't show a full
+// skeleton + refetch for data that's still fresh -- only a real cold load or
+// a cache older than the poll interval does. TTL matches the existing 15s
+// poll interval below, not picked independently.
+const MATCHES_CACHE_TTL_MS = 15000;
+let matchesCache: { matches: Match[]; timestamp: number } | null = null;
 
 export default function Home() {
   const router = useRouter();
@@ -41,6 +50,22 @@ export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+  // BACKLOG-455: a failed fetch must never render as "No matches found".
+  // loadFailed = never loaded anything (show retry); isStale = a later refresh
+  // failed but earlier data is still on screen. hasLoaded tracks which of the two
+  // a failure is.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [isStale, setIsStale] = useState(false);
+  const hasLoaded = useRef(false);
+  // True while any match in state is LIVE: gates the 3s live-score overlay poll.
+  const hasLiveRef = useRef(false);
+  // Mirror of `matches` for the overlay poll, which merges into the latest list without re-subscribing.
+  const matchesRef = useRef<Match[]>([]);
+  // Latest /api/live-matches response, re-applied on top of every full list load.
+  const lastLiveRef = useRef<LiveSnapshot | null>(null);
+  // Number of full-list loads running, and when the overlay last asked for one (cooldown).
+  const fullLoadsInFlight = useRef(0);
+  const lastOverlayRefreshAt = useRef<number | null>(null);
 
   // Date Filter
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -54,6 +79,7 @@ export default function Home() {
 
   // Authentication State - use AuthContext instead of local state
   const { user, isAuthenticated } = useAuth();
+  const isFeatureEnabled = useFeatureFlags();
   const [competitions, setCompetitions] = useState<any[]>([]);
 
   const { notifications, addNotification } = useNotifications();
@@ -67,18 +93,30 @@ export default function Home() {
   // shared fetcher (was duplicated 2x) and polled on an interval, matching the
   // same stopgap pattern /live/page.tsx already uses (BUG-020).
   const fetchAllMatches = useCallback(async (showLoadingState: boolean) => {
+    fullLoadsInFlight.current += 1;
     try {
       if (showLoadingState) setLoading(true);
 
-      const [basketballResponse, footballResponse, otherResponse] = await Promise.all([
+      const responses = await Promise.all([
         fetch('/api/basketball/matches'),
         fetch('/api/football/matches'),
         fetch('/api/other/matches')
       ]);
 
-      const basketballData = await basketballResponse.json();
-      const footballData = await footballResponse.json();
-      const otherData = await otherResponse.json();
+      // BACKLOG-455: all three sources must succeed. A non-OK response used to
+      // fall through (its `success` was just falsy and the sport was silently
+      // skipped); now any failure is a failed load, never a quiet empty list.
+      for (const response of responses) {
+        if (!response.ok) throw new Error(`HTTP ${response.status} from ${response.url}`);
+      }
+      const [basketballData, footballData, otherData] = await Promise.all(
+        responses.map(response => response.json())
+      );
+      for (const body of [basketballData, footballData, otherData]) {
+        if (body?.success !== true || !Array.isArray(body.matches)) {
+          throw new Error('Unexpected matches response shape');
+        }
+      }
 
       const allMatches = [];
 
@@ -106,6 +144,7 @@ export default function Home() {
             startTime: match.startTime,
             venue: match.venue,
             competition: match.competition,
+            competitionId: match.competitionId ?? null,
             round: match.round ?? null,
             sport: 'Basketball',
             matchType: 'competition',
@@ -152,6 +191,7 @@ export default function Home() {
             startTime: match.startTime,
             venue: match.venue,
             competition: match.competition,
+            competitionId: match.competitionId ?? null,
             round: match.round ?? null,
             sport: 'Football',
             matchType: 'competition',
@@ -166,31 +206,102 @@ export default function Home() {
 
       // Add OTHER matches
       if (otherData.success && otherData.matches) {
-        const otherMatches = otherData.matches.map((match: any) => ({
-          ...match,
-          stats: typeof match.stats === 'string' ? JSON.parse(match.stats || '{}') : (match.stats || {})
-        }));
+        const otherMatches = otherData.matches.map((match: any) => {
+          // A malformed stats string must not fail the whole load.
+          let dbStats = {};
+          try {
+            dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats || '{}') : (match.stats || {});
+          } catch (e) {
+            console.error('Error parsing match stats:', e);
+          }
+          return { ...match, stats: dbStats };
+        });
         allMatches.push(...otherMatches);
       }
 
-      setMatches(allMatches);
-      return allMatches;
+      // The heavy lists lag /api/live-matches, so put the latest live snapshot back on top of them;
+      // otherwise a slow list response flips a live score back until the next overlay tick.
+      const merged = applyLiveSnapshot(allMatches as any[], lastLiveRef.current, Date.now()) as Match[];
+
+      setMatches(merged);
+      matchesRef.current = merged;
+      hasLiveRef.current = merged.some((m: any) => m.status === 'LIVE');
+      hasLoaded.current = true;
+      setLoadFailed(false);
+      setIsStale(false);
+      matchesCache = { matches: merged, timestamp: Date.now() };
+      return merged;
     } catch (error) {
       console.error('Error fetching matches:', error);
+      if (hasLoaded.current) setIsStale(true);
+      else setLoadFailed(true);
       return null;
     } finally {
+      fullLoadsInFlight.current -= 1;
       if (showLoadingState) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchAllMatches(true);
-
-    // Poll every 15s -- stopgap until a real WS subscription is wired to the
-    // homepage, matching /live/page.tsx's existing pattern (BUG-020/BUG-149).
-    const interval = setInterval(() => fetchAllMatches(false), 15000);
-    return () => clearInterval(interval);
+  // BACKLOG-480: while a match is live, patch its score/status from the tiny, edge-cacheable
+  // /api/live-matches every ~3s. The full lists above come from the heavy sport routes, whose edge
+  // cache revalidates slowly (measured median 7.0s from a logger's POST to the card changing, vs 4.2s for
+  // /live which reads the small endpoint). A match that finished or a new live match triggers an immediate
+  // full reload; the 15s full poll stays the source of truth.
+  const refreshLiveOverlay = useCallback(async () => {
+    if (!hasLiveRef.current) return;
+    try {
+      const res = await fetch('/api/live-matches');
+      if (!res.ok) return;
+      const live = await res.json();
+      if (!Array.isArray(live)) return;
+      const now = Date.now();
+      lastLiveRef.current = { live, at: now };
+      const { next, changed, needsFullRefresh } = mergeLiveScores(matchesRef.current as any[], live);
+      if (changed) {
+        matchesRef.current = next as Match[];
+        setMatches(next as Match[]);
+      }
+      // A match that just ended stays LIVE in the cached lists for a while, so this keeps coming back
+      // true: reload at most once per cooldown and never on top of a load that is still running.
+      if (shouldRunFullRefresh({
+        needsFullRefresh,
+        inFlight: fullLoadsInFlight.current > 0,
+        lastRunAt: lastOverlayRefreshAt.current,
+        now,
+      })) {
+        lastOverlayRefreshAt.current = now;
+        fetchAllMatches(false);
+      }
+    } catch {
+      // The 15s full poll is the source of truth; an overlay failure must never surface as an error.
+    }
   }, [fetchAllMatches]);
+
+  useEffect(() => {
+    // BACKLOG-387: serve a fresh-enough cache immediately (no skeleton) on
+    // remount, then silently revalidate in the background -- covers the
+    // common "tap into a match, tap back to Fixtures" case, which previously
+    // always re-ran the full loading-state fetch even when the page was just
+    // visited seconds ago.
+    const isFresh = matchesCache && (Date.now() - matchesCache.timestamp) < MATCHES_CACHE_TTL_MS;
+    if (isFresh) {
+      setMatches(matchesCache!.matches);
+      matchesRef.current = matchesCache!.matches;
+      hasLiveRef.current = matchesCache!.matches.some((m: any) => m.status === 'LIVE');
+      hasLoaded.current = true;
+      setLoading(false);
+      fetchAllMatches(false);
+    } else {
+      fetchAllMatches(true);
+    }
+
+    // Full lists every 15s, and the live-score overlay every 3s while a match is live. Both pause while the
+    // tab is hidden and are jittered so viewers do not tick in lockstep. Stopgap until a real WS
+    // subscription is wired to the homepage (BUG-020/BUG-149, BACKLOG-480).
+    const stopFullPoll = startVisiblePolling(() => { fetchAllMatches(false); }, 15000);
+    const stopOverlayPoll = startVisiblePolling(() => { refreshLiveOverlay(); }, 3000);
+    return () => { stopFullPoll(); stopOverlayPoll(); };
+  }, [fetchAllMatches, refreshLiveOverlay]);
 
   // Same-tab fast-path: a logger on this same device gets an instant refresh
   // (plus a notification) without waiting for the next poll tick. Remote
@@ -374,28 +485,32 @@ export default function Home() {
         id="homepage-entity-graph"
       />
 
-      <div className="min-h-screen bg-[#050505] text-white">
+      <div className="min-h-screen bg-background text-foreground">
       {/* Top Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a] border-b border-white/5">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4">
           {/* Main Nav Bar */}
           <div className="h-14 flex items-center justify-between">
             <div className="flex items-center gap-6">
               <Link href="/" className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center font-display text-lg -skew-x-12 text-black">B</div>
+                <BrandMark variant="viewer" size={28} priority />
                 <span className="font-display text-xl tracking-tight hidden sm:block">BRIXSPORT</span>
               </Link>
 
               {/* Desktop Links */}
               <div className="hidden md:flex items-center gap-1">
-                <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
+                <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   Teams
                 </Link>
-                <Link href="/lineups" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
-                  Lineup Builder
-                  <span className="absolute -top-1 -right-1 bg-primary text-black text-[8px] font-black px-1 rounded">NEW</span>
+                <Link href="/players" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
+                  Players
                 </Link>
-                <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
+                {isFeatureEnabled('features.lineupbuilder.enabled') && (
+                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
+                    Lineup Builder
+                  </Link>
+                )}
+                <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground/60 hover:text-primary hover:bg-muted/50 rounded transition-colors">
                   News
                 </Link>
               </div>
@@ -404,18 +519,20 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                aria-label="Search"
+                className="w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors"
               >
-                <Search size={18} className="text-white/60" />
+                <Search size={18} className="text-foreground/60" />
               </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsSettingsOpen(true);
+                  router.push('/notifications');
                 }}
-                className="p-2 hover:bg-white/5 rounded-lg transition-colors relative"
+                aria-label="Notifications"
+                className="w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors relative"
               >
-                <Bell size={18} className="text-white/60" />
+                <Bell size={18} className="text-foreground/60" />
                 {notifications.length > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full"></span>
                 )}
@@ -423,13 +540,13 @@ export default function Home() {
               <div className="hidden sm:flex items-center gap-2">
                 {isAuthenticated && user ? (
                   <button
-                    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 transition-all text-xs font-bold uppercase tracking-wider"
+                    className="flex items-center gap-2 bg-muted hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
                     onClick={() => router.push('/profile')}
                   >
                     {user.avatar ? (
                       <img src={user.avatar} alt={user.name} className="w-5 h-5 rounded-full object-cover" />
                     ) : (
-                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-black text-xs font-bold">
+                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
                         {user.name?.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -437,7 +554,7 @@ export default function Home() {
                   </button>
                 ) : (
                   <button
-                    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 transition-all text-xs font-bold uppercase tracking-wider"
+                    className="flex items-center gap-2 bg-muted hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border transition-all text-xs font-bold uppercase tracking-wider"
                     onClick={() => router.push('/login')}
                   >
                     <User size={16} />
@@ -446,10 +563,12 @@ export default function Home() {
                 )}
               </div>
               <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="md:hidden p-2 hover:bg-white/5 rounded-lg transition-colors"
+                onClick={() => setIsMenuOpen(true)}
+                aria-label="Open menu"
+                aria-haspopup="dialog"
+                className="md:hidden w-11 h-11 flex items-center justify-center hover:bg-muted/50 rounded-lg transition-colors"
               >
-                {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                <Menu size={20} />
               </button>
             </div>
           </div>
@@ -462,7 +581,7 @@ export default function Home() {
                 onClick={() => setActiveSport(sport)}
                 className={`px-4 py-2 text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeSport === sport
                   ? 'text-primary border-b-2 border-primary'
-                  : 'text-white/40 hover:text-white/60'
+                  : 'text-foreground/40 hover:text-foreground/60'
                   }`}
               >
                 {sport}
@@ -475,56 +594,52 @@ export default function Home() {
       {/* Main Content */}
       <main className="pt-28 pb-12">
         <div className="max-w-7xl mx-auto px-4">
-          {/* Status Filter Tabs */}
-          <div className="flex items-center gap-2 mb-6 overflow-x-auto scrollbar-hide">
-            {['ALL', 'LIVE', 'FINISHED', 'UPCOMING', 'FAVORITES'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab
-                  ? 'bg-primary text-black'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                  }`}
-              >
-                {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          {/* Date Filter - SofaScore Style */}
-          <div className="mb-6 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-3">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-              {/* Left side - Title */}
-              <div className="flex items-center gap-3">
-                <Calendar size={18} className="text-primary" />
-                <h3 className="font-bold text-sm">Matches</h3>
-              </div>
-
-              {/* Right side - Date Navigation */}
-              <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1 w-full sm:w-auto">
+          {/* BACKLOG-399/401: homepage had zero <h1> -- the "BRIXSPORT" brand
+              mark in the nav above is a logo Link, not a heading. Visually
+              hidden since the visual design has no room for a redundant
+              on-screen title; screen readers still get a real page heading. */}
+          <h1 className="sr-only">BrixSports — Live Scores and Fixtures</h1>
+          {/* Status Filter Tabs -- BACKLOG-390 #2 (44px touch target) + #4 (scroll-edge fade) */}
+          <div className="relative mb-6">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+              {['ALL', 'LIVE', 'FINISHED', 'UPCOMING', 'FAVORITES'].map((tab) => (
                 <button
-                  onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
-                  className="p-2 hover:bg-white/10 rounded transition-colors"
-                  aria-label="Previous day"
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 min-h-11 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all flex items-center shrink-0 ${activeTab === tab
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-foreground/60 hover:bg-muted/70 hover:text-foreground'
+                    }`}
                 >
-                  <ChevronLeft size={18} className="text-white/60" />
+                  {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
+                  {tab}
                 </button>
-                <div className="px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white min-w-[100px] sm:min-w-[120px] text-center">
-                  {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
-                </div>
-                <button
-                  onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, 1) : addDays(new Date(), 1))}
-                  className="p-2 hover:bg-white/10 rounded transition-colors"
-                  aria-label="Next day"
-                >
-                  <ChevronRight size={18} className="text-white/60" />
-                </button>
-              </div>
+              ))}
             </div>
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
           </div>
 
-
+          {/* Date Navigation - compact inline row (BACKLOG-390 #1: was a full card+heading, ~150-200px taller) */}
+          <div className="flex items-center justify-center gap-1 mb-4">
+            <button
+              onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
+              aria-label="Previous day"
+            >
+              <ChevronLeft size={18} className="text-foreground/60" />
+            </button>
+            <div className="flex items-center gap-1.5 px-3 text-xs sm:text-sm font-semibold text-foreground min-w-[120px] justify-center">
+              <Calendar size={14} className="text-primary" />
+              {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
+            </div>
+            <button
+              onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, 1) : addDays(new Date(), 1))}
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
+              aria-label="Next day"
+            >
+              <ChevronRight size={18} className="text-foreground/60" />
+            </button>
+          </div>
 
           {/* Live Now Section */}
           <div className="mb-8">
@@ -537,11 +652,11 @@ export default function Home() {
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-6 bg-gradient-to-r from-red-500/10 to-primary/10 border border-red-500/20 rounded-2xl p-4 hover:border-red-500/40 transition-all cursor-pointer group"
+                className="mb-6 bg-gradient-to-r from-red-500/20 to-primary/15 dark:from-red-500/10 dark:to-primary/10 border border-red-500/30 dark:border-red-500/20 rounded-2xl p-4 hover:border-red-500/40 transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center">
+                    <div className="w-10 h-10 bg-red-500/25 dark:bg-red-500/20 rounded-xl flex items-center justify-center">
                       <Play size={20} className="text-red-500 fill-red-500" />
                     </div>
                     <div>
@@ -549,77 +664,101 @@ export default function Home() {
                         <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                         LIVE CENTER
                       </h3>
-                      <p className="text-xs text-white/60">
+                      <p className="text-xs text-foreground/60">
                         {matches.filter(m => m.status === 'LIVE').length} matches live now
                       </p>
                     </div>
                   </div>
-                  <ChevronRight size={20} className="text-white/40 group-hover:text-primary transition-colors" />
+                  <ChevronRight size={20} className="text-foreground/40 group-hover:text-primary transition-colors" />
                 </div>
               </motion.div>
             </Link>
           )}
 
           {/* Matches by Date */}
-          {Object.keys(groupedMatches).length > 0 ? (
+          {isStale && !loadFailed && <StaleDataBanner />}
+          {loadFailed ? (
+            <LoadFailedState title="Couldn't load matches" onRetry={() => { setLoadFailed(false); fetchAllMatches(true); }} />
+          ) : loading && matches.length === 0 ? (
+            <div className="py-20 text-center" role="status">
+              <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-foreground/40">Loading matches...</p>
+            </div>
+          ) : Object.keys(groupedMatches).length > 0 ? (
             <div className="space-y-6">
               {Object.entries(groupedMatches).map(([date, dateMatches]: [string, any]) => {
                 // Group matches by competition within the date group
+                // BACKLOG-407: group by id when known -- two competitions can share a
+                // name (same class as BACKLOG-401 #7 on /teams) and must not merge
+                // into one group or link to the wrong competition.
                 const matchesByCompetition = dateMatches.reduce((acc: any, match: Match) => {
                   const compName = match.competition || 'Other'; // Fallback if undefined
-                  if (!acc[compName]) acc[compName] = [];
-                  acc[compName].push(match);
+                  const groupKey = match.competitionId || compName;
+                  if (!acc[groupKey]) acc[groupKey] = { id: match.competitionId ?? null, name: compName, matches: [] };
+                  acc[groupKey].matches.push(match);
                   return acc;
                 }, {});
 
                 return (
                   <div key={date}>
                     {/* Date Header */}
-                    <div className="flex items-center gap-3 mb-3 sticky top-14 z-10 bg-[#050505]/95 backdrop-blur py-2 border-b border-white/5">
-                      <Calendar size={16} className="text-white/40" />
-                      <h2 className="text-sm font-bold uppercase tracking-wider text-white/60">{date}</h2>
+                    <div className="flex items-center gap-3 mb-3 sticky top-14 z-10 bg-background/95 backdrop-blur py-2 border-b border-border">
+                      <Calendar size={16} className="text-foreground/40" />
+                      <h2 className="text-sm font-bold uppercase tracking-wider text-foreground/60">{date}</h2>
                       {/* Show actual date for basketball rounds */}
                       {date.startsWith('Round') && dateMatches.length > 0 && (
-                        <span className="text-xs text-white/40">
-                          {new Date(dateMatches[0].startTime).toLocaleDateString('en-US', {
+                        <span className="text-xs text-foreground/40">
+                          {safeToLocale(dateMatches[0].startTime, 'date', {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric'
-                          })}
+                          }, 'TBD', 'en-US')}
                         </span>
                       )}
-                      <div className="flex-1 h-px bg-white/5"></div>
+                      <div className="flex-1 h-px bg-border"></div>
                     </div>
 
                     {/* Competitions */}
                     <div className="space-y-4">
-                      {Object.entries(matchesByCompetition).map(([competitionName, compMatches]: [string, any]) => (
-                        <div key={competitionName} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-                          {/* Competition Header */}
-                          <div className="bg-white/5 px-4 py-2 flex items-center justify-between border-b border-white/5">
-                            <div className="flex items-center gap-2">
-                              {/* Attempt to find competition logo or use icon */}
-                              {/* Ideally we'd have a map or lookup for competition logos, for now use standard icon */}
-                              <div className="w-5 h-5 rounded bg-white/5 flex items-center justify-center">
-                                <Trophy size={12} className="text-white/40" />
+                      {Object.entries(matchesByCompetition).map(([groupKey, group]: [string, any]) => (
+                        <div key={groupKey} className="bg-muted border border-border rounded-xl overflow-hidden">
+                          {/* Competition Header (BACKLOG-407): a real link when the id is known,
+                              tinted so it reads as a section header instead of blending into the
+                              card. Without an id it stays a plain header with no chevron, so it
+                              never shows an affordance that does nothing. */}
+                          {group.id ? (
+                            <Link
+                              href={`/competitions/${group.id}`}
+                              aria-label={`${group.name} - view competition`}
+                              className="min-h-11 px-4 py-2 flex items-center justify-between gap-3 bg-primary/10 hover:bg-primary/15 border-b border-border transition-colors"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Trophy size={14} className="text-primary shrink-0" />
+                                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider truncate">
+                                  {group.name}
+                                </h3>
                               </div>
-                              <h3 className="text-xs font-bold text-white/80 uppercase tracking-wider">
-                                {competitionName}
+                              <ChevronRight size={16} className="text-primary shrink-0" />
+                            </Link>
+                          ) : (
+                            <div className="min-h-11 px-4 py-2 flex items-center gap-2 bg-primary/10 border-b border-border">
+                              <Trophy size={14} className="text-primary shrink-0" />
+                              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider truncate">
+                                {group.name}
                               </h3>
                             </div>
-                            <ChevronRight size={14} className="text-white/20" />
-                          </div>
+                          )}
 
                           {/* Matches List */}
                           <div>
-                            {compMatches.map((match: Match, idx: number) => (
+                            {group.matches.map((match: Match, idx: number) => (
                               <React.Fragment key={match.id}>
-                              {idx === 1 && <AdBanner position="inline" />}
+                              {idx === 1 && isFeatureEnabled('features.ads.enabled') && <AdBanner position="inline" />}
                               <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 onClick={() => router.push(`/matches/${match.id}`)}
-                                className={`p-4 cursor-pointer hover:bg-white/5 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-white/5' : ''
+                                className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors group ${idx !== group.matches.length - 1 ? 'border-b border-border' : ''
                                   }`}
                               >
                                 <div className="flex items-center justify-between">
@@ -627,25 +766,16 @@ export default function Home() {
                                   <div className="flex-1 space-y-2">
                                     {/* Home Team */}
                                     <div className="flex items-center gap-3">
-                                      {isValidImagePath(match.homeTeam?.logo) ? (
-                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
-                                          <Image
-                                            src={match.homeTeam!.logo}
-                                            alt={match.homeTeam!.name}
-                                            fill
-                                            className="object-cover"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="w-6 h-6 bg-white/10 rounded flex items-center justify-center text-[10px] font-bold">
-                                          {match.homeTeam?.shortName || 'H'}
-                                        </div>
-                                      )}
-                                      <span className="font-medium text-sm text-white/90">
+                                      <TeamLogo
+                                        logo={match.homeTeam?.logo}
+                                        name={match.homeTeam?.name || match.homeTeam?.shortName || 'Home Team'}
+                                        size="xs"
+                                      />
+                                      <span className="font-medium text-sm text-foreground/90">
                                         {match.homeTeam?.name || 'Home Team'}
                                       </span>
                                       {match.status !== 'UPCOMING' && (
-                                        <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
+                                        <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-foreground/60'}`}>
                                           {match.homeScore}
                                           {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
                                             <span className={`ml-1 text-xs font-normal ${match.shootoutHomeScore > match.shootoutAwayScore ? 'text-primary' : ''}`}>({match.shootoutHomeScore})</span>
@@ -656,25 +786,16 @@ export default function Home() {
 
                                     {/* Away Team */}
                                     <div className="flex items-center gap-3">
-                                      {isValidImagePath(match.awayTeam?.logo) ? (
-                                        <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
-                                          <Image
-                                            src={match.awayTeam!.logo}
-                                            alt={match.awayTeam!.name}
-                                            fill
-                                            className="object-cover"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="w-6 h-6 bg-white/10 rounded flex items-center justify-center text-[10px] font-bold">
-                                          {match.awayTeam?.shortName || 'A'}
-                                        </div>
-                                      )}
-                                      <span className="font-medium text-sm text-white/90">
+                                      <TeamLogo
+                                        logo={match.awayTeam?.logo}
+                                        name={match.awayTeam?.name || match.awayTeam?.shortName || 'Away Team'}
+                                        size="xs"
+                                      />
+                                      <span className="font-medium text-sm text-foreground/90">
                                         {match.awayTeam?.name || 'Away Team'}
                                       </span>
                                       {match.status !== 'UPCOMING' && (
-                                        <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
+                                        <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-foreground/60'}`}>
                                           {match.awayScore}
                                           {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
                                             <span className={`ml-1 text-xs font-normal ${match.shootoutAwayScore > match.shootoutHomeScore ? 'text-primary' : ''}`}>({match.shootoutAwayScore})</span>
@@ -695,14 +816,14 @@ export default function Home() {
                                     {match.status === 'LIVE' ? (
                                       <LiveMatchStatus matchId={match.id} sport={match.sport} fallbackPeriod={(match as any).currentPeriod ?? undefined} />
                                     ) : match.status === 'FINISHED' ? (
-                                      <span className="text-xs text-white/40 font-bold">FT</span>
+                                      <span className="text-xs text-foreground/40 font-bold">FT</span>
                                     ) : (
-                                      <span className="text-xs text-white/60">
-                                        {new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                      <span className="text-xs text-foreground/60">
+                                        {safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, 'TBD', 'en-US')}
                                       </span>
                                     )}
                                     {match.round && (
-                                      <span className="text-[9px] text-white/30 font-bold uppercase tracking-wider text-right leading-tight">{match.round}</span>
+                                      <span className="text-[9px] text-foreground/30 font-bold uppercase tracking-wider text-right leading-tight">{match.round}</span>
                                     )}
                                   </div>
                                 </div>
@@ -719,9 +840,9 @@ export default function Home() {
             </div>
           ) : (
             <div className="py-20 text-center">
-              <Trophy size={48} className="mx-auto text-white/10 mb-4" />
-              <p className="text-white/40 font-bold">No matches found</p>
-              <p className="text-white/20 text-sm mt-2">Try adjusting your filters</p>
+              <Trophy size={48} className="mx-auto text-foreground/10 mb-4" />
+              <p className="text-foreground/40 font-bold">No matches found</p>
+              <p className="text-foreground/20 text-sm mt-2">Try adjusting your filters</p>
             </div>
           )}
         </div>
@@ -797,47 +918,83 @@ export default function Home() {
 
 
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-0 z-40 bg-black pt-20 px-4 md:hidden"
-          >
-            <div className="flex flex-col gap-4 text-lg font-display uppercase">
-              <Link href="/teams" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>Teams</Link>
+      {/* Mobile menu -- bottom sheet (BACKLOG-406, polish pass BACKLOG-410).
+          MenuRow gives every top-level item the same icon + label + chevron
+          shape BottomNav already uses elsewhere in the app, instead of the
+          plain text links the first pass shipped. */}
+      <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <SheetContent
+          side="bottom"
+          className="md:hidden max-h-[85vh] overflow-y-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
+        >
+          {/* Drag handle -- purely visual, signals "this sheet can be swiped
+              away" the way a native bottom sheet would; SheetContent's own
+              Radix-driven close (Escape/overlay/X) still does the real work. */}
+          <div className="mx-auto mt-1 h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+          <SheetHeader className="pb-2">
+            <SheetTitle className="font-display uppercase tracking-wide">Menu</SheetTitle>
+            <SheetDescription className="sr-only">Browse teams, players, competitions, lineup builder and news</SheetDescription>
+          </SheetHeader>
+          <nav aria-label="Main menu" className="flex flex-col px-2 pb-6">
+            <MenuRow href="/teams" icon={Users} label="Teams" onNavigate={() => setIsMenuOpen(false)} />
+            <MenuRow href="/players" icon={User} label="Players" onNavigate={() => setIsMenuOpen(false)} />
 
-              {/* Competition Links */}
-              <div className="space-y-2">
-                <Link href="/competitions" className="text-white/60 hover:text-white transition-colors block" onClick={() => setIsMenuOpen(false)}>All Competitions</Link>
-                {competitions.length > 0 && (
-                  <div className="pl-4 border-l border-white/10 space-y-2 py-1">
-                    {competitions.map((comp) => (
-                      <Link
-                        key={comp.id}
-                        href={comp.sport === 'Football' ? `/football?competition=${encodeURIComponent(comp.name)}` : comp.sport === 'Basketball' ? `/basketball?competition=${encodeURIComponent(comp.name)}` : `/competitions?competition=${encodeURIComponent(comp.name)}`}
-                        className="block text-sm text-white/40 hover:text-primary transition-colors truncate"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        {comp.name}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <Link href="/lineups" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
-                Lineup Builder
-                <span className="bg-primary text-black text-[10px] font-black px-2 py-0.5 rounded">NEW</span>
-              </Link>
-              <Link href="/news" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
+            {/* Competitions -- its own row plus the live sub-list, same icon
+                language, visually grouped by the left border + indent. */}
+            <div>
+              <MenuRow href="/competitions" icon={Trophy} label="All Competitions" onNavigate={() => setIsMenuOpen(false)} />
+              {competitions.length > 0 && (
+                <div className="ml-[1.375rem] pl-4 border-l border-border py-1">
+                  {competitions.map((comp) => (
+                    <Link
+                      key={comp.id}
+                      href={`/competitions/${comp.id}`}
+                      className="min-h-11 flex items-center text-sm font-medium text-foreground/50 hover:text-primary transition-colors"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <span className="truncate">{comp.name}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+            <div className="my-1 border-t border-border/60" />
+
+            {/* D3/BACKLOG-155: BACKLOG-406/407 already dropped the promotional
+                badge/tooltip treatment on this untested 🔴 High Volatility
+                feature; this now hides the row entirely when its flag is off,
+                since the page itself has zero gating of its own otherwise. */}
+            {isFeatureEnabled('features.lineupbuilder.enabled') && (
+              <MenuRow href="/lineup-builder" icon={ListChecks} label="Lineup Builder" onNavigate={() => setIsMenuOpen(false)} />
+            )}
+            <MenuRow href="/news" icon={Newspaper} label="News" onNavigate={() => setIsMenuOpen(false)} />
+          </nav>
+        </SheetContent>
+      </Sheet>
     </div>
     </>
+  );
+}
+
+// One row shape for every top-level item in the mobile menu sheet -- icon,
+// label, chevron -- so the sheet reads as a real menu instead of a plain link
+// list. `onNavigate` closes the sheet; Next's <Link> handles the navigation.
+function MenuRow({ href, icon: Icon, label, onNavigate }: {
+  href: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className="min-h-11 px-2 flex items-center gap-3 rounded-xl text-foreground/80 hover:bg-muted hover:text-foreground active:bg-muted/70 transition-colors"
+    >
+      <Icon size={18} className="text-foreground/50 shrink-0" />
+      <span className="flex-1 font-display uppercase tracking-wide">{label}</span>
+      <ChevronRight size={16} className="text-foreground/30 shrink-0" />
+    </Link>
   );
 }

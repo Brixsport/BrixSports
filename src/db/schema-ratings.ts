@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // Player Ratings Table
@@ -22,21 +22,41 @@ export const playerRatings = sqliteTable('player_ratings', {
     // Man of the Match
     isMotM: integer('is_motm', { mode: 'boolean' }).default(false),
 
-    // Rating breakdown (for transparency)
-    ratingBreakdown: text('rating_breakdown', { mode: 'json' }).$type<{
-        goals: number;
-        assists: number;
-        eyePoints: number;
-        cards: number;
-        shots: number;
-        fouls: number;
-        positionBonus: number;
-    }>(),
+    // Rating breakdown (for transparency). Shape is sport-dependent — football
+    // writes the first shape, basketball (BACKLOG-255) writes the second. No UI
+    // currently reads individual fields off this column (grep-confirmed), so the
+    // union costs nothing at the type level and models what's actually stored.
+    ratingBreakdown: text('rating_breakdown', { mode: 'json' }).$type<
+        | {
+              goals: number;
+              assists: number;
+              eyePoints: number;
+              cards: number;
+              shots: number;
+              fouls: number;
+              positionBonus: number;
+          }
+        | {
+              scoring: number;
+              rebounds: number;
+              assists: number;
+              steals: number;
+              blocks: number;
+              turnovers: number;
+              fouls: number;
+              eyePoints: number;
+          }
+    >(),
 
     // Timestamps
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
-});
+}, (table) => ({
+    // One rating row per player per match. The rating upsert in ratingsService.ts
+    // uses this as its conflict target, and it stops two concurrent calculations
+    // from inserting duplicates. The index already exists in the database.
+    matchPlayerUnique: uniqueIndex('player_ratings_match_player_unique').on(table.matchId, table.playerId),
+}));
 
 // Rating History (track changes over time during match)
 export const ratingHistory = sqliteTable('rating_history', {
@@ -69,7 +89,11 @@ export const teamRatings = sqliteTable('team_ratings', {
     // Timestamps
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
-});
+}, (table) => ({
+    // One team rating row per team per match; conflict target of the team rating
+    // upsert in ratingsService.ts. The index already exists in the database.
+    matchTeamUnique: uniqueIndex('team_ratings_match_team_unique').on(table.matchId, table.teamId),
+}));
 
 // Import matches and players tables
 import { matches } from './schema';

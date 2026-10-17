@@ -1,28 +1,32 @@
 import { NextRequest } from 'next/server';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+import { env } from '@/lib/env';
 
 /**
- * In-memory, per-IP fixed-window rate limiter for public GET endpoints.
- * Same tradeoff as loggers/auth/route.ts's own rate limit (BUG-053).
+ * Per-IP rate limiter. Upstash-backed (shared across all instances) ONLY when
+ * a call site opts in with `distributed: true` AND UPSTASH_REDIS_REST_URL/
+ * _TOKEN are set; every other call falls back to the in-memory, per-instance
+ * Map (local dev, Upstash unset, a Redis error, or just not opted in).
  *
- * WEAKER IN PRACTICE THAN IT LOOKS -- confirmed empirically, not just a
- * theoretical caveat (session 53, 2026-08-20): a clean sequential test
- * against a route Vercel had already scaled to multiple warm instances (from
- * an earlier burst test) got load-balanced across that whole warm pool --
- * each instance keeps its own separate `buckets` Map, so no single instance's
- * counter ever approached the limit, and 70 sequential requests against a
- * 60/min ceiling all returned 200. The identical BUG-053 pattern DID
- * correctly 429 in the same session, but only on a route that hadn't been
- * burst-tested yet and so had very few warm instances. In other words: this
- * degrades exactly under the burst/scale traffic pattern it exists to catch,
- * not just on a cold start. It still raises the bar against a naive
- * single-connection scraper, but do not treat it as real protection against
- * a parallel-capable attacker or a real traffic spike -- that needs a shared
- * external store (Redis/Upstash), not module-level memory.
+ * `distributed: true` is reserved for the auth-adjacent, low-traffic write
+ * endpoints (login/register/forgot-password, competitions/register) where
+ * real brute-force/spam protection across Vercel's warm-instance pool
+ * actually matters (BACKLOG-080). The high-traffic public GET routes
+ * (matches, players, teams, search, news, competitions, livestreams) stay
+ * on in-memory on purpose -- they were already accepting that tradeoff
+ * before this migration (BUG-053), and they're hit far more often than the
+ * auth routes, so routing them through Redis too would burn through
+ * Upstash's free-tier command quota for close to zero added security value
+ * (a scraper landing on the "wrong" warm instance mid-burst, not a
+ * brute-force/credential-stuffing risk).
+ *
+ * The in-memory fallback has the same known weakness the old pure-Map
+ * implementation always had: each warm Vercel instance keeps its own Map,
+ * so it under-counts against a burst spread across multiple instances
+ * (confirmed session 53, 2026-08-20). Acceptable for the public GET routes
+ * per the above; that's why the auth routes opt into the real Upstash fix.
  */
-const buckets = new Map<string, { count: number; resetAt: number }>();
-
-const DEFAULT_MAX = 120;
-const DEFAULT_WINDOW_MS = 60 * 1000; // 1 minute
 
 // Vercel's edge network always overwrites client-supplied x-forwarded-for before this
 // runs, so this is not client-spoofable on this deployment target. If ever deployed
@@ -37,16 +41,54 @@ export interface RateLimitResult {
     retryAfterSeconds?: number;
 }
 
-export function checkRateLimit(
-    request: NextRequest | Request,
-    opts?: { max?: number; windowMs?: number }
-): RateLimitResult {
-    const max = opts?.max ?? DEFAULT_MAX;
-    const windowMs = opts?.windowMs ?? DEFAULT_WINDOW_MS;
-    const ip = getClientIp(request);
-    const now = Date.now();
+const DEFAULT_MAX = 120;
+const DEFAULT_WINDOW_MS = 60 * 1000; // 1 minute
 
-    const cur = buckets.get(ip);
+const redis =
+    env.upstashRedisUrl && env.upstashRedisToken
+        ? new Redis({ url: env.upstashRedisUrl, token: env.upstashRedisToken })
+        : null;
+
+// One Ratelimit instance per distinct (max, windowMs) pair, since the SDK bakes
+// the algorithm's config into the instance rather than accepting it per call.
+const limiters = new Map<string, Ratelimit>();
+
+function getLimiter(max: number, windowMs: number): Ratelimit {
+    const key = `${max}:${windowMs}`;
+    let limiter = limiters.get(key);
+    if (!limiter) {
+        limiter = new Ratelimit({
+            redis: redis!,
+            limiter: Ratelimit.slidingWindow(max, `${windowMs} ms`),
+            prefix: 'brixsports-rl',
+        });
+        limiters.set(key, limiter);
+    }
+    return limiter;
+}
+
+// Route path, not just ip+config -- two DIFFERENT routes calling this with the
+// same (max, windowMs) shape (e.g. login and forgot-password both 5/15min)
+// would otherwise share one counter. Confirmed live on staging 2026-09-01:
+// exhausting login's budget also 429'd forgot-password, which nothing had
+// even called yet, before this was added.
+function getPathname(request: NextRequest | Request): string {
+    try {
+        return new URL(request.url).pathname;
+    } catch {
+        return 'unknown-path';
+    }
+}
+
+// Keyed by path + ip + the specific (max, windowMs) config, not just ip --
+// otherwise two routes with different limits calling this on the same
+// visitor IP would share one counter (the original in-memory-only version
+// had this bug).
+const buckets = new Map<string, { count: number; resetAt: number }>();
+
+function checkInMemory(bucketKey: string, max: number, windowMs: number): RateLimitResult {
+    const now = Date.now();
+    const cur = buckets.get(bucketKey);
     if (cur && now < cur.resetAt) {
         if (cur.count >= max) {
             return { limited: true, retryAfterSeconds: Math.ceil((cur.resetAt - now) / 1000) };
@@ -54,7 +96,135 @@ export function checkRateLimit(
         cur.count += 1;
         return { limited: false };
     }
-
-    buckets.set(ip, { count: 1, resetAt: now + windowMs });
+    buckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
     return { limited: false };
+}
+
+export async function checkRateLimit(
+    request: NextRequest | Request,
+    opts?: { max?: number; windowMs?: number; distributed?: boolean }
+): Promise<RateLimitResult> {
+    const max = opts?.max ?? DEFAULT_MAX;
+    const windowMs = opts?.windowMs ?? DEFAULT_WINDOW_MS;
+    const ip = getClientIp(request);
+    // Method too, not just path -- forgot-password's POST (request reset) and
+    // PATCH (apply reset) share a path but are distinct actions; sharing a
+    // budget would let requesting a reset burn the attempts needed to apply it.
+    const bucketKey = `${request.method}:${getPathname(request)}:${ip}:${max}:${windowMs}`;
+
+    if (!redis || !opts?.distributed) {
+        return checkInMemory(bucketKey, max, windowMs);
+    }
+
+    try {
+        const result = await getLimiter(max, windowMs).limit(bucketKey);
+        if (!result.success) {
+            const retryAfterSeconds = Math.max(1, Math.ceil((result.reset - Date.now()) / 1000));
+            return { limited: true, retryAfterSeconds };
+        }
+        return { limited: false };
+    } catch (err) {
+        // Redis unreachable -- fail open to the in-memory limiter rather than
+        // blocking every request or letting every request through unchecked.
+        console.error('[rate-limit] Upstash error, falling back to in-memory:', err);
+        return checkInMemory(bucketKey, max, windowMs);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Failure-only limiter (login-style endpoints)
+//
+// checkRateLimit above counts every request. For credential endpoints that
+// punishes the wrong people: a campus NAT shares one IP, and successful logins
+// would burn the budget that exists for guessing. This limiter only counts
+// failures, checked before the work and recorded after a failed attempt, and a
+// success can clear its counter. Callers build `subject` (for example
+// `ip:1.2.3.4` or `email:a@b.c`) so one endpoint can apply an IP key and a
+// per-account key independently.
+//
+// Fixed window: the first failure starts the window, it ends `windowMs` later.
+// Backed by Upstash when `distributed` and Redis is configured, otherwise (or on
+// a Redis error) by the per-instance Map, same fallback as checkRateLimit.
+// ---------------------------------------------------------------------------
+
+export interface FailureLimitOpts {
+    max: number;
+    windowMs: number;
+    distributed?: boolean;
+}
+
+const failureBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function failureKey(scope: string, subject: string): string {
+    return `brixsports-fail:${scope}:${subject}`;
+}
+
+function useRedis(opts: FailureLimitOpts): boolean {
+    return !!redis && !!opts.distributed;
+}
+
+export async function isFailureLimited(
+    scope: string,
+    subject: string,
+    opts: FailureLimitOpts
+): Promise<RateLimitResult> {
+    const key = failureKey(scope, subject);
+    if (useRedis(opts)) {
+        try {
+            const count = Number((await redis!.get(key)) ?? 0);
+            if (count >= opts.max) {
+                const ttlMs = await redis!.pttl(key);
+                return { limited: true, retryAfterSeconds: Math.max(1, Math.ceil((ttlMs > 0 ? ttlMs : opts.windowMs) / 1000)) };
+            }
+            return { limited: false };
+        } catch (err) {
+            console.error('[rate-limit] Upstash error, falling back to in-memory:', err);
+        }
+    }
+    const cur = failureBuckets.get(key);
+    const now = Date.now();
+    if (cur && now < cur.resetAt && cur.count >= opts.max) {
+        return { limited: true, retryAfterSeconds: Math.max(1, Math.ceil((cur.resetAt - now) / 1000)) };
+    }
+    return { limited: false };
+}
+
+export async function recordFailure(scope: string, subject: string, opts: FailureLimitOpts): Promise<void> {
+    const key = failureKey(scope, subject);
+    if (useRedis(opts)) {
+        try {
+            const count = await redis!.incr(key);
+            if (count === 1) await redis!.pexpire(key, opts.windowMs);
+            return;
+        } catch (err) {
+            console.error('[rate-limit] Upstash error, falling back to in-memory:', err);
+        }
+    }
+    const now = Date.now();
+    const cur = failureBuckets.get(key);
+    if (cur && now < cur.resetAt) {
+        cur.count += 1;
+    } else {
+        failureBuckets.set(key, { count: 1, resetAt: now + opts.windowMs });
+    }
+}
+
+export async function clearFailures(scope: string, subject: string, opts: FailureLimitOpts): Promise<void> {
+    const key = failureKey(scope, subject);
+    failureBuckets.delete(key);
+    if (useRedis(opts)) {
+        try {
+            await redis!.del(key);
+        } catch (err) {
+            console.error('[rate-limit] Upstash error clearing failures:', err);
+        }
+    }
+}
+
+export function ipSubject(request: NextRequest | Request): string {
+    return `ip:${getClientIp(request)}`;
+}
+
+export function emailSubject(email: string): string {
+    return `email:${email.trim().toLowerCase()}`;
 }

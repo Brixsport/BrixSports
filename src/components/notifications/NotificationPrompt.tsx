@@ -104,7 +104,7 @@ export function NotificationPrompt({ isOpen, onClose }: NotificationPromptProps)
                         initial={{ scale: 0.9, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                        className="relative w-full max-w-md bg-gradient-to-br from-[#0A0A0A] to-black border border-white/10 rounded-3xl p-8 shadow-2xl overflow-hidden"
+                        className="relative w-full max-w-md bg-card border border-border rounded-3xl p-8 shadow-2xl overflow-hidden"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Background glow */}
@@ -114,7 +114,7 @@ export function NotificationPrompt({ isOpen, onClose }: NotificationPromptProps)
                         {/* Close button */}
                         <button
                             onClick={handleDismiss}
-                            className="absolute top-4 right-4 p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                            className="absolute top-4 right-4 p-2 text-foreground/40 hover:text-foreground hover:bg-muted rounded-full transition-all"
                         >
                             <X size={20} />
                         </button>
@@ -127,7 +127,7 @@ export function NotificationPrompt({ isOpen, onClose }: NotificationPromptProps)
                                     {isSubscribed ? (
                                         <CheckCircle2 size={48} className="text-primary" />
                                     ) : pushPermission === 'denied' ? (
-                                        <Bell size={48} className="text-white/40" />
+                                        <Bell size={48} className="text-foreground/40" />
                                     ) : (
                                         <BellRing size={48} className="text-primary animate-pulse" />
                                     )}
@@ -137,10 +137,10 @@ export function NotificationPrompt({ isOpen, onClose }: NotificationPromptProps)
 
                         {/* Content */}
                         <div className="text-center relative z-10">
-                            <h3 className="text-2xl font-display uppercase italic text-white mb-2">
+                            <h3 className="text-2xl font-display uppercase italic text-foreground mb-2">
                                 {isSubscribed ? 'You\'re All Set!' : 'Never Miss a Goal'}
                             </h3>
-                            <p className="text-white/60 leading-relaxed mb-6">
+                            <p className="text-foreground/60 leading-relaxed mb-6">
                                 {isSubscribed
                                     ? 'You\'ll now receive instant notifications for goals, match starts, and final scores.'
                                     : 'Get instant alerts when your favorite teams score, matches start, or big moments happen.'}
@@ -149,19 +149,19 @@ export function NotificationPrompt({ isOpen, onClose }: NotificationPromptProps)
                             {/* Benefits */}
                             {!isSubscribed && pushPermission !== 'denied' && (
                                 <div className="space-y-2 mb-6 text-left">
-                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                    <div className="flex items-center gap-3 text-sm text-foreground/60 bg-muted p-3 rounded-xl">
                                         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                                             <span className="text-primary text-xs">⚽</span>
                                         </div>
                                         <span>Goal alerts in real-time</span>
                                     </div>
-                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                    <div className="flex items-center gap-3 text-sm text-foreground/60 bg-muted p-3 rounded-xl">
                                         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                                             <span className="text-primary text-xs">🏆</span>
                                         </div>
                                         <span>Match start & final scores</span>
                                     </div>
-                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                    <div className="flex items-center gap-3 text-sm text-foreground/60 bg-muted p-3 rounded-xl">
                                         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                                             <span className="text-primary text-xs">🔔</span>
                                         </div>
@@ -181,7 +181,7 @@ export function NotificationPrompt({ isOpen, onClose }: NotificationPromptProps)
                                 </Button>
                             ) : pushPermission === 'denied' ? (
                                 <div className="space-y-3">
-                                    <p className="text-sm text-white/40">
+                                    <p className="text-sm text-foreground/40">
                                         Notifications are blocked in your browser settings.
                                     </p>
                                     <Button
@@ -209,7 +209,7 @@ export function NotificationPrompt({ isOpen, onClose }: NotificationPromptProps)
                                     </Button>
                                     <button
                                         onClick={handleDismiss}
-                                        className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors py-2"
+                                        className="text-foreground/40 hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors py-2"
                                     >
                                         Maybe Later
                                     </button>

@@ -5,11 +5,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations, squadPlayers } from '@/db/schema';
+import { teams, players, matches, basketballPlayerStats, footballPlayerStats, playerTeamAffiliations, squadPlayers } from '@/db/schema';
 import { eq, or, desc, and, sql, inArray } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
 import { getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
 import { getAuthUser } from '@/lib/auth';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
+import { getTeamCompetitionStats, getTeamCompetitionSeasons } from '@/lib/standingsService';
 
 interface RouteParams {
     params: Promise<{
@@ -29,6 +31,13 @@ export async function GET(
         const { id } = params;
         const { searchParams } = new URL(request.url);
         const competitionId = searchParams.get('competitionId');
+        // BACKLOG-375: deliberately separate from `competitionId` above -- that param
+        // scopes the SQUAD roster (an existing, unrelated admin feature). Reusing it
+        // for the Season Stats card would silently change squad-roster behavior for
+        // any caller that only meant to scope stats. 'all' spans every competition
+        // (+ friendlies); a specific id gates to just that competition; omitted means
+        // "resolve the default" (most recent season with real data) below.
+        const statsCompetitionIdParam = searchParams.get('statsCompetitionId');
 
         // Get team details
         const [team] = await db
@@ -58,7 +67,6 @@ export async function GET(
                         position: players.position,
                         avatar: players.image,
                         nationality: players.nationality,
-                        rating: players.rating,
                     }
                 })
                 .from(squadPlayers)
@@ -70,16 +78,24 @@ export async function GET(
                     )
                 )
                 .leftJoin(players, eq(squadPlayers.playerId, players.id))
-                .orderBy(desc(players.rating))
                 .all();
+
+            // BACKLOG-253: real career rating, batched -- players.rating is a
+            // frozen legacy default, both for display and for the sort below
+            // (previously sorted by the same frozen field).
+            const squadRatingSummaries = await getPlayerRatingSummaries(
+                squad.filter(s => s.player !== null).map(s => s.player!.id)
+            );
 
             teamPlayers = squad
                 .filter(s => s.player !== null)
                 .map(s => ({
                     ...s.player,
+                    rating: squadRatingSummaries.get(s.player!.id)?.averageRating ?? null,
                     squadRole: s.squadPlayer.role,
                     squadNumber: s.squadPlayer.squadNumber,
-                }));
+                }))
+                .sort((a, b) => (b.rating ?? -Infinity) - (a.rating ?? -Infinity));
 
             squadInfo = {
                 competitionId,
@@ -96,15 +112,34 @@ export async function GET(
                         eq(playerTeamAffiliations.teamId, id),
                         eq(playerTeamAffiliations.isActive, true)
                     )
-                )
-                .orderBy(desc(players.rating));
+                );
 
-            teamPlayers = teamPlayerRows.map(row => toPublicPlayer(row.player, isAdmin));
+            // BACKLOG-253: real career rating, batched -- same reasoning as
+            // the squad branch above.
+            const affiliationRatingSummaries = await getPlayerRatingSummaries(
+                teamPlayerRows.map(row => row.player.id)
+            );
+
+            teamPlayers = teamPlayerRows
+                .map(row => ({
+                    ...toPublicPlayer(row.player, isAdmin),
+                    rating: affiliationRatingSummaries.get(row.player.id)?.averageRating ?? null,
+                }))
+                .sort((a: any, b: any) => (b.rating ?? -Infinity) - (a.rating ?? -Infinity));
         }
 
         // UNIVERSITY POOL — all students eligible to represent this university
         // Football analogy: all Spaniards (university affiliation) who can play for Spain (University Team)
-        let universityPlayers: typeof teamPlayers = [];
+        // BACKLOG-261: NOT narrowed to a DB-level `WHERE university = X` filter,
+        // deliberately -- getResolvedInstitutionalData() resolves university
+        // with priority (org affiliation name > players.university column >
+        // team.university fallback), which can legitimately differ from the
+        // raw column. A naive DB filter on the raw column would silently drop
+        // or wrongly include players. Fetch-all-then-resolve is kept exactly
+        // as before for correctness; only the OUTPUT shape is narrowed below,
+        // to the 4 fields TeamDetailClient.tsx:486-506 actually renders
+        // (grep-confirmed against every consumer of this route).
+        let universityPlayers: Array<{ id: string; name: string; number: number; position: string }> = [];
         if (team.university && !competitionId) {
             const allPlayers = await db
                 .select()
@@ -114,27 +149,81 @@ export async function GET(
             const enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
             universityPlayers = enrichedPlayers
                 .filter((player) => getResolvedInstitutionalData(player, player.team).university === team.university)
-                .map(({ team: _team, ...player }) => toPublicPlayer(player, isAdmin));
+                .map((player) => ({
+                    id: player.id,
+                    name: player.name,
+                    number: player.number,
+                    position: player.position,
+                }));
         }
 
-        // Get player stats (Basketball)
+        // BACKLOG-375: season/competition scope for both the stats card below AND
+        // the per-player stats attached here -- resolved once, shared by both, so a
+        // selected season stays consistent across the whole page. Resolution order:
+        // explicit `statsCompetitionId` param > most recent competition/season with a
+        // real FINISHED match for this team > 'all' (team has none yet).
+        const teamSeasons = await getTeamCompetitionSeasons(id, team.sport);
+        const resolvedStatsCompetitionId: string | 'all' =
+            statsCompetitionIdParam || teamSeasons[0]?.competitionId || 'all';
+
+        // Get player stats -- BACKLOG-375: previously Basketball-only (football
+        // players on a team roster got zero `.stats`, confirmed a real gap, not by
+        // design -- no BACKLOG entry had ever called it out).
+        //
+        // Prefer-scoped-fallback-to-any, NOT a strict competitionId gate: a direct DB
+        // check (2026-09-10) found 202 of 244 football_player_stats rows have
+        // `competitionId = NULL` -- including every Joga-Bonito player's row, despite
+        // real goals/appearances data existing. A strict `eq(competitionId, X)` filter
+        // would silently zero out real stats for exactly the players this fix is
+        // meant to surface. Filed as BACKLOG-376 (the backfill itself, not fixed
+        // here) -- this read-side fallback is the same shape as
+        // players/[id]/route.ts's pickEffectiveSeasonRows.
         let playersWithStats: typeof teamPlayers = teamPlayers;
-        if (team.sport === 'Basketball' && teamPlayers.length > 0) {
+        if (teamPlayers.length > 0) {
             const playerIds = teamPlayers.map((p: any) => p.id);
-            const statsData = await db
+            const statsTable = team.sport === 'Basketball' ? basketballPlayerStats : footballPlayerStats;
+            const allStatsData = await db
                 .select()
-                .from(basketballPlayerStats)
-                .where(inArray(basketballPlayerStats.playerId, playerIds));
+                .from(statsTable)
+                .where(inArray(statsTable.playerId, playerIds));
 
             playersWithStats = teamPlayers.map((p: any) => {
-                const s = statsData.find((sd: any) => sd.playerId === p.id);
-                return { ...p, stats: s || null };
+                const playerRows = allStatsData.filter((sd: any) => sd.playerId === p.id);
+                const scoped = resolvedStatsCompetitionId !== 'all'
+                    ? playerRows.filter((sd: any) => sd.competitionId === resolvedStatsCompetitionId)
+                    : [];
+                const pool = scoped.length > 0 ? scoped : playerRows;
+                const s = pool.length > 0
+                    ? [...pool].sort((a: any, b: any) =>
+                        new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime())[0]
+                    : null;
+                return { ...p, stats: s };
             });
         }
 
+        // BACKLOG-261: explicit allow-list -- every matches column except the
+        // 5 CLAUDE.md-banned fields plus everything else TeamDetailClient.tsx
+        // doesn't read (grep-confirmed: id, startTime, isHome (computed),
+        // status, homeScore, awayScore, competition, venue, opponent.name,
+        // opponent.shortName -- the only fields read across both the recent
+        // and upcoming sections). homeTeamId/awayTeamId kept in the query
+        // (needed to compute isHome/opponent) but dropped from the final
+        // shape below.
+        const TEAM_MATCH_FIELDS = {
+            id: matches.id,
+            homeTeamId: matches.homeTeamId,
+            awayTeamId: matches.awayTeamId,
+            status: matches.status,
+            homeScore: matches.homeScore,
+            awayScore: matches.awayScore,
+            startTime: matches.startTime,
+            venue: matches.venue,
+            competition: matches.competition,
+        };
+
         // Get recent matches (last 10)
         const recentMatches = await db
-            .select()
+            .select(TEAM_MATCH_FIELDS)
             .from(matches)
             .where(
                 or(
@@ -147,7 +236,7 @@ export async function GET(
 
         // Get upcoming matches (next 10)
         const upcomingMatches = await db
-            .select()
+            .select(TEAM_MATCH_FIELDS)
             .from(matches)
             .where(
                 and(
@@ -161,64 +250,53 @@ export async function GET(
             .orderBy(matches.startTime)
             .limit(10);
 
-        // Fetch opponent details for matches
-        const enrichMatches = async (matchList: any[]) => {
-            return Promise.all(
-                matchList.map(async (match) => {
-                    const isHome = match.homeTeamId === id;
-                    const opponentId = isHome ? match.awayTeamId : match.homeTeamId;
+        // BACKLOG-261: batch the opponent lookup into one query instead of
+        // one per match (was a real N+1 across up to 20 matches).
+        const opponentIds = Array.from(new Set(
+            [...recentMatches, ...upcomingMatches].map(m => m.homeTeamId === id ? m.awayTeamId : m.homeTeamId)
+        ));
+        const opponentTeams = opponentIds.length > 0
+            ? await db
+                .select({ id: teams.id, name: teams.name, shortName: teams.shortName })
+                .from(teams)
+                .where(inArray(teams.id, opponentIds))
+            : [];
+        const opponentMap = new Map(opponentTeams.map(t => [t.id, { name: t.name, shortName: t.shortName }]));
 
-                    const [opponent] = await db
-                        .select()
-                        .from(teams)
-                        .where(eq(teams.id, opponentId));
+        const enrichMatches = (matchList: typeof recentMatches) =>
+            matchList.map(({ homeTeamId, awayTeamId, homeScore, awayScore, ...match }) => {
+                const isHome = homeTeamId === id;
+                const opponentId = isHome ? awayTeamId : homeTeamId;
+                return {
+                    ...match,
+                    // homeScore/awayScore are nullable columns; every downstream
+                    // consumer (stats/form calc below, TeamDetailClient.tsx)
+                    // does numeric comparisons assuming a real score.
+                    homeScore: homeScore ?? 0,
+                    awayScore: awayScore ?? 0,
+                    isHome,
+                    opponent: opponentMap.get(opponentId) ?? null,
+                };
+            });
 
-                    return {
-                        ...match,
-                        isHome,
-                        opponent,
-                    };
-                })
-            );
-        };
+        const enrichedRecent = enrichMatches(recentMatches);
+        const enrichedUpcoming = enrichMatches(upcomingMatches);
 
-        const enrichedRecent = await enrichMatches(recentMatches);
-        const enrichedUpcoming = await enrichMatches(upcomingMatches);
+        // Calculate team statistics -- BACKLOG-375 (season-scoped "Season Stats" card).
+        // Reads fresh from `matches` via standingsService's getTeamCompetitionStats,
+        // NOT from summed `standings` rows: `standings` intentionally excludes
+        // knockout-round matches (BACKLOG-275, correct for a league table), which
+        // made a team's own season summary silently drop any Cup run (confirmed live,
+        // Joga-Bonito: 3 group games in `standings` vs 6 real FINISHED matches
+        // including a Quarter-Final/Semifinal/Final run). This card answers "what did
+        // the team actually do," not "what does the group table say." teamSeasons /
+        // resolvedStatsCompetitionId were already resolved above (shared with the
+        // per-player stats block so both stay in sync on the same selected season).
+        const stats = await getTeamCompetitionStats(id, team.sport, resolvedStatsCompetitionId);
 
-        // Calculate team statistics
-        // Use stored stats from database if they exist, otherwise calculate from recent matches
+        // "Recent form" strip is intentionally NOT scoped to resolvedStatsCompetitionId --
+        // it's the team's actual last 5 games played, any competition, same as before.
         const finishedMatches = enrichedRecent.filter(m => m.status === 'FINISHED');
-
-        // Check if team has stored stats (played field is not null/undefined)
-        const useStoredStats = team.played !== null && team.played !== undefined;
-
-        const stats = {
-            played: useStoredStats ? (team.played ?? 0) : finishedMatches.length,
-            won: useStoredStats ? (team.won ?? 0) : finishedMatches.filter(m => {
-                if (m.isHome) return m.homeScore > m.awayScore;
-                return m.awayScore > m.homeScore;
-            }).length,
-            drawn: useStoredStats ? (team.drawn ?? 0) : finishedMatches.filter(m => m.homeScore === m.awayScore).length,
-            lost: useStoredStats ? (team.lost ?? 0) : finishedMatches.filter(m => {
-                if (m.isHome) return m.homeScore < m.awayScore;
-                return m.awayScore < m.homeScore;
-            }).length,
-            goalsFor: useStoredStats ? (team.goalsFor ?? 0) : finishedMatches.reduce((sum, m) => {
-                return sum + (m.isHome ? m.homeScore : m.awayScore);
-            }, 0),
-            goalsAgainst: useStoredStats ? (team.goalsAgainst ?? 0) : finishedMatches.reduce((sum, m) => {
-                return sum + (m.isHome ? m.awayScore : m.homeScore);
-            }, 0),
-            goalDifference: 0,
-            points: useStoredStats ? (team.points ?? 0) : 0 // Add points
-        };
-
-        if (!useStoredStats) {
-            // Basic points calculation if not stored
-            stats.points = (stats.won * (team.sport === 'Basketball' ? 2 : 3)) + (stats.drawn * 1);
-        }
-
-        stats.goalDifference = stats.goalsFor - stats.goalsAgainst;
 
         // Get form (last 5 matches)
         const form = finishedMatches.slice(0, 5).map(m => {
@@ -245,6 +323,13 @@ export async function GET(
             stats,
             form,
             competitions,
+            // BACKLOG-375: drives the Season Stats card's selector. `all` is always a
+            // valid choice even when `seasons` is empty (a team with no FINISHED
+            // competition matches yet still gets a stats card, just all zeros).
+            statsSeasons: {
+                selected: resolvedStatsCompetitionId,
+                seasons: teamSeasons,
+            },
         });
     } catch (error) {
         console.error('Error fetching team details:', error);

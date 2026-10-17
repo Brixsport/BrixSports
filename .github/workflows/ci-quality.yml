@@ -1,0 +1,57 @@
+name: CI Quality Gate
+
+# next.config.ts sets ignoreBuildErrors, so a PR into dev/main could merge with
+# new type errors or a broken build. This job is DB-free and secret-free:
+#   1. tsc, failing only on errors NOT in scripts/tsc-baseline.txt
+#   2. vitest unit tests (vitest.config.ts includes tests/unit only)
+#   3. `npm run build` with harmless placeholder env, so a change that breaks
+#      `next build` (config, route modules, bundling) fails here and not on Vercel
+# Integration and smoke tests are deliberately NOT run here (they need staging
+# credentials); see smoke-test.yml.
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Typecheck (no new errors) + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck (fail on new errors vs scripts/tsc-baseline.txt)
+        run: node scripts/tsc-baseline-check.mjs
+
+      - name: Unit tests
+        run: npm test
+
+      # Placeholder values only: they satisfy module-level reads during page-data
+      # collection and are never used to reach a real service. No Sentry auth
+      # token is set, so no source maps are uploaded.
+      - name: Next build (placeholder env)
+        run: npm run build
+        env:
+          CI: 'true'
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_ENV: development
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          TURSO_CONNECTION_URL: libsql://build-placeholder.invalid
+          TURSO_AUTH_TOKEN: build-placeholder
+          JWT_SECRET: build-placeholder-secret

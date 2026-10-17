@@ -1,0 +1,93 @@
+name: Uptime Monitor
+
+# Probes the live site every 5 minutes (readiness with a database read, the live matches list and the
+# home page). A failure is retried three times before it counts. While the site is failing there is
+# one open issue labelled "incident" (the incident board: filter issues by that label); it is closed
+# with a recovery note when the checks pass again. The job also fails, so GitHub sends its usual
+# failed-workflow email. The summary names paths and status codes only, never the site address.
+#
+# Scheduled workflows run from the default branch, so this starts working once it is on main. It uses
+# the APP_URL secret (the production origin), the same one the reminder job uses.
+# GitHub may delay a scheduled run by several minutes under load; an external pinger on
+# /api/health/ready is the second line of defence.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime-monitor
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe the live site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run the checks
+        id: probe
+        continue-on-error: true
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          SUMMARY_FILE: ${{ runner.temp }}/uptime-summary.txt
+        run: node scripts/ci/uptime-check.mjs
+
+      - name: Open or update the incident issue
+        if: ${{ steps.probe.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUMMARY_FILE: ${{ runner.temp }}/uptime-summary.txt
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create incident --color B60205 --description "Live site outage" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          summary="$(cat "$SUMMARY_FILE" 2>/dev/null || echo 'The probe could not run (check the workflow log).')"
+          now="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          printf '%s\n\n%s\n\nRun: %s\n' "Checked at $now." "$summary" "$RUN_URL" > "$RUNNER_TEMP/incident-body.md"
+
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --label incident --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -z "$number" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --label incident \
+              --title "Uptime incident: the live site is failing health checks" \
+              --body-file "$RUNNER_TEMP/incident-body.md"
+          else
+            # One update per 30 minutes while it keeps failing, so the issue is not flooded.
+            last="$(gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json comments,createdAt --jq '(.comments[-1].createdAt // .createdAt)')"
+            age=$(( $(date -u +%s) - $(date -u -d "$last" +%s) ))
+            if [ "$age" -ge 1800 ]; then
+              gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/incident-body.md"
+            fi
+          fi
+
+      - name: Close the incident on recovery
+        if: ${{ steps.probe.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --label incident --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            now="$(date -u +'%Y-%m-%d %H:%M UTC')"
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "Recovered: all checks passed at $now. Run: $RUN_URL"
+          fi
+
+      - name: Fail the job when the site is down
+        if: ${{ steps.probe.outcome == 'failure' }}
+        run: |
+          echo "The live site failed its health checks."
+          exit 1

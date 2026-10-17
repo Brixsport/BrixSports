@@ -6,7 +6,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getClientErrorMessage } from '@/lib/client-error';
 import { useSocket } from '@/hooks/useWebSocket';
+import { compareStandings } from '@/lib/standingsSort';
 
 export interface StandingRow {
     position: number;
@@ -22,6 +24,8 @@ export interface StandingRow {
     goalsAgainst: number;
     goalDifference: number;
     points: number;
+    yellowCards: number;
+    redCards: number;
     groupName?: string | null;
     form: string[];
 }
@@ -82,18 +86,16 @@ export function useLiveStandings({
                     goalsAgainst: standing.goalsAgainst,
                     goalDifference: standing.goalDifference,
                     points: standing.points,
+                    yellowCards: standing.yellowCards ?? 0,
+                    redCards: standing.redCards ?? 0,
                     groupName: standing.groupName,
                     form: standing.form || [],
                 }))
-                .sort((a: StandingRow, b: StandingRow) => {
-                    if (b.points !== a.points) return b.points - a.points;
-                    if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-                    return b.goalsFor - a.goalsFor;
-                });
+                .sort(compareStandings);
 
             setStandings(transformedStandings);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            setError(getClientErrorMessage(err, 'An error occurred'));
         } finally {
             setLoading(false);
         }
@@ -105,11 +107,16 @@ export function useLiveStandings({
 
         socket.emit('join-competition', competitionId);
 
-        const handleStandingsUpdate = (data: { standings: StandingRow[] }) => {
+        // The shared socket also carries other competitions' updates; ignore a payload that names a
+        // different competition (a payload without an id is applied as before).
+        const handleStandingsUpdate = (data: { competitionId?: string; standings: StandingRow[] }) => {
+            if (data.competitionId !== undefined && data.competitionId !== competitionId) return;
+            if (!Array.isArray(data.standings)) return;
             setStandings(data.standings);
         };
 
-        const handleLiveMatches = (data: { matches: string[] }) => {
+        const handleLiveMatches = (data: { competitionId?: string; matches: string[] }) => {
+            if (data.competitionId !== undefined && data.competitionId !== competitionId) return;
             setLiveMatches(data.matches);
         };
 

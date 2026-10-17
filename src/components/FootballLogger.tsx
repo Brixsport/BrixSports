@@ -12,13 +12,41 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // silently and permanently break the queue) and never got it, since it lived
 // in a separate file. Importing from the shared module closes that gap here
 // too, for free, and removes the duplication.
-import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining, parseMatchEventSyncMessage, getQueuedEventCounts, clearFailedQueuedEvents } from '@/lib/admin-offline-queue';
+import { classifyEventPostStatus, describeEventRejection, extractErrorCode, scoresForFinalization } from '@/lib/event-post-outcome';
+import { requiresDecisiveResult } from '@/lib/matchRules';
+import { clockCheckpoint } from '@/lib/clock-checkpoint';
+import { getClientErrorMessage } from '@/lib/client-error';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import { getMatchStateManager, destroyMatchStateManager, MatchStateManager, MatchState, FootballEventType, MatchPeriod } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
+
+// BACKLOG-151: shared by both the 10s poll sync and the new real-time WS push
+// (see useMultiLogger's onIncomingEvent) -- one reconstruction path for
+// "SyncEvent from another logger" -> "local MatchEvent", not two copies that
+// could drift. manager.mergeExternalEvents() already dedupes by id.
+function reconstructMatchEventFromSync(s: SyncEvent, matchId: string, manager: MatchStateManager): any {
+    return {
+        id: s.id,
+        matchId,
+        type: s.type as any,
+        absoluteMinute: s.minute,
+        displayMinute: s.minute, // Approximation
+        second: s.second,
+        period: s.minute <= 45 ? 'FIRST_HALF' : 'SECOND_HALF', // Rough heuristic
+        playerId: s.playerId || null,
+        playerSnapshot: s.playerId ? manager.createPlayerSnapshot(s.playerId) : null,
+        relatedPlayerId: s.relatedPlayerId || null,
+        relatedPlayerSnapshot: s.relatedPlayerId ? manager.createPlayerSnapshot(s.relatedPlayerId) : null,
+        teamId: s.teamId,
+        detail: s.detail,
+        createdAt: s.timestamp instanceof Date ? s.timestamp : new Date(s.timestamp),
+        loggerId: s.loggerId,
+    };
+}
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
 
@@ -118,6 +146,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // never drift from the DB-authoritative shootoutHomeScore/shootoutAwayScore.
     const [showShootoutModal, setShowShootoutModal] = useState(false);
     const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | null>(null);
+    // BACKLOG-281: mirrors the server's own decisive-result check (matches/[id]/route.ts
+    // PATCH) so the logger sees this blocked before wasting a round-trip on a 422 --
+    // the server remains the actual source of truth, this is UX only.
+    const knockoutLevelBlock = requiresDecisiveResult(match.round) && homeScore === awayScore
+        && (currentPeriod !== 'PENALTY_SHOOTOUT' || (shootoutScore?.home ?? 0) === (shootoutScore?.away ?? 0));
     // BACKLOG-190: IFAB Law 10.3 -- "each kick is taken by a different player,
     // and all eligible players must take a kick before any player can take a
     // second kick." Tracks who has already kicked *this round* per team; once a
@@ -133,7 +166,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [pendingFoulPlayerId, setPendingFoulPlayerId] = useState<string | null>(null);
 
     // Pre-match States
-    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active'>('loading');
+    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active' | 'load_error'>('loading');
     const [lineups, setLineups] = useState<any>({ home: null, away: null });
     const [showCommsModal, setShowCommsModal] = useState(false);
     const [comms, setComms] = useState<any[]>([]);
@@ -141,20 +174,40 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const { user } = useAuth();
     const [showLineupEditModal, setShowLineupEditModal] = useState(false);
     const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BACKLOG-466 item 2: events the server rejected on replay (non-retryable 4xx) --
+    // kept in IndexedDB by the SW, never retried, surfaced here until dismissed.
+    const [failedQueuedCount, setFailedQueuedCount] = useState(0);
     // BUG-194 part 2: period-transition PATCH / undo DELETE retries, via the
     // separate pendingAdminChanges queue (mirrors BasketballLogger.tsx's own
     // BUG-142 fix exactly, same admin-offline-queue.ts module).
     const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
+    // Events the server refused on the live POST this session. They are rolled back
+    // locally, but while any exist the client score tally is not trusted for the
+    // final-whistle PATCH (see finalScoreFields).
+    const rejectedEventCount = useRef(0);
+    // The final-whistle PATCH only carries the client's score when every event was
+    // accepted; otherwise the server's own derived score stands.
+    const finalScoreFields = () => scoresForFinalization(homeScore, awayScore, {
+        pending: queuedOfflineCount,
+        failed: failedQueuedCount,
+        rejected: rejectedEventCount.current,
+    });
 
     // Listen for background-sync completion from sw-admin.js
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
         const handleMessage = (e: MessageEvent) => {
-            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
-                setQueuedOfflineCount(0);
+            // BACKLOG-466 item 2: SYNC_COMPLETE now means the queue is truly empty;
+            // SYNC_PARTIAL carries what is still pending / permanently failed.
+            const counts = parseMatchEventSyncMessage(e.data);
+            if (counts) {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
             } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
                 setQueuedAdminChangeCount(0);
+            } else if (e.data?.type === 'SYNC_PARTIAL' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(typeof e.data.remaining === 'number' ? e.data.remaining : 0);
             }
         };
         navigator.serviceWorker.addEventListener('message', handleMessage);
@@ -171,11 +224,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             navigator.serviceWorker.ready.then((reg) => {
                 if ('sync' in reg) {
                     const syncReg = reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } };
-                    syncReg.sync.register('sync-match-events').catch(() => {});
-                    syncReg.sync.register('sync-admin-changes').catch(() => {});
-                } else if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
-                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                    // `sync` can exist yet reject register() (Background Sync disabled by the
+                    // browser / privacy mode): fall back to the direct drain message, same as iOS.
+                    syncReg.sync.register('sync-match-events').catch(() => {
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    });
+                    syncReg.sync.register('sync-admin-changes').catch(() => {
+                        (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                    });
+                } else if (navigator.serviceWorker.controller ?? reg.active) {
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    (navigator.serviceWorker.controller ?? reg.active)?.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                 }
             }).catch(() => {});
         };
@@ -184,6 +243,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         };
         window.addEventListener('online', triggerDrain);
         document.addEventListener('visibilitychange', handleVisibility);
+        // BACKLOG-466 item 3: a killed tab / evicted iOS PWA leaves rows in IndexedDB
+        // that nothing drained on reopen (the listeners above only fire on a later
+        // online/visibility event) and queuedOfflineCount started at 0. Hydrate the
+        // badge from the store and drain once on mount.
+        getQueuedEventCounts()
+            .then((counts) => {
+                setQueuedOfflineCount(counts.pending);
+                setFailedQueuedCount(counts.failed);
+            })
+            .catch((err) => console.error('[FootballLogger] Could not read offline queue:', err));
+        triggerDrain();
         return () => {
             window.removeEventListener('online', triggerDrain);
             document.removeEventListener('visibilitychange', handleVisibility);
@@ -321,14 +391,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     useEffect(() => {
         let unsubscribe: (() => void) | null = null;
 
+        // BUG-241: none of these 4 fetches had a timeout, so a hang on any one
+        // of them (e.g. eligible-players on a match with an incomplete draft
+        // lineup) left the component on 'loading' forever with no error shown.
+        const fetchWithTimeout = (url: string, ms = 15000) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), ms);
+            return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+        };
+
         const init = async () => {
             try {
                 // Fetch teams, all players, and eligible players for this match
                 const [teamsRes, playersRes, lineupsRes, eligibleRes] = await Promise.all([
-                    fetch('/api/teams'),
-                    fetch('/api/players'),
-                    fetch(`/api/matches/${match.id}/lineup`),
-                    fetch(`/api/matches/${match.id}/eligible-players`)
+                    fetchWithTimeout('/api/teams'),
+                    fetchWithTimeout('/api/players'),
+                    fetchWithTimeout(`/api/matches/${match.id}/lineup`),
+                    fetchWithTimeout(`/api/matches/${match.id}/eligible-players`)
                 ]);
 
                 const teamsData = await teamsRes.json();
@@ -515,6 +594,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             } catch (err) {
                 console.error("Failed to init logger:", err);
                 setIsLoading(false);
+                setViewState('load_error');
             }
         };
 
@@ -556,7 +636,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const { absoluteMinute: minute, second, period } = matchState.clock;
 
         let half = 1;
-        let extraTime = 0;
+        const { minute: cappedMinute, extraTime } = clockCheckpoint(period, minute, matchState.halfDuration);
 
         if (period === 'SECOND_HALF') half = 2;
         else if (period === 'HALF_TIME') half = 1;
@@ -564,12 +644,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         else if (period === 'EXTRA_TIME_2') half = 4;
         else if (period === 'FINISHED') half = 2;
 
-        if (period === 'FIRST_HALF' && minute > 45) extraTime = minute - 45;
-        if (period === 'SECOND_HALF' && minute > 90) extraTime = minute - 90;
-
         const payload = {
             matchId: match.id,
-            minute: minute > 45 && period === 'FIRST_HALF' ? 45 : (minute > 90 && period === 'SECOND_HALF' ? 90 : minute),
+            minute: cappedMinute,
             extraTime,
             half,
             second,
@@ -642,6 +719,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
         enabled: !!currentLogger,
+        // BACKLOG-151: real-time arrival instead of waiting for the next 10s poll.
+        onIncomingEvent: (event) => {
+            const manager = stateManager.current;
+            if (!manager || event.loggerId === currentLogger?.id) return;
+            manager.mergeExternalEvents([reconstructMatchEventFromSync(event, match.id, manager)]);
+        },
     });
 
     // Periodic Sync
@@ -673,30 +756,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             try {
                 const merged = await syncEvents(syncableEvents);
 
-                // Convert back to MatchEvent
+                // Convert back to MatchEvent (dedup against already-held events is
+                // handled inside mergeExternalEvents itself, no need to duplicate it here)
                 const externalEvents: any[] = merged.map(s => {
-                    // Check if we already have it
                     const existing = currentEvents.find(ce => ce.id === s.id);
                     if (existing) return existing;
-
-                    // Reconstruct
-                    return {
-                        id: s.id,
-                        matchId: match.id,
-                        type: s.type as any,
-                        absoluteMinute: s.minute,
-                        displayMinute: s.minute, // Approximation
-                        second: s.second,
-                        period: s.minute <= 45 ? 'FIRST_HALF' : 'SECOND_HALF', // Rough heuristic
-                        playerId: s.playerId || null,
-                        playerSnapshot: s.playerId ? manager.createPlayerSnapshot(s.playerId) : null,
-                        relatedPlayerId: s.relatedPlayerId || null,
-                        relatedPlayerSnapshot: s.relatedPlayerId ? manager.createPlayerSnapshot(s.relatedPlayerId) : null,
-                        teamId: s.teamId,
-                        detail: s.detail,
-                        createdAt: s.timestamp instanceof Date ? s.timestamp : new Date(s.timestamp),
-                        loggerId: s.loggerId
-                    };
+                    return reconstructMatchEventFromSync(s, match.id, manager);
                 });
 
                 manager.mergeExternalEvents(externalEvents);
@@ -767,6 +832,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             // 2. Persist to API
             // Hoisted so catch block can queue the same payload on network failure.
             const payload = {
+                // BACKLOG-466 item 1: the client temp id doubles as the idempotency
+                // key -- the server adopts it as match_events.id and answers a replay
+                // (queued retry after a lost response) with the existing row.
+                id: event.id,
                 type: event.type,
                 minute: event.absoluteMinute,
                 second: event.second,
@@ -778,62 +847,112 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 loggerName: currentLogger?.name,
                 period: event.period,
             };
-            try {
-
-                const res = await fetch(`/api/matches/${match.id}/events`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (res.ok) {
-                    const saved = await res.json();
-                    if (saved.event && saved.event.id) {
-                        manager.confirmEvent(event.id, saved.event.id);
-                    }
-                } else {
-                    // Server rejection (4xx/5xx) — real error, not a connectivity issue.
-                    // Do NOT queue: the server received and rejected the event.
-                    const errBody = await res.json().catch(() => ({}));
-                    if (res.status === 401) {
-                        alert('Session expired — please log in again to continue logging.');
-                    } else if (res.status === 403) {
-                        alert('Not authorised to log events for this match. Contact admin.');
-                    } else {
-                        alert(`Event failed to save (${res.status}) — check connection and retry.`);
-                    }
-                    console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
-                }
-            } catch (e) {
-                // Network failure — server never received the event. Queue for background sync.
+            // BACKLOG-466 items 4/7: queue the payload for background replay (the
+            // client event id in `payload.id` makes a replay idempotent server-side).
+            // Every failure path now surfaces in the persistent banner (no blocking
+            // alert(), no console-only error). Returns true when the event is safely
+            // in the queue.
+            const queueForRetry = async (why: string): Promise<boolean> => {
                 const token = localStorage.getItem('authToken');
                 if (!token) {
                     // No token = no recovery path. Surface visibly rather than silently losing the event.
-                    console.error('[FootballLogger] Network error and no token available — event cannot be queued:', e);
-                    alert('Network error: could not save this event and no session found. Please re-login and re-log this event manually.');
-                    return;
+                    console.error('[FootballLogger] Cannot queue event, no token available:', why);
+                    setEventSaveError(`"${event.type}" was NOT saved (${why}) and no session was found to queue it. Please re-login and re-log this event.`);
+                    return false;
                 }
                 // JWT TTL is 7 days. Refuse to queue if < 30 min remaining —
                 // a drained sync with an expired token will 401 with no recovery path.
                 const QUEUE_MIN_TTL_SECONDS = 30 * 60;
                 if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
                     console.warn('[FootballLogger] Token expiring soon — refusing to queue offline event');
-                    alert('Your session is expiring soon. This event was NOT queued for offline sync — please re-login before continuing offline, then re-log this event.');
-                    return;
+                    setEventSaveError(`Session expiring soon - "${event.type}" was NOT saved or queued (${why}). Please re-login, then re-log this event.`);
+                    return false;
                 }
                 try {
                     await queueOfflineEvent(match.id, payload, token);
-                    setQueuedOfflineCount(prev => prev + 1);
+                } catch (queueErr) {
+                    console.error('[FootballLogger] Failed to queue event:', queueErr);
+                    setEventSaveError(`"${event.type}" was NOT saved (${why}) and could not be queued on this device either. Re-log it manually once you are back online.`);
+                    return false;
+                }
+                setQueuedOfflineCount(prev => prev + 1);
+                setEventSaveError(`"${event.type}" not saved yet (${why}) - queued, will sync automatically.`);
+                try {
                     if ('serviceWorker' in navigator) {
                         const reg = await navigator.serviceWorker.ready;
                         if ('sync' in reg) {
                             await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
                         }
                     }
-                    console.log('[FootballLogger] Event queued for background sync');
-                } catch (queueErr) {
-                    console.error('[FootballLogger] Failed to queue event:', queueErr);
+                } catch (syncErr) {
+                    // The row is safely in IndexedDB; the mount/online/visibility drain will pick it up.
+                    console.warn('[FootballLogger] Queued, but sync registration failed:', syncErr);
                 }
+                console.log('[FootballLogger] Event queued for background sync');
+                return true;
+            };
+
+            const postEvent = () => fetch(`/api/matches/${match.id}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            try {
+                let res = await postEvent();
+
+                // 401: one cookie-based refresh, then one retry. The refresh also
+                // re-stores localStorage.authToken, which the offline queue needs.
+                if (classifyEventPostStatus(res.status) === 'refresh-auth') {
+                    try {
+                        const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                        if (refreshRes.ok) {
+                            const refreshed = await refreshRes.json().catch(() => null);
+                            if (refreshed?.token) localStorage.setItem('authToken', refreshed.token);
+                            res = await postEvent();
+                        }
+                    } catch (refreshErr) {
+                        console.warn('[FootballLogger] Token refresh failed:', refreshErr);
+                    }
+                }
+
+                const action = classifyEventPostStatus(res.status);
+                if (action === 'saved') {
+                    const saved = await res.json().catch(() => null);
+                    if (saved?.event && saved.event.id) {
+                        manager.confirmEvent(event.id, saved.event.id);
+                    }
+                } else if (action === 'queue' || action === 'refresh-auth') {
+                    // 5xx/408/429 are transient, and a 401 that survived the refresh may
+                    // still clear after re-login: keep the event instead of dropping it.
+                    console.error('[FootballLogger] Event POST not saved, queueing:', res.status);
+                    await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`);
+                } else {
+                    // Non-retryable rejection (403, 409 finished, 422...). The server
+                    // received and refused it: queueing would only fail again. The local
+                    // score may now be ahead of the saved score until reconciled.
+                    const errBody = await res.json().catch(() => ({}));
+                    console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
+                    setEventSaveError(describeEventRejection(res.status, event.type, extractErrorCode(errBody)));
+                    // Take the refused event back out, by id: it is not saved, so it
+                    // must not keep counting towards the local score or the timeline.
+                    rejectedEventCount.current += 1;
+                    if (manager.undoEventById(event.id) && isSocketConnected) {
+                        const afterRollback = manager.getState();
+                        emit('event:undo', {
+                            matchId: match.id,
+                            eventId: event.id,
+                            score: afterRollback.score,
+                            stats: afterRollback.stats,
+                            lineups: afterRollback.lineups,
+                            teamRatings: afterRollback.teamRatings,
+                        });
+                    }
+                }
+            } catch (e) {
+                // Network failure — server never received the event. Queue for background sync.
+                console.error('[FootballLogger] Event POST failed (network):', e);
+                await queueForRetry('network error');
             }
         });
 
@@ -1039,7 +1158,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
         persistMatchPatch(
             isFinalWhistle
-                ? { currentPeriod: nextPeriod, status: 'FINISHED', homeScore, awayScore, stats: matchState?.stats }
+                ? { currentPeriod: nextPeriod, status: 'FINISHED', ...finalScoreFields(), stats: matchState?.stats }
                 : { currentPeriod: nextPeriod },
             isFinalWhistle ? 'match finalization' : `${nextPeriod} transition`
         );
@@ -1210,14 +1329,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 body: JSON.stringify({
                     status: 'FINISHED',
                     currentPeriod: 'FINISHED',
-                    homeScore,
-                    awayScore,
+                    ...finalScoreFields(),
                     stats: matchState?.stats
                 }),
             });
-            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            if (!res.ok) {
+                // BACKLOG-281: surface the real reason (e.g. a level knockout
+                // match rejected with KNOCKOUT_DRAW_NOT_ALLOWED) instead of a
+                // generic message -- the logger needs to know to use Extra
+                // Time/Penalties instead of retrying the same action.
+                const body = await res.json().catch(() => null);
+                throw new Error(body?.error || `Server returned ${res.status}`);
+            }
             // PATCH confirmed — transition local state to FINISHED
-            stateManager.current?.transitionStatus('FINISHED');
+            // (skipped when the final whistle already moved local state to FINISHED)
+            if (stateManager.current && stateManager.current.getState().clock.period !== 'FINISHED') {
+                stateManager.current.transitionStatus('FINISHED');
+            }
 
             // Sync status via socket immediately
             if (isSocketConnected) {
@@ -1235,7 +1363,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             alert('Match finalized.');
         } catch (e) {
             console.error(e);
-            alert('Error saving match result.');
+            // A raw fetch()/TypeError ("Failed to fetch") is not user-facing text --
+            // same BUG-198 shape as the client pages audit covered, just missed
+            // here since this file wasn't one of the originally flagged pages.
+            alert(getClientErrorMessage(e, 'Error saving match result.'));
         } finally {
             setIsSaving(false);
         }
@@ -1369,6 +1500,27 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         return (
             <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    if (viewState === 'load_error') {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-8 space-y-6">
+                <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                    <Activity size={48} className="text-red-500/60" />
+                </div>
+                <h2 className="text-2xl font-display italic uppercase">Failed to Load Match</h2>
+                <p className="text-white/40 text-center max-w-sm">
+                    Could not load this match's data — the connection may be slow or a request timed out. Check your connection and retry.
+                </p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="flex items-center gap-2 px-6 py-3 bg-primary text-black font-bold rounded-xl hover:scale-105 transition-transform"
+                >
+                    <Activity size={18} />
+                    Retry
+                </button>
             </div>
         );
     }
@@ -1559,22 +1711,39 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             "Sync Paused" state instead of implying anything isn't being saved. */}
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0">
                             <span className={`w-1.5 h-1.5 rounded-full ${!isConnected ? 'bg-red-500 animate-pulse' : isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-yellow-500 animate-pulse'}`} />
-                            <span className="text-[8px] font-black uppercase tracking-tighter opacity-60">
+                            <span className="text-[10px] font-black uppercase tracking-tighter opacity-80">
                                 {!isConnected ? 'Offline' : isSocketConnected ? 'Live Sync' : 'Sync Paused'}
                             </span>
                         </div>
                         {queuedOfflineCount > 0 && (
                             <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
                                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-orange-400">
                                     {queuedOfflineCount} Queued
                                 </span>
                             </div>
                         )}
+                        {failedQueuedCount > 0 && (
+                            <button
+                                type="button"
+                                title="These queued events were rejected by the server and were NOT saved. Re-log them manually, then tap to dismiss."
+                                onClick={() => {
+                                    clearFailedQueuedEvents()
+                                        .then(() => setFailedQueuedCount(0))
+                                        .catch((err) => console.error('[FootballLogger] Failed to clear rejected queue rows:', err));
+                                }}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-red-500/10 rounded-lg border border-red-500/40 shrink-0"
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-red-400">
+                                    {failedQueuedCount} Not Saved - Tap
+                                </span>
+                            </button>
+                        )}
                         {queuedAdminChangeCount > 0 && (
                             <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
                                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-orange-400">
                                     {queuedAdminChangeCount} Pending
                                 </span>
                             </div>
@@ -1712,16 +1881,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 if (!stateManager.current || isStartingMatch) return;
                                 setIsStartingMatch(true);
                                 try {
+                                    // BUG-242: status and currentPeriod used to go out as two sequential
+                                    // PATCHes (status first, awaited; currentPeriod second, fire-and-forget).
+                                    // Each PATCH broadcasts independently via its own after() hook, so a
+                                    // viewer's page could receive status:'LIVE' before currentPeriod ever
+                                    // arrived -- rendering "Match is currently live!" next to a stale
+                                    // "NOT STARTED" period badge for however long the second broadcast/poll
+                                    // took to land. Single atomic PATCH closes that window entirely.
                                     const res = await fetch(`/api/matches/${match.id}`, {
                                         method: 'PATCH',
                                         headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ status: 'LIVE' }),
+                                        body: JSON.stringify({ status: 'LIVE', currentPeriod: 'FIRST_HALF' }),
                                     });
                                     if (!res.ok) throw new Error(`Server returned ${res.status}`);
                                     // PATCH confirmed — now transition local state and start the clock
                                     stateManager.current.transitionStatus('FIRST_HALF');
-                                    // Persist period to DB — non-blocking
-                                    persistMatchPatch({ currentPeriod: 'FIRST_HALF' }, 'First Half start');
                                     // MATCH_START notification now sent server-side from matches/[id]/route.ts's
                                     // PATCH handler when currentPeriod transitions to FIRST_HALF — this client
                                     // fetch was double-sending it (BUG-204 sweep), removed.
@@ -1786,8 +1960,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     )}
 
                     {currentPeriod !== 'NOT_STARTED' && (
-                        <button onClick={handleFinalize} disabled={isSaving}
-                            className="py-2.5 px-4 bg-white/5 border border-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                        <button onClick={handleFinalize} disabled={isSaving || knockoutLevelBlock}
+                            title={knockoutLevelBlock ? 'Knockout match is level -- use Extra Time or Penalties to reach a decisive result' : undefined}
+                            className="py-2.5 px-4 bg-white/5 border border-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform disabled:opacity-30 disabled:cursor-not-allowed">
                             {isSaving ? '...' : '🏁 End'}
                         </button>
                     )}
@@ -2087,11 +2262,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                         }
                                     }
                                 } else {
-                                    alert(`Shootout kick failed to save (${res.status}) — check connection and retry.`);
+                                    setEventSaveError(`Shootout kick was NOT saved (error ${res.status}) - check connection and retry.`);
                                 }
                             } catch (e) {
                                 console.error('[FootballLogger] Shootout kick POST failed:', e);
-                                alert('Network error: could not save this kick. Please retry.');
+                                setEventSaveError('Network error: this shootout kick was NOT saved. Please retry.');
                             }
                         }}
                         />
@@ -2326,8 +2501,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     <FoulOutcomeModal
                         onSelect={(outcome) => {
                             if (outcome === 'None') {
-                                confirmEvent('Foul', pendingFoulPlayerId, null);
-                                // Then maybe ask reason for foul?
+                                // No card: the reason modal records the single Foul event
+                                // (on select or on close), so do not confirm it here too.
                                 setPendingReasonEvent({ type: 'Foul', playerId: pendingFoulPlayerId });
                                 setShowReasonModal(true);
                             } else {
@@ -2837,6 +3012,13 @@ function PlayerSelectionModal({
     subbedOnPlayerIds,
     emptyMessage = 'No player found',
 }: any) {
+    // Ignore taps that land right after the modal mounts: a double-tap on the
+    // button that opened this modal would otherwise select the first row under it.
+    const mountedAt = useRef(Date.now());
+    const handleSelect = (id: string) => {
+        if (Date.now() - mountedAt.current < 400) return;
+        onSelect(id);
+    };
     // BUG-201: no guard here meant an absent lineup (starters/players both empty)
     // made starterIds an empty Set, and filterStartersOnly's `!starterIds.has(p.id)`
     // was then true for every player -- the whole roster got filtered out, showing
@@ -2900,7 +3082,7 @@ function PlayerSelectionModal({
                                 return (
                                     <button
                                         key={p.id}
-                                        onClick={() => onSelect(p.id)}
+                                        onClick={() => handleSelect(p.id)}
                                         className="p-3 text-left hover:bg-white/5 rounded-lg flex items-center gap-3 group relative overflow-hidden"
                                     >
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isBench ? 'bg-white/5 text-white/40' : 'bg-primary/20 text-primary border border-primary/20'}`}>

@@ -1,170 +1,35 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
-import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats, basketballPlayerStats } from '@/db/schema';
+import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastEventDeleted, broadcastScoreUpdate } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
+import { safeParseEventValue } from '@/lib/eventValue';
+import { getEventStatEffects } from '@/lib/player-stats-key';
+import { recordEventStats, revertEventStats } from '@/lib/playerStatsService';
+import { validateEventPatch } from '@/lib/event-patch';
+import { recalculateStandingsForMatch } from '@/lib/standingsService';
 
-// Reverts one stat increment for a player when an event is deleted.
-// Mirrors updatePlayerStats in events/route.ts — same guards must apply at call site.
-// Does NOT throw — event deletion already succeeded by the time this runs.
-// `value` (already JSON.parsed by the caller) is only meaningful for basketball's
-// shot types — same make/miss gate as updatePlayerStats' `made` boolean, since a
-// missed shot must never decrement a made-count that was never incremented.
-async function revertPlayerStat(sport: string, playerId: string, eventType: string, value?: unknown): Promise<void> {
+// Standings count cards and goals from a FINISHED match's events, so any admin change to
+// such an event has to refresh them. Own try/catch: it must never fail the request.
+async function recalculateStandingsSafely(matchId: string) {
     try {
-        // BUG-130: basketball had zero revert coverage at all — a hard `if (sport !==
-        // 'Football') return;` no-op'd every basketball stat revert, same shape as
-        // football's already-fixed BUG-060, just never ported. Mirrors
-        // updatePlayerStats' basketball branch (events/route.ts) exactly, decrementing
-        // with a MAX(x-1, 0) floor instead of incrementing.
-        if (sport === 'Basketball') {
-            const stats = await db
-                .select()
-                .from(basketballPlayerStats)
-                .where(eq(basketballPlayerStats.playerId, playerId))
-                .get();
-
-            if (!stats) return;
-
-            const updates: Partial<typeof stats> = {};
-            const wasMake = typeof value === 'number' && value > 0;
-
-            switch (eventType) {
-                // BUG-133: the write side (events/route.ts) increments the *Attempted
-                // counter on every shot attempt regardless of make/miss -- the revert
-                // must decrement it unconditionally too, or a deleted shot leaves the
-                // attempt count permanently 1 too high (asymmetric with the write path,
-                // the exact anti-pattern known-issues.md already documents for BUG-060).
-                case 'Field Goal':
-                    updates.fieldGoalsAttempted = Math.max(0, (stats.fieldGoalsAttempted || 0) - 1);
-                    if (wasMake) {
-                        updates.fieldGoalsMade = Math.max(0, (stats.fieldGoalsMade || 0) - 1);
-                        updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 2);
-                    }
-                    break;
-                case 'Three Pointer':
-                    updates.threePointersAttempted = Math.max(0, (stats.threePointersAttempted || 0) - 1);
-                    if (wasMake) {
-                        updates.threePointersMade = Math.max(0, (stats.threePointersMade || 0) - 1);
-                        updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 3);
-                    }
-                    break;
-                case 'Free Throw':
-                    updates.freeThrowsAttempted = Math.max(0, (stats.freeThrowsAttempted || 0) - 1);
-                    if (wasMake) {
-                        updates.freeThrowsMade = Math.max(0, (stats.freeThrowsMade || 0) - 1);
-                        updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 1);
-                    }
-                    break;
-                case 'Rebound':
-                    updates.totalRebounds = Math.max(0, (stats.totalRebounds || 0) - 1);
-                    break;
-                case 'Assist':
-                    updates.assists = Math.max(0, (stats.assists || 0) - 1);
-                    break;
-                case 'Steal':
-                    updates.steals = Math.max(0, (stats.steals || 0) - 1);
-                    break;
-                case 'Block':
-                    updates.blocks = Math.max(0, (stats.blocks || 0) - 1);
-                    break;
-                case 'Turnover':
-                    updates.turnovers = Math.max(0, (stats.turnovers || 0) - 1);
-                    break;
-                case 'Foul':
-                    updates.personalFouls = Math.max(0, (stats.personalFouls || 0) - 1);
-                    break;
-                case 'Technical Foul':
-                    // BACKLOG-166: mirrors events/route.ts's write-side split -- must
-                    // stay symmetric, per this project's own convention (any stat
-                    // incremented on write must be decremented on delete).
-                    updates.technicalFouls = Math.max(0, (stats.technicalFouls || 0) - 1);
-                    break;
-                default:
-                    return;
-            }
-
-            if (Object.keys(updates).length > 0) {
-                await db
-                    .update(basketballPlayerStats)
-                    .set(updates)
-                    .where(eq(basketballPlayerStats.playerId, playerId));
-            }
-            return;
-        }
-
-        if (sport !== 'Football') return;
-
-        const stats = await db
-            .select()
-            .from(footballPlayerStats)
-            .where(eq(footballPlayerStats.playerId, playerId))
-            .get();
-
-        if (!stats) return;
-
-        const updates: Partial<typeof stats> = {};
-
-        switch (eventType.toUpperCase().replace(/\s+/g, '_')) {
-            case 'GOAL':
-                updates.goals = Math.max(0, (stats.goals || 0) - 1);
-                updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
-                break;
-            case 'ASSIST':
-                updates.assists = Math.max(0, (stats.assists || 0) - 1);
-                break;
-            case 'OWN_GOAL':
-                updates.ownGoals = Math.max(0, (stats.ownGoals || 0) - 1);
-                break;
-            case 'PENALTY':
-                updates.penaltiesScored = Math.max(0, (stats.penaltiesScored || 0) - 1);
-                updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
-                break;
-            case 'PENALTY_MISSED':
-                updates.shotsOffTarget = Math.max(0, (stats.shotsOffTarget || 0) - 1);
-                break;
-            case 'PENALTY_SAVED':
-                updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
-                break;
-            case 'FOUL':
-                updates.foulsCommitted = Math.max(0, (stats.foulsCommitted || 0) - 1);
-                break;
-            case 'YELLOW_CARD':
-                updates.yellowCards = Math.max(0, (stats.yellowCards || 0) - 1);
-                break;
-            case 'RED_CARD':
-                updates.redCards = Math.max(0, (stats.redCards || 0) - 1);
-                break;
-            case 'SAVE':
-                updates.saves = Math.max(0, (stats.saves || 0) - 1);
-                break;
-            default:
-                return;
-        }
-
-        if (Object.keys(updates).length > 0) {
-            await db
-                .update(footballPlayerStats)
-                .set(updates)
-                .where(eq(footballPlayerStats.playerId, playerId));
-        }
+        await recalculateStandingsForMatch(matchId);
     } catch (error) {
-        console.error('[revertPlayerStat] stat reversion failed — event already deleted:', error);
-        Sentry.captureException(error, { extra: { playerId, eventType, sport } });
-        // Do not rethrow. Event deletion succeeded. Stat drift is recoverable; a false 500 is not.
+        console.error('Error recalculating standings after event change:', error);
+        Sentry.captureException(error, { tags: { area: 'standings-recalc' }, extra: { matchId } });
     }
 }
 
 // PATCH /api/matches/[id]/events/[eventId] - Update match event
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string; eventId: string } }
+    { params }: { params: Promise<{ id: string; eventId: string }> }
 ) {
     try {
-        const { id: matchId, eventId } = params;
+        const { id: matchId, eventId } = await params;
 
         const authUser = await getAuthUser(request);
         if (!authUser) {
@@ -190,21 +55,50 @@ export async function PATCH(
             }
         }
 
-        const body = await request.json();
-        const { type, minute, second, teamId, playerId, relatedPlayerId, detail, period } = body;
+        let body: Record<string, unknown>;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 });
+        }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+            return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 });
+        }
+        const { type, minute, second, teamId, playerId, relatedPlayerId, detail, period } = body as Record<string, any>;
 
-        // Verify event exists
+        // Verify event exists AND belongs to the match in the URL (the assignment check above is
+        // against the URL match, so an event of another match must not be reachable through it).
         const event = await db
             .select()
             .from(matchEvents)
             .where(eq(matchEvents.id, eventId))
             .get();
 
-        if (!event) {
+        if (!event || event.matchId !== matchId) {
             return NextResponse.json(
                 { error: 'Event not found' },
                 { status: 404 }
             );
+        }
+
+        const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
+        if (!match) {
+            return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+        }
+
+        // Write-lock: a logger cannot edit events of a FINISHED match (admins can).
+        if (authUser.role === 'logger' && match.status === 'FINISHED') {
+            return NextResponse.json(
+                { error: 'Match is finished and locked; only an admin can edit its events', code: 'MATCH_FINISHED_LOCKED' },
+                { status: 409 }
+            );
+        }
+
+        // Input validation (422), including the rule that a scoring event cannot be re-typed,
+        // moved to the other team or have its made/value changed in place.
+        const patchError = validateEventPatch(body, { type: event.type, teamId: event.teamId, value: event.value }, match);
+        if (patchError) {
+            return NextResponse.json({ error: patchError }, { status: 422 });
         }
 
         // Update event — explicit allowlist only. matchId, loggerId, createdAt, isEyePoint, id are immutable.
@@ -212,15 +106,15 @@ export async function PATCH(
             .update(matchEvents)
             .set({
                 ...(type !== undefined && { type }),
-                ...(minute !== undefined && { minute }),
-                ...(second !== undefined && { second }),
-                ...(teamId !== undefined && { teamId }),
-                ...(playerId !== undefined && { playerId }),
-                ...(relatedPlayerId !== undefined && { relatedPlayerId }),
+                ...(minute !== undefined && { minute: Number(minute) }),
+                ...(second !== undefined && { second: second === null ? null : Number(second) }),
+                ...(teamId !== undefined && { teamId: teamId || null }),
+                ...(playerId !== undefined && { playerId: playerId || null }),
+                ...(relatedPlayerId !== undefined && { relatedPlayerId: relatedPlayerId || null }),
                 ...(detail !== undefined && { detail }),
                 ...(period !== undefined && { period }),
             })
-            .where(eq(matchEvents.id, eventId));
+            .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)));
 
         // Get updated event
         const updatedEvent = await db
@@ -228,6 +122,32 @@ export async function PATCH(
             .from(matchEvents)
             .where(eq(matchEvents.id, eventId))
             .get();
+
+        // Player stats follow the edit: when the type or the credited players changed, remove the
+        // old contribution and add the new one (same shared effect list as create and delete).
+        if (updatedEvent && match.matchType !== 'friendly' && match.currentPeriod !== 'PENALTY_SHOOTOUT') {
+            const parsedValue = safeParseEventValue(event.value);
+            const made = typeof parsedValue === 'number' && parsedValue > 0;
+            const before = getEventStatEffects(match.sport, {
+                type: event.type, playerId: event.playerId, relatedPlayerId: event.relatedPlayerId, made,
+            });
+            const afterEffects = getEventStatEffects(match.sport, {
+                type: updatedEvent.type, playerId: updatedEvent.playerId, relatedPlayerId: updatedEvent.relatedPlayerId, made,
+            });
+            if (JSON.stringify(before) !== JSON.stringify(afterEffects)) {
+                after(async () => {
+                    await revertEventStats(match.sport, match.competitionId, before);
+                    await recordEventStats(match.sport, match.competitionId, afterEffects);
+                });
+            }
+        }
+
+        // Cards feed the standings tie-breakers: refresh them when an admin re-types or moves
+        // an event of a finished match.
+        if (match.status === 'FINISHED' && updatedEvent &&
+            (updatedEvent.type !== event.type || updatedEvent.teamId !== event.teamId)) {
+            after(() => recalculateStandingsSafely(matchId));
+        }
 
         return NextResponse.json({
             success: true,
@@ -244,12 +164,17 @@ export async function PATCH(
 }
 
 // DELETE /api/matches/[id]/events/[eventId] - Delete match event
+//
+// Idempotent: the row is removed with DELETE ... RETURNING inside the transaction, and the score
+// revert, stats revert and broadcasts run only for the request that actually removed it. A
+// concurrent or repeated delete of the same event gets the same 404 as any delete of a missing
+// event and changes nothing.
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string; eventId: string } }
+    { params }: { params: Promise<{ id: string; eventId: string }> }
 ) {
     try {
-        const { id: matchId, eventId } = params;
+        const { id: matchId, eventId } = await params;
 
         const authUser = await getAuthUser(request);
         if (!authUser) {
@@ -300,6 +225,15 @@ export async function DELETE(
             .where(eq(matches.id, matchId))
             .get();
 
+        // Write-lock: a logger cannot delete events of a FINISHED match (a delete reverts the score
+        // and player stats, which would defeat the lock the events POST route enforces). Admins can.
+        if (authUser.role === 'logger' && match?.status === 'FINISHED') {
+            return NextResponse.json(
+                { error: 'Match is finished and locked; only an admin can delete its events', code: 'MATCH_FINISHED_LOCKED' },
+                { status: 409 }
+            );
+        }
+
         // BUG-130: this check only ever recognized football's GOAL/PENALTY/OWN_GOAL —
         // deleting a basketball Field Goal/Three Pointer/Free Throw event removed the
         // event row but never touched matches.homeScore/awayScore, leaving a ghost
@@ -307,7 +241,7 @@ export async function DELETE(
         // JSON (BUG-126/BUG-132) — parse it the same way the POST route's own
         // isBasketballScore gate does, so a deleted *miss* (value 0/absent) correctly
         // never triggers a revert, mirroring the credit-time gate exactly.
-        const parsedValue = event.value != null ? JSON.parse(event.value) : null;
+        const parsedValue = safeParseEventValue(event.value);
         const isBasketballScore =
             match?.sport === 'Basketball' &&
             typeof parsedValue === 'number' && parsedValue > 0 &&
@@ -330,9 +264,16 @@ export async function DELETE(
         let newAwayScore: number | undefined;
         let newShootoutHomeScore: number | undefined;
         let newShootoutAwayScore: number | undefined;
+        let deleted = false as boolean;
 
         await db.transaction(async (tx) => {
-            await tx.delete(matchEvents).where(eq(matchEvents.id, eventId));
+            const removed = await tx
+                .delete(matchEvents)
+                .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)))
+                .returning({ id: matchEvents.id });
+            // Another request removed it first: nothing to revert.
+            if (removed.length === 0) return;
+            deleted = true;
 
             if (isScoringEvent && match) {
                 const points = SCORING_POINT_VALUES[upperType] ?? 1;
@@ -375,6 +316,13 @@ export async function DELETE(
             }
         });
 
+        if (!deleted) {
+            return NextResponse.json(
+                { error: 'Event not found' },
+                { status: 404 }
+            );
+        }
+
         // BUG-108/BUG-116: broadcast the deletion now that it's actually committed — same
         // gap as the POST route, same pre-built fix (src/lib/socket.ts). Wrapped in
         // after() rather than a bare fire-and-forget call — see events/route.ts's POST
@@ -389,18 +337,27 @@ export async function DELETE(
             after(() => broadcastScoreUpdate(matchId, match.homeScore ?? 0, match.awayScore ?? 0, newShootoutHomeScore, newShootoutAwayScore));
         }
 
-        // Revert player stats — same guards as POST: skip friendlies and shootout events
+        // Revert player stats — same guards as POST: skip friendlies and shootout events.
+        // The revert removes exactly the effects the write path adds for this event (the player,
+        // and the keeper's save for a saved penalty), from the row of this match's own
+        // season and competition only.
         if (match) {
             const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
             const isCompetitive = match.matchType !== 'friendly' && !isPenaltyShootout;
 
-            if (event.playerId && isCompetitive) {
-                await revertPlayerStat(match.sport, event.playerId, event.type, parsedValue);
+            if (isCompetitive) {
+                const effects = getEventStatEffects(match.sport, {
+                    type: event.type,
+                    playerId: event.playerId,
+                    relatedPlayerId: event.relatedPlayerId,
+                    made: typeof parsedValue === 'number' && parsedValue > 0,
+                });
+                await revertEventStats(match.sport, match.competitionId, effects);
             }
 
-            // Penalty Saved: also revert the keeper's saves stat (relatedPlayerId = keeper, may be null)
-            if (upperType === 'PENALTY_SAVED' && event.relatedPlayerId && isCompetitive) {
-                await revertPlayerStat(match.sport, event.relatedPlayerId, 'Save', parsedValue);
+            // An admin deleting a goal or card of a finished match changes the standings.
+            if (match.status === 'FINISHED') {
+                after(() => recalculateStandingsSafely(matchId));
             }
         }
 

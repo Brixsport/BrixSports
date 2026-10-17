@@ -1,7 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ArrowRight, Search, CheckCircle, AlertCircle, History } from 'lucide-react';
+
+// BACKLOG-227: sw-admin.js's stale-while-revalidate policy on /api/players*
+// (added for near-static fields like name/position) also covers the
+// genuinely mutation-adjacent affiliationHistory this page reads right after
+// a write -- serving the pre-transfer cached copy for one read cycle. Fix
+// option 2 from that entry: evict the specific cached reads a transfer
+// affects, rather than narrowing the SWR pattern (which would lose the
+// speed benefit for the read-heavy public player profile page too). The
+// cache name carries a build-time-injected version, so match by suffix
+// instead of hardcoding it.
+async function evictStaleAdminApiCache(urls: string[]) {
+    if (typeof window === 'undefined' || !('caches' in window)) return;
+    try {
+        const cacheNames = await caches.keys();
+        // Cache Storage is origin-scoped, not per-SW -- sw-user.js's cache also
+        // ends in "-api" and can sort first, which would silently evict the
+        // wrong service worker's cache on this admin-only page (caught live,
+        // session 59: brixsport-user-*-api existed alongside brixsport-admin-*-api).
+        const apiCacheName = cacheNames.find((n) => n.includes('-admin-') && n.endsWith('-api'));
+        if (!apiCacheName) return;
+        const cache = await caches.open(apiCacheName);
+        await Promise.all(urls.map((url) => cache.delete(url)));
+    } catch {
+        // Best-effort only -- a failed eviction just means the existing
+        // one-cycle staleness (already documented, low priority) persists.
+    }
+}
 
 interface PlayerResult {
     id: string;
@@ -55,6 +83,15 @@ function formatDate(value: string | null) {
 // /api/players/[id]'s affiliationHistory field. No bulk-transfer mode; one
 // transfer at a time, matching the original plan's "minimal" scope.
 export default function RosterTransfersPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-neutral-950 text-white p-6 flex items-center justify-center text-white/40 text-sm">Loading...</div>}>
+            <RosterTransfersInner />
+        </Suspense>
+    );
+}
+
+function RosterTransfersInner() {
+    const searchParams = useSearchParams();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<PlayerResult[]>([]);
     const [searching, setSearching] = useState(false);
@@ -119,6 +156,40 @@ export default function RosterTransfersPage() {
         fetchHistory(player.id);
     };
 
+    // Entry point from a player's own admin profile (/admin/players/[id]'s
+    // "Transfer" button) -- carries playerId through so the admin doesn't have
+    // to re-search for the player they were just looking at. Uses the admin
+    // player-detail endpoint directly (memberships, already isActive-filtered
+    // at the query level) rather than /api/players/search, since we already
+    // have the exact id and don't need fuzzy matching.
+    useEffect(() => {
+        const playerId = searchParams.get('playerId');
+        if (!playerId) return;
+        fetch(`/api/players/${playerId}`)
+            .then((res) => res.json())
+            .then((data) => {
+                const p = data.player;
+                if (!p) return;
+                const currentTeams = (p.memberships ?? []).map((m: any) => ({
+                    teamId: m.team.id,
+                    teamName: m.team.name,
+                    affiliationType: m.affiliation.affiliationType,
+                    isPrimary: !!m.affiliation.isPrimary,
+                }));
+                selectPlayer({
+                    id: p.id,
+                    name: p.name,
+                    jerseyName: p.jerseyName ?? null,
+                    position: p.position,
+                    college: p.college ?? null,
+                    university: p.university,
+                    currentTeams,
+                });
+            })
+            .catch(() => {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const resetForm = () => {
         setSelectedPlayer(null);
         setQuery('');
@@ -148,6 +219,10 @@ export default function RosterTransfersPage() {
                 setNewTeamId('');
                 setJerseyNumber('');
                 setPosition('');
+                await evictStaleAdminApiCache([
+                    `/api/players/${selectedPlayer.id}`,
+                    `/api/players/search?q=${encodeURIComponent(query.trim())}&limit=15`,
+                ]);
                 await fetchHistory(selectedPlayer.id);
             } else {
                 setMessage({ type: 'error', text: data.error || 'Transfer failed' });

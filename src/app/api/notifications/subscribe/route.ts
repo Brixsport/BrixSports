@@ -7,9 +7,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { pushSubscriptions, pushSubscriptionMatches, users, matches } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { ANONYMOUS_PUSH_USER_ID, ensureAnonymousPushUser } from '@/lib/notifications/anonymous-subscriber';
+import {
+    MAX_SUBSCRIPTIONS_PER_DEVICE,
+    isValidDeviceId,
+    shouldKeepExistingOwner,
+    validatePushSubscription,
+} from '@/lib/notifications/subscription-validation';
 
 /**
  * Subscribe to push notifications.
@@ -24,6 +31,16 @@ import { ANONYMOUS_PUSH_USER_ID, ensureAnonymousPushUser } from '@/lib/notificat
  */
 export async function POST(request: NextRequest) {
     try {
+        // Anonymous callers can reach this route, and every stored endpoint later
+        // receives a server-side POST, so throttle by IP.
+        const rl = await checkRateLimit(request, { max: 20, windowMs: 60 * 1000, distributed: true });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const authUser = await getAuthUser(request).catch(() => null);
 
         const body = await request.json();
@@ -34,6 +51,17 @@ export async function POST(request: NextRequest) {
                 { error: 'Invalid subscription format' },
                 { status: 400 }
             );
+        }
+
+        const subscriptionCheck = validatePushSubscription(subscription);
+        if (!subscriptionCheck.ok) {
+            return NextResponse.json({ error: subscriptionCheck.error }, { status: 422 });
+        }
+        if (deviceId !== undefined && deviceId !== null && !isValidDeviceId(deviceId)) {
+            return NextResponse.json({ error: 'Invalid deviceId' }, { status: 422 });
+        }
+        if (matchId !== undefined && matchId !== null && typeof matchId !== 'string') {
+            return NextResponse.json({ error: 'Invalid matchId' }, { status: 422 });
         }
 
         const isAnonymous = !authUser;
@@ -93,17 +121,37 @@ export async function POST(request: NextRequest) {
         let subscriptionId: string;
         if (existing.length > 0) {
             subscriptionId = existing[0].id;
-            await db
-                .update(pushSubscriptions)
-                .set({
-                    userId: effectiveUserId,
-                    deviceId: deviceId || existing[0].deviceId,
-                    p256dh: subscription.keys.p256dh,
-                    auth: subscription.keys.auth,
-                    userAgent: request.headers.get('user-agent') || undefined,
-                })
-                .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
+            // A row owned by a signed-in user is never re-parented or re-keyed by an
+            // anonymous caller; the caller may only add a match link below.
+            if (!shouldKeepExistingOwner({
+                isAnonymous,
+                existingUserId: existing[0].userId,
+                anonymousUserId: ANONYMOUS_PUSH_USER_ID,
+            })) {
+                await db
+                    .update(pushSubscriptions)
+                    .set({
+                        userId: effectiveUserId,
+                        deviceId: deviceId || existing[0].deviceId,
+                        p256dh: subscription.keys.p256dh,
+                        auth: subscription.keys.auth,
+                        userAgent: request.headers.get('user-agent') || undefined,
+                    })
+                    .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
+            }
         } else {
+            if (deviceId) {
+                const [{ total }] = await db
+                    .select({ total: count() })
+                    .from(pushSubscriptions)
+                    .where(eq(pushSubscriptions.deviceId, deviceId));
+                if (total >= MAX_SUBSCRIPTIONS_PER_DEVICE) {
+                    return NextResponse.json(
+                        { error: 'Too many subscriptions for this device' },
+                        { status: 422 }
+                    );
+                }
+            }
             subscriptionId = `sub-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             await db.insert(pushSubscriptions).values({
                 id: subscriptionId,

@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { systemSettings, systemSettingsHistory } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
+import { validateSettingValue } from '@/lib/settings-validation';
 
 // Default settings to initialize if not in database
 const DEFAULT_SETTINGS = {
@@ -19,6 +20,14 @@ const DEFAULT_SETTINGS = {
     'algorithm.rating.min': { value: '1.0', type: 'number', category: 'algorithm', description: 'Minimum player rating' },
 
     // System Settings
+    // BACKLOG-228 (session 56): was a hardcoded CURRENT_SEASON constant in
+    // rosterService.ts requiring a code edit + redeploy to roll forward. Now
+    // the single admin-editable source of truth for roster transfers, new
+    // roster/player affiliations, and live match-event stat writes with no
+    // competitionId to derive a season from. Format must stay "YYYY/YYYY" --
+    // nothing validates that shape server-side yet (type: 'string' has no
+    // extra check, unlike 'number'/'boolean' above), so change it carefully.
+    'system.season.current': { value: '2026/2027', type: 'string', category: 'system', description: 'Current season for new roster transfers, affiliations, and stat writes (format: YYYY/YYYY)' },
     'system.maintenance.mode': { value: 'false', type: 'boolean', category: 'system', description: 'Enable maintenance mode' },
     'system.registration.enabled': { value: 'true', type: 'boolean', category: 'system', description: 'Allow new user registrations' },
     'system.notifications.enabled': { value: 'true', type: 'boolean', category: 'system', description: 'Enable push notifications' },
@@ -27,15 +36,20 @@ const DEFAULT_SETTINGS = {
     'features.fpl.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Fantasy Premier League' },
     'features.predictions.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Match predictions' },
     'features.polls.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Polls' },
-    'features.transfers.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Transfer news' },
 
     // High-Volatility Feature Gates (BACKLOG-155) -- defaulted OFF deliberately.
     // defaulting to false means they gate closed
     // automatically rather than depending on someone remembering to flip them.
+    // D3: features.transfers.enabled moved here from the regular Feature Flags
+    // block above -- it was defaulted 'true' despite gating the same
+    // admin/transfers/page.tsx FeatureGate call as the other four (a real gap:
+    // this is the only one of the 5 readiness-checklist 🔴 features whose flag
+    // wasn't actually closed by default before this fix).
     'features.ads.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Advertisements' },
     'features.lineupbuilder.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Lineup Builder' },
     'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'User Management / Access Control admin panel' },
     'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'News Management' },
+    'features.transfers.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Transfers admin panel (news/rumor announcements)' },
 };
 
 // Initialize default settings in database if they don't exist
@@ -101,9 +115,9 @@ export async function PATCH(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { key, value, reason } = body;
+        const { key, value: rawValue, reason } = body;
 
-        if (!key || value === undefined) {
+        if (!key || typeof key !== 'string' || rawValue === undefined) {
             return NextResponse.json(
                 { error: 'Missing key or value' },
                 { status: 400 }
@@ -125,19 +139,11 @@ export async function PATCH(request: NextRequest) {
         }
 
         // Validate value based on type
-        if (currentSetting.type === 'number' && isNaN(Number(value))) {
-            return NextResponse.json(
-                { error: 'Invalid number value' },
-                { status: 400 }
-            );
+        const validated = validateSettingValue(key, currentSetting.type, rawValue);
+        if (!validated.ok) {
+            return NextResponse.json({ error: validated.error }, { status: 400 });
         }
-
-        if (currentSetting.type === 'boolean' && !['true', 'false'].includes(value.toLowerCase())) {
-            return NextResponse.json(
-                { error: 'Invalid boolean value. Must be "true" or "false"' },
-                { status: 400 }
-            );
-        }
+        const value = validated.value;
 
         // Create history record
         await db.insert(systemSettingsHistory).values({

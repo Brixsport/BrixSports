@@ -5,10 +5,20 @@ import { playerTeamAffiliations, players, teams } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, toPublicPlayer, type EnrichedPlayer, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam, getResolvedInstitutionalData, playerMatchesInstitutionFilters } from '@/lib/player-affiliation-utils';
-import { CURRENT_SEASON } from '@/lib/rosterService';
+import { getCurrentSeason } from '@/lib/rosterService';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
-function playerMatchesSearch(player: EnrichedPlayer, query: string) {
+// BACKLOG-254: players.rating is the frozen legacy column (BACKLOG-253) --
+// attach the real career-average accessor so list consumers (e.g. xi/page.tsx)
+// stop reading it. Adds `averageRating` alongside the existing `rating` field
+// rather than replacing it, since this route's consumers aren't fully audited.
+async function withAverageRating<T extends { id: string }>(list: T[]): Promise<(T & { averageRating: number | null })[]> {
+    const summaries = await getPlayerRatingSummaries(list.map((p) => p.id));
+    return list.map((p) => ({ ...p, averageRating: summaries.get(p.id)?.averageRating ?? null }));
+}
+
+function playerMatchesSearch(player: EnrichedPlayer, query: string, includeEmail = false) {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) {
         return true;
@@ -20,7 +30,8 @@ function playerMatchesSearch(player: EnrichedPlayer, query: string) {
         player.name,
         player.jerseyName,
         player.id,
-        player.email,
+        // Admin-only match field (email oracle otherwise); see /api/search.
+        ...(includeEmail ? [player.email] : []),
         institutionalData.university,
         institutionalData.college,
         institutionalData.department,
@@ -45,7 +56,7 @@ function playerMatchesSearch(player: EnrichedPlayer, query: string) {
 
 export async function GET(request: Request) {
     try {
-        const rl = checkRateLimit(request);
+        const rl = await checkRateLimit(request);
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
@@ -63,6 +74,17 @@ export async function GET(request: Request) {
         const department = searchParams.get('department');
         const college = searchParams.get('college');
         const university = searchParams.get('university');
+        // BACKLOG-161: /xi's player picker had no sport filter, letting a
+        // viewer mix football and basketball players into one "team".
+        const sport = searchParams.get('sport');
+        // BACKLOG-283: default stays 500 (the pre-existing safety cap), NOT
+        // 50 -- admin/past-matches/import/page.tsx calls this bare expecting
+        // the full 309-player roster, and other pages may too. Only a caller
+        // that explicitly passes `limit` opts into a smaller page. Only
+        // applies to the general listing branch below (ids/teamId are
+        // targeted lookups, already bounded by their own query).
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '500', 10) || 500), 500);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
         if (ids) {
             const playerIds = ids.split(',').map((id) => id.trim()).filter(Boolean);
@@ -74,7 +96,7 @@ export async function GET(request: Request) {
             const enriched = await enrichPlayersWithAffiliations(foundPlayers);
             return NextResponse.json({
                 success: true,
-                players: enriched.map((p) => toPublicPlayer(p, isAdmin)),
+                players: await withAverageRating(enriched.map((p) => toPublicPlayer(p, isAdmin))),
             });
         }
 
@@ -106,7 +128,7 @@ export async function GET(request: Request) {
             const enrichedTeamPlayers = await enrichPlayersWithAffiliations(Array.from(combinedMap.values()));
             return NextResponse.json({
                 success: true,
-                players: enrichedTeamPlayers.map((p) => toPublicPlayer(p, isAdmin)),
+                players: await withAverageRating(enrichedTeamPlayers.map((p) => toPublicPlayer(p, isAdmin))),
             });
         }
 
@@ -122,19 +144,44 @@ export async function GET(request: Request) {
             }));
         }
 
+        if (sport) {
+            enrichedPlayers = enrichedPlayers.filter((player) =>
+                getPrimaryTeam(player)?.sport?.toLowerCase() === sport.toLowerCase()
+            );
+        }
+
         if (search) {
             // Matched against email/memberships/etc. BEFORE the public strip below —
             // search must still work over fields a non-admin caller never sees in the
             // response (BACKLOG-167). Stripping happens only at the return boundary.
-            enrichedPlayers = enrichedPlayers.filter((player) => playerMatchesSearch(player, search));
+            enrichedPlayers = enrichedPlayers.filter((player) => playerMatchesSearch(player, search, isAdmin));
         }
 
-        return NextResponse.json({ success: true, players: enrichedPlayers.map((p) => toPublicPlayer(p, isAdmin)) });
+        const total = enrichedPlayers.length;
+        const pagedPlayers = enrichedPlayers.slice(offset, offset + limit);
+
+        return NextResponse.json({
+            success: true,
+            players: await withAverageRating(pagedPlayers.map((p) => toPublicPlayer(p, isAdmin))),
+            total,
+        }, {
+            headers: {
+                'X-Total-Count': String(total),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
+        });
     } catch (error) {
         console.error('Error fetching players:', error);
         return NextResponse.json({ success: false, error: 'Failed to fetch players' }, { status: 500 });
     }
 }
+
+const PLAYER_CREATE_FIELDS = [
+    'name', 'jerseyName', 'number', 'teamId', 'position', 'age', 'height', 'weight',
+    'nationality', 'college', 'department', 'university', 'isExternal', 'image',
+    'marketValue', 'profileId', 'email', 'attributes',
+] as const;
 
 export async function POST(request: Request) {
     try {
@@ -166,10 +213,20 @@ export async function POST(request: Request) {
             }, { status: 400 });
         }
 
-        const playerId = body.id || `player-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Generated server-side; a client-supplied id is ignored
+        const playerId = `player-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        // Allow-list, not a spread of the request body: id, rating, eyePoints and
+        // createdAt are not client-settable
+        const playerFields: Record<string, unknown> = {};
+        for (const field of PLAYER_CREATE_FIELDS) {
+            if (body[field] !== undefined) playerFields[field] = body[field];
+        }
 
         const newPlayer = await db.insert(players).values({
-            ...body,
+            ...playerFields,
+            name: body.name,
+            position: body.position,
             id: playerId,
             teamId: body.teamId || null,
             number: body.number ?? 0,
@@ -189,7 +246,7 @@ export async function POST(request: Request) {
                 startDate: newPlayer[0].createdAt || new Date(),
                 jerseyNumber: newPlayer[0].number,
                 position: newPlayer[0].position,
-                season: CURRENT_SEASON,
+                season: await getCurrentSeason(),
                 createdAt: newPlayer[0].createdAt || new Date(),
             });
         }

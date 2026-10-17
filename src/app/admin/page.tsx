@@ -21,6 +21,7 @@ async function readListResponse(res: Response, label: string): Promise<any[]> {
 
 function AdminPageContent() {
   const [matches, setMatches] = useState<any[]>([]);
+  const [totalMatchCount, setTotalMatchCount] = useState(0);
   const [teams, setTeams] = useState<any[]>([]);
   const [loggers, setLoggers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,19 +30,32 @@ function AdminPageContent() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [matchesRes, teamsRes, loggersRes] = await Promise.all([
-          fetch('/api/matches'),
+        // BACKLOG-283: this page previously fetched a bare `/api/matches`
+        // (default limit 50, newest-first) -- every stat/table here except
+        // "Total Matches" only needs non-finished matches, so fetching by
+        // status directly avoids silently dropping older active matches
+        // once total matches (100+, mostly historical backfill) exceeded 50.
+        // "Total Matches" itself reads the real count off X-Total-Count.
+        const [liveRes, upcomingRes, halfTimeRes, teamsRes, loggersRes, countRes] = await Promise.all([
+          fetch('/api/matches?status=LIVE&limit=200'),
+          fetch('/api/matches?status=UPCOMING&limit=200'),
+          fetch('/api/matches?status=HALF_TIME&limit=200'),
           fetch('/api/teams'),
-          fetch('/api/loggers')
+          fetch('/api/loggers'),
+          fetch('/api/matches?limit=1')
         ]);
 
-        const [matchesData, teamsData, loggersData] = await Promise.all([
-          readListResponse(matchesRes, 'matches'),
+        const [liveData, upcomingData, halfTimeData, teamsData, loggersData] = await Promise.all([
+          readListResponse(liveRes, 'live matches'),
+          readListResponse(upcomingRes, 'upcoming matches'),
+          readListResponse(halfTimeRes, 'half-time matches'),
           readListResponse(teamsRes, 'teams'),
           readListResponse(loggersRes, 'loggers')
         ]);
+        const matchesData = [...liveData, ...upcomingData, ...halfTimeData];
 
         setMatches(matchesData);
+        setTotalMatchCount(countRes.ok ? parseInt(countRes.headers.get('X-Total-Count') || '0', 10) : matchesData.length);
         setTeams(teamsData);
         setLoggers(loggersData);
       } catch (error) {
@@ -131,12 +145,12 @@ function AdminPageContent() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-white/5 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-white/30 text-nowrap">
-                      <th className="p-4 md:p-6 whitespace-nowrap">Match</th>
-                      <th className="p-4 md:p-6">Status</th>
-                      <th className="p-4 md:p-6">Assigned Logger</th>
-                      <th className="p-4 md:p-6">Health</th>
-                      <th className="p-4 md:p-6 text-right">Actions</th>
+                    <tr className="bg-white/5 text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-white/30 text-nowrap">
+                      <th className="p-1 md:p-4 lg:p-6 whitespace-nowrap">Match</th>
+                      <th className="p-1 md:p-4 lg:p-6">Status</th>
+                      <th className="p-1 md:p-4 lg:p-6">Assigned Logger</th>
+                      <th className="hidden lg:table-cell p-1 md:p-4 lg:p-6">Health</th>
+                      <th className="p-1 md:p-4 lg:p-6 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -147,41 +161,41 @@ function AdminPageContent() {
 
                       return (
                         <tr key={match.id} className="group hover:bg-white/5 transition-colors">
-                          <td className="p-4 md:p-6">
-                            <div className="flex items-center gap-2 md:gap-3">
+                          <td className="p-1 md:p-4 lg:p-6">
+                            <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3">
                               <div className="flex items-center gap-1 shrink-0">
                                 <TeamLogo logo={homeTeam?.logo} name={homeTeam?.name ?? ''} color={homeTeam?.color} size="sm" />
-                                <span className="text-[8px] md:text-xs font-bold italic text-white/40">VS</span>
+                                <span className="text-[8px] lg:text-xs font-bold italic text-white/40">VS</span>
                                 <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} color={awayTeam?.color} size="sm" />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-[11px] md:text-sm font-bold truncate max-w-[120px] md:max-w-none">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>
-                                <p className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest truncate">{match.competition || 'N/A'}</p>
+                                <p className="text-[11px] lg:text-sm font-bold truncate max-w-[110px] md:max-w-[140px] lg:max-w-none">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>
+                                <p className="text-[8px] lg:text-[10px] text-white/20 uppercase tracking-widest truncate">{match.competition || 'N/A'}</p>
                               </div>
                             </div>
                           </td>
-                          <td className="p-4 md:p-6">
-                            <div className="flex items-center gap-1.5 md:gap-2">
-                              <span className={`w-1 w-1 md:w-1.5 md:h-1.5 rounded-full ${match.status === 'LIVE' ? 'bg-primary' : 'bg-white/20'}`}></span>
-                              <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest">{match.status}</span>
+                          <td className="p-1 md:p-4 lg:p-6">
+                            <div className="flex items-center gap-1.5 lg:gap-2">
+                              <span className={`w-1 w-1 lg:w-1.5 lg:h-1.5 rounded-full ${match.status === 'LIVE' ? 'bg-primary' : 'bg-white/20'}`}></span>
+                              <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-widest">{match.status}</span>
                             </div>
                           </td>
-                          <td className="p-4 md:p-6">
-                            <div className="flex items-center gap-2 md:gap-3">
-                              <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center text-[8px] md:text-[10px] font-black uppercase tracking-widest shrink-0">
+                          <td className="p-1 md:p-4 lg:p-6">
+                            <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3">
+                              <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full bg-white/10 flex items-center justify-center text-[8px] lg:text-[10px] font-black uppercase tracking-widest shrink-0">
                                 {logger?.name?.charAt(0) || '?'}
                               </div>
-                              <p className="text-[10px] md:text-xs font-bold italic truncate max-w-[80px] md:max-w-none">{logger?.name || 'Unassigned'}</p>
+                              <p className="text-[10px] lg:text-xs font-bold italic truncate max-w-[70px] md:max-w-[90px] lg:max-w-none">{logger?.name || 'Unassigned'}</p>
                             </div>
                           </td>
-                          <td className="p-4 md:p-6">
-                            <div className="flex items-center gap-1.5 md:gap-2 text-blue-500">
+                          <td className="hidden lg:table-cell p-1 md:p-4 lg:p-6">
+                            <div className="flex items-center gap-1.5 lg:gap-2 text-blue-500">
                               <CheckCircle2 size={14} />
-                              <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest">Optimal</span>
+                              <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-widest">Optimal</span>
                             </div>
                           </td>
-                          <td className="p-4 md:p-6 text-right">
-                            <button className="p-1.5 md:p-2 hover:bg-white/10 rounded-lg transition-colors">
+                          <td className="p-1 md:p-4 lg:p-6 text-right">
+                            <button className="p-1 md:p-1.5 lg:p-2 hover:bg-white/10 rounded-lg transition-colors">
                               <MoreVertical size={16} className="text-white/40" />
                             </button>
                           </td>
@@ -258,7 +272,7 @@ function AdminPageContent() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold italic">Total Matches</span>
-                  <span className="text-xs font-bold text-primary">{matches.length}</span>
+                  <span className="text-xs font-bold text-primary">{totalMatchCount}</span>
                 </div>
               </div>
               <Link href="/admin/settings" className="block w-full py-3 md:py-4 border border-white/10 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-colors text-center">

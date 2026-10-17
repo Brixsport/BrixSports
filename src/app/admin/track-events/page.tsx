@@ -294,14 +294,19 @@ function AdminTrackEventsPageContent() {
                 </div>
 
                 {/* Filters */}
-                <div className="flex items-center gap-3 mb-6">
-                    <Filter size={18} className="text-white/60" />
-                    <div className="flex gap-2">
+                {/* BACKLOG (admin responsive audit): the 4-pill status row had no wrap and no
+                    responsive sizing, pushing scrollWidth 6px past a 375px viewport -- same class
+                    of bug as BACKLOG-343's /admin/matches filter row. Same established fix: tight
+                    padding/text by default, full sizing from sm:, overflow-x-auto + scrollbar-hide
+                    as the safety net. */}
+                <div className="flex items-center gap-2 sm:gap-3 mb-6">
+                    <Filter size={18} className="text-white/60 shrink-0" />
+                    <div className="flex gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
                         {['all', 'LIVE', 'UPCOMING', 'FINISHED'].map((status) => (
                             <button
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
-                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${filterStatus === status
+                                className={`shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors ${filterStatus === status
                                         ? 'bg-primary text-black'
                                         : 'bg-white/5 hover:bg-white/10'
                                     }`}

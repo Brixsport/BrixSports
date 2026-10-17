@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/db/schema';
-import { eq, asc, and, sql, gt, isNull } from 'drizzle-orm';
+import { eq, and, sql, gt, isNull, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
-import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
+import { isPushEligibleMatchType } from '@/lib/notifications/send-gate';
+import { getEventStatEffects } from '@/lib/player-stats-key';
+import { recordEventStats } from '@/lib/playerStatsService';
+import { isValidClientEventId } from '@/lib/event-id';
+import { validateEventInput } from '@/lib/event-input';
+import { toPublicMatchEvent } from '@/lib/ws-public-payload';
 
 // Notification-reliability fix: this trigger used to fire from the logger's own
 // browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
@@ -24,7 +28,9 @@ import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
 // a flat map here -- that table is what basketball's 'Technical Foul' entry and
 // football's five entries both come from.
 
-// GET /api/matches/[id]/events - Get all events for a match
+const EVENTS_PAGE_LIMIT = 500;
+
+// GET /api/matches/[id]/events - Get the events for a match (newest EVENTS_PAGE_LIMIT, ascending)
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -46,13 +52,16 @@ export async function GET(
             );
         }
 
-        // Get all events for the match
-        const events = await db
+        // The newest EVENTS_PAGE_LIMIT events: a long match must lose its oldest events, not
+        // the latest ones, when it exceeds the cap. Fetched newest-first, then returned in
+        // ascending order so the response order is what consumers have always received.
+        const newestFirst = await db
             .select()
             .from(matchEvents)
             .where(eq(matchEvents.matchId, matchId))
-            .orderBy(asc(matchEvents.minute), asc(matchEvents.second))
-            .limit(200);
+            .orderBy(desc(matchEvents.minute), desc(matchEvents.second), desc(matchEvents.id))
+            .limit(EVENTS_PAGE_LIMIT);
+        const events = newestFirst.reverse();
 
         // Strip logger identity fields from unauthenticated (public) responses — NDPR compliance.
         // Only privileged callers (admin, or a logger seeding local state / multi-logger conflict
@@ -111,8 +120,17 @@ export async function POST(
             }
         }
 
-        const body = await request.json();
+        let body: any;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 });
+        }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+            return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 });
+        }
         const {
+            id: clientEventIdRaw,
             type,
             minute,
             second,
@@ -123,7 +141,6 @@ export async function POST(
             isEyePoint = false,
             value,
             made,
-            loggerName,
             period,
         } = body;
 
@@ -149,6 +166,32 @@ export async function POST(
             );
         }
 
+        // BACKLOG-466 item 1: optional client-generated event id used as an
+        // idempotency key (match_events.id is the text PRIMARY KEY, so no schema
+        // change). A replay (offline-queue drain after a lost response, double
+        // submit) carrying an id that already exists for THIS match returns that
+        // row with 200 -- no insert, no score change, no side effects -- and is
+        // checked BEFORE the FINISHED lock so a replay of an already-saved event
+        // is never reported as a failure. An id that exists for a DIFFERENT match
+        // (or any invalid id) is ignored and the server generates its own.
+        const clientEventId = isValidClientEventId(clientEventIdRaw) ? clientEventIdRaw : null;
+        let adoptClientEventId = false;
+        if (clientEventId) {
+            const [existingById] = await db
+                .select()
+                .from(matchEvents)
+                .where(eq(matchEvents.id, clientEventId))
+                .limit(1);
+            if (existingById && existingById.matchId === matchId) {
+                return NextResponse.json({
+                    success: true,
+                    message: 'Duplicate submission ignored — event already recorded',
+                    event: existingById,
+                }, { status: 200 });
+            }
+            adoptClientEventId = !existingById;
+        }
+
         // BACKLOG-153 item 3: no server-side write-lock existed on FINISHED matches --
         // an event POST against an already-finished match had nothing rejecting it,
         // silently corrupting post-match stats/score. Score corrections go through the
@@ -161,43 +204,52 @@ export async function POST(
             );
         }
 
-        // BUG-196: duplicate-submission guard. Found live during session 48's football
-        // Tier 0 sweep -- two concurrent identical POSTs (a double-tap, or a client retry
-        // after a slow/lost ack) each created a genuine, separate match_events row and,
-        // for a scoring type, each incremented the score independently -- confirmed live,
-        // a real Goal double-submit inflated away_score by 2 instead of 1. Player-attributed
-        // events only (playerId required): a repeat of the identical (match, type, minute,
-        // player) within a short window is treated as the same real-world event and the
-        // original is returned instead of inserting a second row. Player-less event types
-        // (corner, offside, etc.) are intentionally excluded -- those can legitimately repeat
-        // with identical fields moments apart and a false-positive dedup there would silently
-        // drop a real event.
-        if (playerId) {
-            const dedupWindowStart = new Date(Date.now() - 10_000);
-            const [existingEvent] = await db
-                .select()
-                .from(matchEvents)
-                .where(
-                    and(
-                        eq(matchEvents.matchId, matchId),
-                        eq(matchEvents.type, type),
-                        eq(matchEvents.minute, minute),
-                        eq(matchEvents.playerId, playerId),
-                        gt(matchEvents.createdAt, dedupWindowStart)
-                    )
-                )
-                .limit(1);
-            if (existingEvent) {
-                return NextResponse.json({
-                    success: true,
-                    message: 'Duplicate submission ignored — event already recorded',
-                    event: existingEvent,
-                }, { status: 200 });
-            }
+        // Events are accepted only while the match is LIVE (admins included: an admin sets the
+        // match LIVE first). A queued event replayed after the match was reopened or before it
+        // started is reported with a code so the client can keep it queued instead of dropping it.
+        if (match.status !== 'LIVE') {
+            return NextResponse.json(
+                { error: 'Events can only be logged while the match is live', code: 'MATCH_NOT_LIVE' },
+                { status: 409 }
+            );
         }
 
+        // Input validation (422): bad input is rejected, never stored or credited (src/lib/event-input.ts).
+        const inputError = validateEventInput({ type, minute, second, detail, teamId, made }, match);
+        if (inputError) {
+            return NextResponse.json({ error: inputError }, { status: 422 });
+        }
+
+        // BUG-196 / dual-logger live test (2026-09-10): duplicate-submission guard.
+        // Originally found live during session 48's football Tier 0 sweep -- two
+        // concurrent identical POSTs (a double-tap, or a client retry after a slow/
+        // lost ack) each created a genuine, separate match_events row and, for a
+        // scoring type, each incremented the score independently. Player-attributed
+        // events only (playerId required): a repeat of the identical (match, type,
+        // minute, player) within a short window is treated as the same real-world
+        // event and the original is returned instead of inserting a second row.
+        // Player-less event types (corner, offside, etc.) are intentionally excluded
+        // -- those can legitimately repeat with identical fields moments apart and a
+        // false-positive dedup there would silently drop a real event.
+        //
+        // This check originally ran as a standalone SELECT *before* the
+        // db.transaction() below that does the insert + score update -- which meant
+        // it only protected against a double-tap from the SAME request path, not two
+        // genuinely concurrent requests. Live-tested with two real logger accounts
+        // firing the identical goal via Promise.all (true concurrency, not
+        // sequential): both passed this check (neither had committed yet when the
+        // other's SELECT ran) and both inserted, inflating the score by 2 instead of
+        // 1 -- reproducing exactly BUG-196's original symptom, just from two loggers
+        // instead of one double-tap. Fix: the dedup check now runs *inside* the same
+        // transaction as the insert, the same pattern already proven for the
+        // logger-assignment race (assign-logger/route.ts's check-then-insert,
+        // BUG-008) -- the whole check+insert+score-update is now one atomic unit, so
+        // a second concurrent request's check can no longer run against a
+        // not-yet-committed state.
+        let dedupHit: typeof matchEvents.$inferSelect | undefined;
+
         // Create event
-        const eventId = nanoid();
+        const eventId = adoptClientEventId && clientEventId ? clientEventId : nanoid();
         const newEvent = {
             id: eventId,
             matchId,
@@ -237,7 +289,9 @@ export async function POST(
             // project's own rule, not from request-body input. Stores the admin's
             // real users.id (not a formatted display string) so the actor can still be
             // looked up exactly, the same way loggerId itself would if the FK allowed it.
-            loggerName: authUser.role === 'logger' ? (loggerName || null) : authUser.id,
+            // A logger's display name comes from the verified session too: a client-supplied
+            // loggerName in the body is ignored.
+            loggerName: authUser.role === 'logger' ? (authUser.name || null) : authUser.id,
             period: period || null,
             createdAt: new Date(),
         };
@@ -298,7 +352,82 @@ export async function POST(
         // reverts a different amount than an insert credited.
 
         await db.transaction(async (tx) => {
-            await tx.insert(matchEvents).values(newEvent);
+            if (playerId) {
+                // BACKLOG-433: the previous version of this guard ran the
+                // dedup SELECT and the INSERT as two separate statements
+                // inside this same db.transaction(), on the assumption that
+                // Turso's transaction gives the same read-blocks-on-
+                // uncommitted-write isolation a local SQLite file connection
+                // would. Live-tested 4x with two genuinely concurrent
+                // requests (Promise.all): 3 of 4 runs reproduced BUG-196's
+                // original symptom exactly -- both requests' SELECT ran
+                // before either had committed, both saw "no existing row",
+                // both inserted, score double-counted. Turso's remote/HTTP
+                // transaction protocol does not appear to serialize
+                // concurrent transactions' reads against each other's
+                // uncommitted writes the way a single-process SQLite file
+                // connection does.
+                //
+                // Fixed by collapsing the check and the insert into ONE
+                // atomic statement (INSERT ... SELECT ... WHERE NOT EXISTS).
+                // A single SQL statement is atomic at the SQLite engine
+                // level regardless of the higher-level transaction/isolation
+                // semantics for multi-statement transactions over HTTP --
+                // there is no window between "check" and "act" left for a
+                // second concurrent request to land in, because they are
+                // the same database operation. created_at is stored as unix
+                // seconds (confirmed directly against real rows in staging,
+                // not assumed) -- matches.$inferInsert's own timestamp mode
+                // for this column, replicated by hand here since a raw sql
+                // fragment used as a literal SELECT source has no access to
+                // Drizzle's column-level encode/decode mapping.
+                //
+                // BACKLOG-466 item 5: the key now also includes `value` via a
+                // NULL-safe `IS` comparison (same statement structure, one extra
+                // predicate). value = JSON of the points for a scoring/basketball
+                // event (0 for a miss), so a miss followed by a make by one player
+                // in the same minute within 10s is no longer collapsed into one.
+                // Deliberately NOT keyed on `detail`: two loggers recording the same
+                // real event can word it differently, and widening on it would
+                // reopen the BACKLOG-151/433 dual-logger double count. Residual: two
+                // makes of identical value by one player in the same minute within
+                // 10s still collapse (the heuristic cannot tell them from a second
+                // logger's copy of the same event).
+                const dedupWindowStart = new Date(Date.now() - 10_000);
+                const result: any = await tx.run(sql`
+                    INSERT INTO match_events
+                        (id, match_id, type, minute, second, period, team_id, player_id, related_player_id, detail, is_eye_point, value, logger_id, logger_name, created_at)
+                    SELECT ${newEvent.id}, ${newEvent.matchId}, ${newEvent.type}, ${newEvent.minute}, ${newEvent.second}, ${newEvent.period}, ${newEvent.teamId}, ${newEvent.playerId}, ${newEvent.relatedPlayerId}, ${newEvent.detail}, ${newEvent.isEyePoint ? 1 : 0}, ${newEvent.value}, ${newEvent.loggerId}, ${newEvent.loggerName}, ${Math.floor(newEvent.createdAt.getTime() / 1000)}
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM match_events
+                        WHERE match_id = ${matchId} AND type = ${type} AND minute = ${minute} AND player_id = ${playerId} AND value IS ${newEvent.value} AND created_at > ${Math.floor(dedupWindowStart.getTime() / 1000)}
+                    )
+                `);
+
+                if ((result.rowsAffected ?? 0) === 0) {
+                    // Deduped -- fetch whatever matching row already exists to
+                    // return in the response (best-effort, same as before).
+                    const [existingEvent] = await tx
+                        .select()
+                        .from(matchEvents)
+                        .where(
+                            and(
+                                eq(matchEvents.matchId, matchId),
+                                eq(matchEvents.type, type),
+                                eq(matchEvents.minute, minute),
+                                eq(matchEvents.playerId, playerId),
+                                newEvent.value === null ? isNull(matchEvents.value) : eq(matchEvents.value, newEvent.value),
+                                gt(matchEvents.createdAt, dedupWindowStart)
+                            )
+                        )
+                        .orderBy(desc(matchEvents.createdAt))
+                        .limit(1);
+                    dedupHit = existingEvent;
+                    return;
+                }
+            } else {
+                await tx.insert(matchEvents).values(newEvent);
+            }
 
             if (isScoringEvent && !isPenaltyShootout) {
                 const points = SCORING_POINT_VALUES[upperType] ?? 1;
@@ -341,7 +470,37 @@ export async function POST(
                 newShootoutHomeScore = updated.shootoutHomeScore ?? 0;
                 newShootoutAwayScore = updated.shootoutAwayScore ?? 0;
             }
+        }).catch(async (txError) => {
+            // BACKLOG-466 item 1/6: two concurrent requests carrying the SAME client
+            // id both passed the pre-check above; the loser hits the PRIMARY KEY
+            // constraint, the whole transaction rolls back (no score change). If the
+            // winner's row now exists for this match, that is an idempotent replay,
+            // not a failure. Anything else is a real error and propagates.
+            if (adoptClientEventId && clientEventId) {
+                const [winner] = await db
+                    .select()
+                    .from(matchEvents)
+                    .where(eq(matchEvents.id, clientEventId))
+                    .limit(1);
+                if (winner && winner.matchId === matchId) {
+                    dedupHit = winner;
+                    newHomeScore = undefined;
+                    newAwayScore = undefined;
+                    newShootoutHomeScore = undefined;
+                    newShootoutAwayScore = undefined;
+                    return;
+                }
+            }
+            throw txError;
         });
+
+        if (dedupHit) {
+            return NextResponse.json({
+                success: true,
+                message: 'Duplicate submission ignored — event already recorded',
+                event: dedupHit,
+            }, { status: 200 });
+        }
 
         // BUG-108/BUG-116: broadcast to live viewers now that the DB write has actually
         // succeeded — previously nothing here ever broadcast at all; the only push a
@@ -357,7 +516,8 @@ export async function POST(
         // alive until the broadcast settles, without delaying the response itself.
         // broadcast()'s own try/catch already swallows failures, so this can't fail
         // event creation.
-        after(() => broadcastMatchEvent(matchId, newEvent));
+        // Public room: broadcast without logger identity (same rule as the REST GET; src/lib/ws-public-payload.ts).
+        after(() => broadcastMatchEvent(matchId, toPublicMatchEvent(newEvent)));
 
         if (newHomeScore !== undefined && newAwayScore !== undefined) {
             after(() => broadcastScoreUpdate(matchId, newHomeScore!, newAwayScore!));
@@ -368,7 +528,7 @@ export async function POST(
         }
 
         const notificationEventType = getNotifiableEventType(match.sport, type);
-        if (notificationEventType && !isPenaltyShootout) {
+        if (notificationEventType && !isPenaltyShootout && isPushEligibleMatchType(match.matchType)) {
             after(async () => {
                 try {
                     // Penalty Saved credits the keeper (relatedPlayerId), not the taker --
@@ -392,9 +552,9 @@ export async function POST(
                         minute,
                         homeScore: newHomeScore ?? match.homeScore ?? undefined,
                         awayScore: newAwayScore ?? match.awayScore ?? undefined,
-                        // Not used for targeting yet -- see MatchEventNotification's own
-                        // comment (roadmap item 4). Carried through now so a future
-                        // followed-player audience query doesn't need this call site again.
+                        // BACKLOG-342: now used for targeting -- match-notification-service.ts's
+                        // playerFavorites query joins on these to notify anyone who has
+                        // starred this specific player (userFavorites, favoriteType: 'player').
                         playerId: notifyPlayerId || undefined,
                         relatedPlayerId: relatedPlayerId || undefined,
                         competitionId: match.competitionId,
@@ -430,41 +590,39 @@ export async function POST(
             });
         }
 
-        // Update player stats for competitive matches only — friendlies and shootout events do not count
-        if (playerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
-            await updatePlayerStats(match.sport, playerId, type, match.competitionId, value, made);
-        }
-
-        // Penalty Saved: credit the keeper's saves stat via relatedPlayerId (null-check — keeper is optional)
-        if (upperType === 'PENALTY_SAVED' && relatedPlayerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
-            await updatePlayerStats(match.sport, relatedPlayerId, 'Save', match.competitionId, value);
-        }
-
-        // Auto-calculate ratings after event (for live matches). Wrapped in after(),
-        // same reasoning as the broadcast calls above: this used to be a synchronous
-        // await sitting between the DB write and the response, so it delayed not just
-        // the response to the logger but also when the after()-scheduled broadcast
-        // above could even start (after() callbacks don't run until this handler's
-        // own promise resolves). Real contributor to BUG-119's remaining latency.
-        // BACKLOG-124: this used to be an HTTP self-fetch to this route's own
-        // /ratings sibling, forwarding no Cookie/Authorization header -- it 401'd and
-        // was silently swallowed on every single live event, so auto-ratings had
-        // never actually run live since this feature was written. That same
-        // self-fetch was also the exact trigger for a local-dev hang (a genuine
-        // outbound HTTPS request to a real deployed NEXT_PUBLIC_APP_URL from within
-        // the same process handling the original request). Calling the shared
-        // function directly (src/lib/ratingsService.ts) removes the HTTP round-trip
-        // entirely -- this code only runs once `authUser.role` has already been
-        // verified as admin/logger above, so there's no auth to forward or re-check.
-        if (match.status === 'LIVE') {
-            after(async () => {
-                try {
-                    await calculateAndSaveRatings(matchId);
-                } catch (error) {
-                    console.error('Error auto-calculating ratings:', error);
-                }
+        // Update player stats for competitive matches only — friendlies and shootout events do not count.
+        // Runs AFTER the response (after()): the stats upsert is 2-3 sequential Turso round trips and used to
+        // delay both the logger's ack and the viewers' broadcast, which also only starts once the response is
+        // sent (BACKLOG-480 item 4). updatePlayerStats already swallows errors and reports them to Sentry.
+        // The player on the event is credited, and for a saved penalty the keeper (relatedPlayerId, optional)
+        // is credited a save: getEventStatEffects returns both, the same list the delete path reverts.
+        if (match.matchType !== 'friendly' && !isPenaltyShootout) {
+            const statEffects = getEventStatEffects(match.sport, {
+                type,
+                playerId: playerId || null,
+                relatedPlayerId: relatedPlayerId || null,
+                made: made === true,
             });
+            if (statEffects.length > 0) {
+                after(() => recordEventStats(match.sport, match.competitionId, statEffects));
+            }
         }
+
+        // BACKLOG-255: no longer auto-calculating ratings on every single live event.
+        // This used to run calculateAndSaveRatings() (a sequential SELECT+UPDATE per
+        // rated player) on every LIVE-status event -- a real, unmeasured contributor
+        // to Flow B's ~9.9s latency (readiness checklist). Ratings now recalculate
+        // once, on the match's FINISHED transition (src/app/api/matches/[id]/route.ts),
+        // plus on-demand via the existing admin "Calculate Ratings" button
+        // (POST /api/matches/[id]/ratings, admin/match-ratings/[id]/page.tsx) -- both
+        // already call the same shared calculateAndSaveRatings(). Known, accepted
+        // side effect (architect's Q2 recommendation, not an oversight): the match
+        // detail page's Lineups tab reads playerRatings (finalRating ?? autoRating,
+        // matches/[id]/route.ts:~483) without a status gate, so a LIVE match's
+        // displayed ratings now stay at their last-computed value (initialize/route.ts's
+        // 6.0 default, if never manually recalculated) for the rest of the match
+        // instead of updating after every event -- only FINISHED or a manual admin
+        // recalculation refreshes them. Traded deliberately for Flow B latency.
 
         return NextResponse.json({
             success: true,
@@ -479,230 +637,5 @@ export async function POST(
             { error: 'Failed to create match event' },
             { status: 500 }
         );
-    }
-}
-
-// BACKLOG-126: season-readiness. Pre-migration, every player had exactly one lifetime
-// stats row (looked up by playerId alone), silently blending every season/competition
-// together forever. Stats are now scoped by (playerId, season, competitionId) — season
-// is derived from the match's real competition. Rows written before this migration
-// (season='2024' for football, season='2025/2026' for basketball) are an intentionally
-// frozen legacy/lifetime baseline (Option A, Richard's call) — never written to again by
-// this function once a real season is derivable, and never replayed/reconciled here.
-// Matches with no competitionId (schema allows it, though non-friendly matches should
-// always have one) fall back to CURRENT_SEASON rather than the legacy '2024' bucket, so
-// new data never silently merges into the frozen baseline.
-const CURRENT_SEASON_FALLBACK = '2026/2027';
-
-// Helper function to update player stats
-async function updatePlayerStats(
-    sport: string,
-    playerId: string,
-    eventType: string,
-    competitionId: string | null,
-    value?: any,
-    made?: boolean
-) {
-    try {
-        const { basketballPlayerStats, footballPlayerStats, competitions } = await import('@/db/schema');
-
-        let season = CURRENT_SEASON_FALLBACK;
-        if (competitionId) {
-            const competition = await db
-                .select({ season: competitions.season })
-                .from(competitions)
-                .where(eq(competitions.id, competitionId))
-                .get();
-            if (competition?.season) season = competition.season;
-        }
-
-        if (sport === 'Basketball') {
-            // BUG (missed-shot-counted-as-made): these three cases used to increment
-            // made-counts and totalPoints unconditionally on event type alone, with no
-            // make/miss distinction — a "2PT Missed"/"3PT Missed"/"FT Missed" log entry
-            // silently wrote a make + its points to the DB, since `value` truthiness
-            // (0 is falsy) was the only signal available and it collapsed to the same
-            // "absent" case as a real make with no value sent. `made` is an explicit
-            // boolean sent by the client for these three types specifically — a miss
-            // must increment zero counters, never inferred from value.
-            // BUG-133: *Attempted columns (fieldGoalsAttempted/threePointersAttempted/
-            // freeThrowsAttempted) were never incremented on make OR miss -- with no
-            // denominator, fieldGoalPercentage/threePointPercentage/freeThrowPercentage
-            // could never be computed for any player, ever. Every shot attempt (make or
-            // miss) increments its Attempted counter; only a make also increments the
-            // Made counter and totalPoints -- made/miss discipline from the fix above
-            // is unchanged, this is additive.
-            const deltas: Partial<Record<keyof typeof basketballPlayerStats.$inferInsert, number>> = {};
-            switch (eventType) {
-                case 'Field Goal':
-                    deltas.fieldGoalsAttempted = 1;
-                    if (made) {
-                        deltas.fieldGoalsMade = 1;
-                        deltas.totalPoints = 2;
-                    }
-                    break;
-                case 'Three Pointer':
-                    deltas.threePointersAttempted = 1;
-                    if (made) {
-                        deltas.threePointersMade = 1;
-                        deltas.totalPoints = 3;
-                    }
-                    break;
-                case 'Free Throw':
-                    deltas.freeThrowsAttempted = 1;
-                    if (made) {
-                        deltas.freeThrowsMade = 1;
-                        deltas.totalPoints = 1;
-                    }
-                    break;
-                case 'Rebound':
-                    deltas.totalRebounds = 1;
-                    break;
-                case 'Assist':
-                    deltas.assists = 1;
-                    break;
-                case 'Steal':
-                    deltas.steals = 1;
-                    break;
-                case 'Block':
-                    deltas.blocks = 1;
-                    break;
-                case 'Turnover':
-                    deltas.turnovers = 1;
-                    break;
-                case 'Foul':
-                    deltas.personalFouls = 1;
-                    break;
-                case 'Technical Foul':
-                    // BACKLOG-166: this used to be indistinguishable from a regular
-                    // Foul client-side (both dispatched type: 'Foul'), so it silently
-                    // inflated personalFouls -- now its own type, own column.
-                    deltas.technicalFouls = 1;
-                    break;
-            }
-
-            await upsertPlayerStats(basketballPlayerStats, playerId, season, competitionId, deltas);
-        } else if (sport === 'Football') {
-            const deltas: Partial<Record<keyof typeof footballPlayerStats.$inferInsert, number>> = {};
-            switch (eventType.toUpperCase().replace(/\s+/g, '_')) {
-                case 'GOAL':
-                    deltas.goals = 1;
-                    deltas.shotsOnTarget = 1;
-                    break;
-                case 'ASSIST':
-                    deltas.assists = 1;
-                    break;
-                case 'OWN_GOAL':
-                    deltas.ownGoals = 1;
-                    break;
-                case 'PENALTY':
-                    deltas.penaltiesScored = 1;
-                    deltas.shotsOnTarget = 1;
-                    break;
-                case 'PENALTY_MISSED':
-                    deltas.shotsOffTarget = 1;
-                    break;
-                case 'PENALTY_SAVED':
-                    deltas.shotsOnTarget = 1;
-                    break;
-                case 'FOUL':
-                    deltas.foulsCommitted = 1;
-                    break;
-                case 'YELLOW_CARD':
-                    deltas.yellowCards = 1;
-                    break;
-                case 'RED_CARD':
-                    deltas.redCards = 1;
-                    break;
-                case 'SAVE':
-                    deltas.saves = 1;
-                    break;
-            }
-
-            await upsertPlayerStats(footballPlayerStats, playerId, season, competitionId, deltas);
-        }
-    } catch (error) {
-        console.error('Error updating player stats:', error);
-        Sentry.captureException(error, { tags: { area: 'player-stats' }, extra: { playerId, eventType, sport, competitionId } });
-        // Don't throw - event should still be logged
-    }
-}
-
-// BUG-235: the old select-then-insert-or-update pattern was not atomic. Two
-// near-simultaneous events for the same player/season/competition (the exact
-// dual-logger scenario BACKLOG-151 flags as never tested) could both SELECT a
-// null row, both attempt INSERT, and the second throw a unique-constraint
-// violation on the (playerId, season, competitionId) index BACKLOG-126 added --
-// caught above and silently swallowed, permanently dropping that player's stat
-// increment for the event with zero visible error anywhere. Real DB-level
-// upsert (single atomic statement) instead of separate read-then-write calls
-// closes the race for every match tied to a real competition -- SQLite/libsql
-// does not treat two NULL competitionId rows as conflicting under a UNIQUE
-// index (each NULL is distinct from every other NULL), so a friendly/
-// untracked-competition match (competitionId === null) can't rely on the
-// conflict target the same way; the insert-then-recover-via-update fallback
-// below at least turns that narrower remaining case into "recovered on retry"
-// rather than "silently gone," matching this project's "no silent failures" rule.
-async function upsertPlayerStats(
-    table: typeof import('@/db/schema').footballPlayerStats | typeof import('@/db/schema').basketballPlayerStats,
-    playerId: string,
-    season: string,
-    competitionId: string | null,
-    deltas: Record<string, number>
-) {
-    if (Object.keys(deltas).length === 0) return;
-
-    const insertValues: Record<string, unknown> = {
-        id: `stats_${nanoid()}`,
-        playerId,
-        season,
-        competitionId,
-        ...deltas,
-    };
-
-    if (competitionId) {
-        // Real competition -- the unique index actually catches a concurrent conflict.
-        const incrementSet: Record<string, unknown> = {};
-        for (const [column, delta] of Object.entries(deltas)) {
-            incrementSet[column] = sql`${(table as any)[column]} + ${delta}`;
-        }
-        await db
-            .insert(table as any)
-            .values(insertValues)
-            .onConflictDoUpdate({
-                target: [(table as any).playerId, (table as any).season, (table as any).competitionId],
-                set: incrementSet,
-            });
-        return;
-    }
-
-    // No competition (friendly match) -- NULL bypasses the unique index, so fall
-    // back to insert-first, recover-via-update-on-conflict rather than a blind
-    // select-then-branch (narrows, doesn't fully close, the race for this case).
-    try {
-        await db.insert(table as any).values(insertValues);
-    } catch {
-        const existing = await db
-            .select()
-            .from(table as any)
-            .where(and(
-                eq((table as any).playerId, playerId),
-                eq((table as any).season, season),
-                isNull((table as any).competitionId)
-            ))
-            .get();
-        if (!existing) throw new Error('upsertPlayerStats: insert failed and no existing row found to update');
-        const incrementSet: Record<string, unknown> = {};
-        for (const [column, delta] of Object.entries(deltas)) {
-            incrementSet[column] = sql`${(table as any)[column]} + ${delta}`;
-        }
-        await db
-            .update(table as any)
-            .set(incrementSet)
-            .where(and(
-                eq((table as any).playerId, playerId),
-                eq((table as any).season, season),
-                isNull((table as any).competitionId)
-            ));
     }
 }

@@ -4,11 +4,15 @@ import { db } from '@/db';
 import { users, loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { env } from '@/lib/env';
+import { isLoggerStatusActive } from '@/lib/logger-login';
+import { isTokenVersionCurrent } from '@/lib/token-version';
 
 export interface AuthUser {
     userId: string;
     email: string;
     role: string;
+    /** Raw `tv` claim from the token; undefined for tokens signed before versions existed. */
+    tokenVersion?: unknown;
 }
 
 export interface AuthenticatedUser {
@@ -54,13 +58,14 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
 
         // Logger JWTs use { id, email, role }; admin JWTs use { userId, email, role }.
         // Normalise to userId so downstream callers work uniformly.
-        const decoded = jwt.verify(token, env.jwtSecret) as { userId?: string; id?: string; email: string; role: string };
+        const decoded = jwt.verify(token, env.jwtSecret) as { userId?: string; id?: string; email: string; role: string; tv?: unknown };
         const userId = decoded.userId ?? decoded.id ?? '';
 
         return {
             userId,
             email: decoded.email,
             role: normalizeUserRole(decoded.role),
+            tokenVersion: decoded.tv,
         };
     } catch (error) {
         console.error('[verifyAuth] Auth verification error:', error);
@@ -86,6 +91,19 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
         // (e.g. a field operator who also has a fan account, and logged in via the
         // viewer login path). Try the loggers table first; fall back to users if
         // not found there so the session resolves correctly in both cases.
+        const toAuthenticatedLogger = (logger: typeof loggers.$inferSelect): AuthenticatedUser => ({
+            id: logger.id,
+            email: logger.email ?? '',
+            name: logger.name,
+            role: 'logger',
+            avatar: null,
+            coverImage: null,
+            bio: null,
+            favoriteTeamId: null,
+            createdAt: logger.createdAt,
+            updatedAt: null,
+        });
+
         if (authData.role === 'logger') {
             const loggerResult = await db
                 .select()
@@ -96,18 +114,8 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
             const logger = loggerResult[0];
 
             if (logger) {
-                return {
-                    id: logger.id,
-                    email: logger.email ?? '',
-                    name: logger.name,
-                    role: 'logger',
-                    avatar: null,
-                    coverImage: null,
-                    bio: null,
-                    favoriteTeamId: null,
-                    createdAt: logger.createdAt,
-                    updatedAt: null,
-                };
+                // A disabled logger account has no session, even with an unexpired token.
+                return isLoggerStatusActive(logger.status) ? toAuthenticatedLogger(logger) : null;
             }
             // Not in loggers table — fall through to users table lookup below.
         }
@@ -121,6 +129,32 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
         const user = userResult[0];
 
         if (!user) {
+            // BUG-239: a `loggers` row's own `role` column isn't guaranteed to be
+            // exactly 'logger' (a real staging row was found with role='admin').
+            // If the token's claimed role wasn't 'logger' (so the fast path above
+            // was skipped) and no matching `users` row exists either, check
+            // `loggers` as a last resort before giving up — otherwise a stale/
+            // incorrect `loggers.role` value permanently 401s a real, active
+            // logger the moment their token gets re-signed from that DB row
+            // (e.g. on /api/auth/refresh).
+            if (authData.role !== 'logger') {
+                const loggerResult = await db
+                    .select()
+                    .from(loggers)
+                    .where(eq(loggers.id, authData.userId))
+                    .limit(1);
+
+                const logger = loggerResult[0];
+                if (logger) {
+                    return isLoggerStatusActive(logger.status) ? toAuthenticatedLogger(logger) : null;
+                }
+            }
+            return null;
+        }
+
+        // A password change or reset bumps the stored version, which ends every
+        // session signed before it. Tokens with no version count as 0.
+        if (!isTokenVersionCurrent(authData.tokenVersion, user.tokenVersion)) {
             return null;
         }
 
@@ -180,11 +214,12 @@ export function hasRole(user: AuthenticatedUser | null, allowedRoles: string[]):
  * @param userId - User ID
  * @param email - User email
  * @param role - User role
+ * @param tokenVersion - The user's current users.token_version (0 for a new account)
  * @returns JWT token
  */
-export function generateToken(userId: string, email: string, role: string): string {
+export function generateToken(userId: string, email: string, role: string, tokenVersion: number): string {
     return jwt.sign(
-        { userId, email, role: normalizeUserRole(role) },
+        { userId, email, role: normalizeUserRole(role), tv: tokenVersion },
         env.jwtSecret,
         { expiresIn: '7d' }
     );

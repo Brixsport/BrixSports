@@ -4,11 +4,12 @@ import { news, newsLikes, users } from '@/db/schema';
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { toPublicNewsListItem } from '@/lib/public-news';
 
 // GET /api/news - Get all news articles with filters
 export async function GET(request: NextRequest) {
     try {
-        const rl = checkRateLimit(request);
+        const rl = await checkRateLimit(request);
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
@@ -24,7 +25,11 @@ export async function GET(request: NextRequest) {
         const breaking = searchParams.get('breaking');
         const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
-        const status = searchParams.get('status') || 'published'; // Only show published by default
+
+        // Only admins may ask for anything other than published articles.
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+        const status = isAdmin ? (searchParams.get('status') || 'published') : 'published';
 
         // Build query conditions
         const conditions = [];
@@ -69,8 +74,20 @@ export async function GET(request: NextRequest) {
             .from(news)
             .where(and(...conditions));
 
+        // BACKLOG-261: omit the full article body from the LIST response for
+        // non-admin callers -- src/app/news/page.tsx's own NewsArticle type
+        // never reads `content`. Kept for admins: src/app/admin/news/page.tsx's
+        // handleEdit() populates the edit form straight from this list response
+        // (article.content), with no separate by-id fetch -- omitting it
+        // unconditionally would have silently broken every admin edit. Public
+        // detail route (/api/news/[id]) is untouched and keeps content for
+        // everyone, as before.
+        const responseArticles = isAdmin
+            ? newsArticles
+            : newsArticles.map(toPublicNewsListItem);
+
         return NextResponse.json({
-            news: newsArticles,
+            news: responseArticles,
             pagination: {
                 total: totalCount[0]?.count || 0,
                 limit,

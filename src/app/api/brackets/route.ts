@@ -23,25 +23,23 @@ export async function GET(request: NextRequest) {
         // Build query conditions
         const conditions = [];
 
-        const { or } = await import('drizzle-orm');
-
-        if (competitionId || competition) {
-            // Brackets are often seeded without competitionId, and competition casing may differ,
-            // so we match by ID when possible, otherwise case-insensitive by name.
-            const name = competition || '';
-            const nameLower = name.toLowerCase();
-
-            const matchByName = name
-                ? sql`lower(${bracketNodes.competition}) = ${nameLower}`
-                : undefined;
-
-            if (competitionId && matchByName) {
-                conditions.push(or(eq(bracketNodes.competitionId, competitionId), matchByName));
-            } else if (competitionId) {
-                conditions.push(eq(bracketNodes.competitionId, competitionId));
-            } else if (matchByName) {
-                conditions.push(matchByName);
-            }
+        if (competitionId) {
+            // competitionId is authoritative when present -- do NOT OR it with a
+            // name fallback. Two different competitions can legitimately share
+            // an exact name (e.g. two seasons both literally named "BUSA LEAGUE
+            // FOOTBALL"), and OR'ing in a name match even when a real id is
+            // already known silently pulls in the other competition's bracket
+            // nodes too the moment that name collision exists (confirmed live
+            // via the sibling standings route, session 2026-09-05, once
+            // BACKLOG-291's grouping fix made two same-named seasons reachable
+            // side by side for the first time).
+            conditions.push(eq(bracketNodes.competitionId, competitionId));
+        } else if (competition) {
+            // No id available -- fall back to name matching for legacy/name-only
+            // callers, only as a last resort, never alongside a real competitionId.
+            // Brackets are often seeded without competitionId, and competition
+            // casing may differ, so this stays case-insensitive.
+            conditions.push(sql`lower(${bracketNodes.competition}) = ${competition.toLowerCase()}`);
         }
 
         if (sport) {
@@ -52,7 +50,8 @@ export async function GET(request: NextRequest) {
         const nodes = await db
             .select()
             .from(bracketNodes)
-            .where(and(...conditions));
+            .where(and(...conditions))
+            .limit(200);
 
         // Group nodes by round
         const rounds = nodes.reduce((acc, node) => {
@@ -114,8 +113,9 @@ export async function GET(request: NextRequest) {
             })
         );
 
-        // Sort rounds by typical tournament order
-        const roundOrder = ['FINAL', 'SEMI_FINAL', 'QUARTER_FINAL', 'ROUND_16', 'ROUND_32'];
+        // Sort rounds by typical tournament order. THIRD_PLACE was previously
+        // omitted -- indexOf returned -1, sorting it before FINAL (BACKLOG-276).
+        const roundOrder = ['FINAL', 'THIRD_PLACE', 'SEMI_FINAL', 'QUARTER_FINAL', 'ROUND_16', 'ROUND_32'];
         enrichedRounds.sort((a, b) => {
             const aIndex = roundOrder.indexOf(a.round);
             const bIndex = roundOrder.indexOf(b.round);

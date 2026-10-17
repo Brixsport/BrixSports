@@ -86,20 +86,20 @@ export function InstallPrompt({ appType = 'user' }: { appType?: 'user' | 'admin'
                 <div className="bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl shadow-primary/20">
                     <button
                         onClick={handleDismiss}
-                        className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
+                        className="absolute top-4 right-4 text-foreground/40 hover:text-foreground transition-colors"
                     >
                         <X size={20} />
                     </button>
 
                     <div className="flex items-start gap-4 mb-4">
                         <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center flex-shrink-0">
-                            <Smartphone className="text-black" size={24} />
+                            <Smartphone className="text-primary-foreground" size={24} />
                         </div>
                         <div>
-                            <h3 className="font-display text-xl italic uppercase tracking-tight text-white mb-1">
+                            <h3 className="font-display text-xl italic uppercase tracking-tight text-foreground mb-1">
                                 Install Brixsport
                             </h3>
-                            <p className="text-sm text-white/60">
+                            <p className="text-sm text-foreground/60">
                                 Get instant access to live scores, faster load times, and offline support
                             </p>
                         </div>
@@ -108,14 +108,14 @@ export function InstallPrompt({ appType = 'user' }: { appType?: 'user' | 'admin'
                     <div className="flex gap-3">
                         <button
                             onClick={handleInstall}
-                            className="flex-1 bg-primary text-black font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-primary/30 flex items-center justify-center gap-2"
+                            className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-primary/30 flex items-center justify-center gap-2"
                         >
                             <Download size={16} />
                             Install App
                         </button>
                         <button
                             onClick={handleDismiss}
-                            className="px-4 py-3 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors"
+                            className="px-4 py-3 text-foreground/60 hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors"
                         >
                             Not Now
                         </button>

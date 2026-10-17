@@ -21,7 +21,6 @@ const ENDPOINTS_TO_CHECK = [
     { path: '/api/news', name: 'News API' },
     { path: '/api/transfers', name: 'Transfers API' },
     { path: '/api/polls', name: 'Polls API' },
-    { path: '/api/events', name: 'Events API' },
     { path: '/api/brackets', name: 'Brackets API' },
     // Admin APIs
     { path: '/api/admin/ads', name: 'Admin Ads API' },

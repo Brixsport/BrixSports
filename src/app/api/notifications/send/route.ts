@@ -23,8 +23,6 @@ function configureVAPID(): { success: boolean; error?: string } {
         hasPrivateKey: !!vapidPrivateKey,
         publicKeyLength: vapidPublicKey?.length,
         privateKeyLength: vapidPrivateKey?.length,
-        publicKeyPreview: vapidPublicKey?.substring(0, 20) + '...',
-        privateKeyPreview: vapidPrivateKey?.substring(0, 20) + '...',
     });
 
     if (!vapidPublicKey || !vapidPrivateKey) {
@@ -276,14 +274,13 @@ export async function POST(request: NextRequest) {
                 : [];
         }
 
-        // Log unique user IDs with subscriptions for debugging
+        // Log counts only; never individual user ids
         const uniqueUserIds = [...new Set(allSubscriptions.map(s => s.userId))];
         console.log('[Notifications API] Found subscriptions:', {
             total: allSubscriptions.length,
             targetAudience,
             targetUserCount: targetUserIds === null ? 'all' : targetUserIds.length,
             uniqueUsersWithSubscriptions: uniqueUserIds.length,
-            userIds: uniqueUserIds, // List all user IDs that have subscriptions
         });
 
         let successCount = 0;

@@ -8,7 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, competitions } from '@/db/schema';
-import { eq, asc, desc, and, or } from 'drizzle-orm';
+import { eq, asc, desc, and, or, isNull } from 'drizzle-orm';
+import { PUBLIC_FIXTURE_MATCH_FIELDS } from '@/lib/public-match-fields';
+import { toPublicH2HTeam } from '@/lib/public-h2h';
 
 interface RouteParams {
     params: {
@@ -48,7 +50,13 @@ export async function GET(
         }
 
         // Build filters
-        const filters = [eq(matches.competition, competition.name)];
+        // Match by competition id; rows with no id yet fall back to the competition name.
+        const filters = [
+            or(
+                eq(matches.competitionId, competitionId),
+                and(isNull(matches.competitionId), eq(matches.competition, competition.name))
+            )!,
+        ];
 
         if (status) {
             filters.push(eq(matches.status, status));
@@ -71,7 +79,7 @@ export async function GET(
         // Fetch matches with team details
         const fixturesData = await db
             .select({
-                match: matches,
+                match: PUBLIC_FIXTURE_MATCH_FIELDS,
                 homeTeam: teams,
             })
             .from(matches)
@@ -92,8 +100,8 @@ export async function GET(
 
                 return {
                     ...row.match,
-                    homeTeam: row.homeTeam,
-                    awayTeam,
+                    homeTeam: toPublicH2HTeam(row.homeTeam ?? undefined) ?? null,
+                    awayTeam: toPublicH2HTeam(awayTeam) ?? null,
                 };
             })
         );

@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { transfers, players, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { toPublicTransfer } from '@/lib/public-transfers';
 
 // GET /api/transfers/[id] - Get single transfer with full details
 export async function GET(
@@ -55,12 +56,7 @@ export async function GET(
             toTeam = toTeamData[0] || null;
         }
 
-        return NextResponse.json({
-            ...transfer,
-            player,
-            fromTeam,
-            toTeam,
-        });
+        return NextResponse.json(toPublicTransfer(transfer, player, fromTeam, toTeam));
     } catch (error) {
         console.error('[Transfers API] Error fetching transfer:', error);
         return NextResponse.json(

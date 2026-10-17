@@ -137,11 +137,18 @@ export function MatchLoggerUI({ match, onExit, currentLogger, teams, players }: 
     }));
   }, [events, stats]);
 
+  // Same shape as BasketballLogger's fixed BACKLOG-134 gap: a failed initial
+  // events fetch used to only console.error and leave `events` empty with no
+  // indication -- indistinguishable from "this match genuinely has no events
+  // yet," risking duplicate logging of events that actually already exist.
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     // Fetch events
     const fetchEvents = async () => {
       try {
         const res = await fetch(`/api/matches/${match.id}/events`);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data = await res.json();
         if (data.events) {
           setEvents(data.events.map((e: any) => ({
@@ -151,6 +158,7 @@ export function MatchLoggerUI({ match, onExit, currentLogger, teams, players }: 
         }
       } catch (e) {
         console.error(e);
+        setLoadError('Failed to load existing match events — check connection and reload before logging, to avoid duplicating events that may already exist.');
       }
     };
     fetchEvents();
@@ -323,6 +331,17 @@ export function MatchLoggerUI({ match, onExit, currentLogger, teams, players }: 
 
   return (
     <div className="fixed inset-0 bg-[#050505] text-white z-50 flex flex-col overflow-hidden">
+      {loadError && (
+        <div className="shrink-0 bg-orange-500/10 border-b border-orange-500/20 px-6 py-2 flex items-center justify-between gap-3">
+          <span className="text-xs text-orange-400 font-medium flex items-center gap-2">
+            <AlertTriangle size={14} className="shrink-0" />
+            {loadError}
+          </span>
+          <button onClick={() => setLoadError(null)} className="text-orange-400/60 hover:text-orange-400 text-xs shrink-0">
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-black/80 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">

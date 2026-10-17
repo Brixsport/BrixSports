@@ -3,8 +3,10 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getMatchConfig } from '@/lib/matchConfig';
+import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // POST /api/matches/[id]/lineup/publish - Publish lineup (lock it)
 export async function POST(
@@ -25,6 +27,9 @@ export async function POST(
 
         const params = await props.params;
         const matchId = params.id;
+        if (authUser.role === 'logger' && !(await isLoggerAssigned(matchId, authUser.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
         const body = await request.json();
         const { team } = body; // 'home' | 'away'
 
@@ -100,13 +105,14 @@ export async function POST(
             updatedAt: new Date().toISOString()
         };
 
-        // Save back to database
-        await db.update(matches)
-            .set({
-                lineups: JSON.stringify(existingLineups),
-                updatedAt: new Date()
-            })
-            .where(eq(matches.id, matchId));
+        // Save back to database -- BACKLOG-220: compare-and-swap against the
+        // exact raw value read above, so publishing home and away at once (the
+        // normal admin flow post-BACKLOG-323) can't have one overwrite drop
+        // the other's write.
+        const writeResult = await writeMatchLineupsAtomic(matchId, match[0].lineups as string | null, existingLineups);
+        if (!writeResult.ok) {
+            return NextResponse.json(CONCURRENT_MODIFICATION_RESPONSE, { status: 409 });
+        }
 
         // Send push notification for lineup availability
         try {

@@ -6,10 +6,10 @@ export function StatBar({ label, homeValue, awayValue, homeTeam, awayTeam, suffi
         <div className="space-y-2">
             <div className="flex justify-between text-sm">
                 <span className="font-bold">{homeValue}{suffix}</span>
-                <span className="text-white/60 text-xs uppercase tracking-wider">{label}</span>
+                <span className="text-foreground/60 text-xs uppercase tracking-wider">{label}</span>
                 <span className="font-bold">{awayValue}{suffix}</span>
             </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden flex">
+            <div className="h-2 bg-muted rounded-full overflow-hidden flex">
                 <div
                     className="h-full bg-primary"
                     style={{ width: `${homePercent}%` }}

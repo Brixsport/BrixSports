@@ -6,12 +6,35 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Trophy, Users, Layout, Shield, Search,
-    Plus, X, Save, Trash2, Filter, ChevronRight,
-    Trophy as TrophyIcon, Settings, Calendar
+    Plus, X, Save, Trash2, Filter, ChevronRight, ChevronDown,
+    Trophy as TrophyIcon, Settings, Calendar, Shuffle, Award
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
+import { TeamLogo } from '@/lib/utils/team-logo';
+
+// Found live, session 59, while verifying BACKLOG-271 on staging: after a
+// successful save, this page's own refetch of /api/standings?competitionId=
+// can be served a stale pre-save copy by sw-admin.js's SWR policy on
+// /^\/api\/(football\/|basketball\/)?standings(\/|$|\?)/ -- same staleness
+// class BACKLOG-227 fixed for /api/players*, reproduced twice via direct DOM
+// checks (not a tool-read timing artifact). Cache Storage is origin-scoped,
+// not per-SW -- sw-user.js also has a "-api"-suffixed cache, so matching must
+// require "-admin-" too or this can silently evict the wrong SW's cache
+// (the exact mistake caught and fixed in roster-transfers/page.tsx first).
+async function evictStaleStandingsCache(competitionId: string) {
+    if (typeof window === 'undefined' || !('caches' in window)) return;
+    try {
+        const cacheNames = await caches.keys();
+        const apiCacheName = cacheNames.find((n) => n.includes('-admin-') && n.endsWith('-api'));
+        if (!apiCacheName) return;
+        const cache = await caches.open(apiCacheName);
+        await cache.delete(`/api/standings?competitionId=${competitionId}`);
+    } catch {
+        // Best-effort only.
+    }
+}
 
 interface Team {
     id: string;
@@ -27,6 +50,9 @@ interface Competition {
     name: string;
     sport: string;
     format: string;
+    // BACKLOG-302: the real, code-consumed shape -- distinct from `format`
+    // above (decorative, no code consumers). Null means not yet classified.
+    structure?: 'pure-league' | 'group-knockout' | 'final-only-ko' | 'swiss-top8' | null;
     season: string;
     status: string;
     numberOfTeams?: number;
@@ -41,6 +67,35 @@ interface StandingEntry {
     team?: Team;
 }
 
+// BACKLOG-272: soft visibility only, no hard cap enforced -- mirrors the
+// same helper in the competitions list page.
+function teamCountColor(assigned: number, target?: number): string {
+    if (!target) return 'text-primary';
+    if (assigned < target) return 'text-amber-400';
+    if (assigned > target) return 'text-red-400';
+    return 'text-green-400';
+}
+
+// BACKLOG-302: which format-specific admin controls apply to a competition's
+// real structure. `format` is decorative (no code consumers) -- this reads
+// `structure` instead, confirmed necessary since 2 of 8 real competitions had
+// a `format` value that didn't match their actual live data. A pure-league or
+// final-only-ko competition has no bracket/draw concept at all; group-knockout
+// needs a top-N knockout stage (BACKLOG-280's generic bracket) but not a
+// league-phase draw (that's swiss-top8-specific, BACKLOG-277/278/279).
+function advancedSettingsFor(structure: Competition['structure']): Array<{ label: string; href: string; icon: typeof Shuffle }> {
+    if (structure === 'swiss-top8') {
+        return [
+            { label: 'Draw', href: 'draw', icon: Shuffle },
+            { label: 'Knockout', href: 'knockout', icon: Award },
+        ];
+    }
+    if (structure === 'group-knockout') {
+        return [{ label: 'Knockout', href: 'knockout', icon: Award }];
+    }
+    return [];
+}
+
 export default function CompetitionTeamsPage() {
     const { id } = useParams();
     const router = useRouter();
@@ -53,6 +108,11 @@ export default function CompetitionTeamsPage() {
     const [allTeams, setAllTeams] = useState<Team[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+    const [showAdvancedMenu, setShowAdvancedMenu] = useState(false);
+    // BACKLOG-271: ids of previously-saved standings rows removed locally
+    // this session -- POST alone never deleted them, so Save must explicitly
+    // DELETE these before/alongside upserting whatever remains.
+    const [removedIds, setRemovedIds] = useState<string[]>([]);
 
     useEffect(() => {
         fetchData();
@@ -60,6 +120,7 @@ export default function CompetitionTeamsPage() {
 
     const fetchData = async () => {
         setIsLoading(true);
+        setRemovedIds([]);
         try {
             const [compRes, teamsRes, standingsRes] = await Promise.all([
                 fetch(`/api/competitions/${id}`),
@@ -113,6 +174,12 @@ export default function CompetitionTeamsPage() {
     };
 
     const handleRemoveTeam = (teamId: string) => {
+        const target = competitionTeams.find(t => t.teamId === teamId);
+        if (target?.id) {
+            // Was a real, already-saved standings row -- must be explicitly
+            // deleted on Save, not just dropped from local state.
+            setRemovedIds([...removedIds, target.id]);
+        }
         setCompetitionTeams(competitionTeams.filter(t => t.teamId !== teamId));
     };
 
@@ -127,7 +194,24 @@ export default function CompetitionTeamsPage() {
         setIsSaving(true);
 
         try {
-            // Prepare entries for the standings table
+            // BACKLOG-271: teams removed locally must be actually deleted --
+            // the POST below is upsert-only and would otherwise leave their
+            // rows in the DB untouched forever.
+            if (removedIds.length > 0) {
+                const delResponse = await fetch('/api/standings', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: removedIds }),
+                });
+                if (!delResponse.ok) {
+                    error('Failed to remove some teams');
+                    setIsSaving(false);
+                    return;
+                }
+            }
+
+            // Prepare entries for the standings table -- may be empty if
+            // every team was removed and none remain to upsert.
             const entries = competitionTeams.map(t => ({
                 id: t.id,
                 teamId: t.teamId,
@@ -144,18 +228,23 @@ export default function CompetitionTeamsPage() {
                 points: 0
             }));
 
-            const response = await fetch('/api/standings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ entries })
-            });
+            if (entries.length > 0) {
+                const response = await fetch('/api/standings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ entries })
+                });
 
-            if (response.ok) {
-                success('Competition teams saved successfully');
-                fetchData(); // Refresh to get correct IDs
-            } else {
-                error('Failed to save changes');
+                if (!response.ok) {
+                    error('Failed to save changes');
+                    setIsSaving(false);
+                    return;
+                }
             }
+
+            success('Competition teams saved successfully');
+            await evictStaleStandingsCache(competition.id);
+            fetchData(); // Refresh to get correct IDs
         } catch (err) {
             error('Network error while saving');
             console.error(err);
@@ -200,20 +289,31 @@ export default function CompetitionTeamsPage() {
 
             <div className="max-w-7xl mx-auto space-y-12">
                 {/* Header */}
-                <header className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                {/* BACKLOG (admin responsive audit): a first pass only shrunk the icon+title row
+                    using sm:/md: tiers -- but md: is exactly 768px, the tablet test width, so
+                    "full desktop" sizing (text-5xl heading, md:flex-row single-line header, full
+                    Save/Advanced-Settings button padding) all kicked back in AT 768px, right where
+                    the fix needed to still be holding. Every breakpoint in this header (both the
+                    flex-col/flex-row stacking and the sm:/md: sizing tiers) shifted up one level --
+                    sm: -> md:, md: -> lg: -- so the shrunk layout now holds through the whole
+                    375-1023px mobile+tablet range and only resolves to full desktop sizing at
+                    lg: (1024px+), which real desktop widths comfortably clear. Also shrunk the
+                    "Advanced Settings" button (previously unshrunk, not caught by the first pass'
+                    top-offender scan) and added flex-wrap to the action-button row as a safety net. */}
+                <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
                     <div className="space-y-4">
                         <Link href="/admin/competitions" className="inline-flex items-center gap-2 text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-widest">
                             <ArrowLeft size={14} /> Back to Competitions
                         </Link>
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center">
-                                <TrophyIcon size={32} className="text-primary" />
+                        <div className="flex items-center gap-3 md:gap-4">
+                            <div className="w-12 h-12 md:w-16 md:h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center shrink-0">
+                                <TrophyIcon size={24} className="text-primary md:w-8 md:h-8" />
                             </div>
-                            <div>
-                                <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">
+                            <div className="min-w-0">
+                                <h1 className="font-display text-2xl md:text-3xl lg:text-5xl tracking-tighter italic uppercase leading-tight md:leading-none">
                                     {competition.name}
                                 </h1>
-                                <div className="flex items-center gap-4 mt-2">
+                                <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-2">
                                     <span className="text-xs font-bold uppercase tracking-widest text-white/40">{competition.sport}</span>
                                     <span className="w-1 h-1 bg-white/20 rounded-full"></span>
                                     <span className="text-xs font-bold uppercase tracking-widest text-white/40">{competition.season}</span>
@@ -224,11 +324,55 @@ export default function CompetitionTeamsPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowAdvancedMenu(v => !v)}
+                                className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-3 py-2.5 md:px-6 md:py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs md:text-sm hover:bg-white/10 transition-colors"
+                            >
+                                <Settings size={18} />
+                                <span className="hidden sm:inline">Advanced Settings</span>
+                                <span className="sm:hidden">Settings</span>
+                                <ChevronDown size={14} className={`transition-transform ${showAdvancedMenu ? 'rotate-180' : ''}`} />
+                            </button>
+                            <AnimatePresence>
+                                {showAdvancedMenu && (
+                                    <>
+                                        {/* Click-outside catcher */}
+                                        <div className="fixed inset-0 z-10" onClick={() => setShowAdvancedMenu(false)} />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -8 }}
+                                            className="absolute right-0 top-full mt-2 w-56 bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-20"
+                                        >
+                                            {competition && advancedSettingsFor(competition.structure).length > 0 ? (
+                                                advancedSettingsFor(competition.structure).map(({ label, href, icon: Icon }) => (
+                                                    <Link
+                                                        key={href}
+                                                        href={`/admin/competitions/${id}/${href}`}
+                                                        onClick={() => setShowAdvancedMenu(false)}
+                                                        className="flex items-center gap-3 px-5 py-4 text-sm font-bold uppercase tracking-widest text-white hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
+                                                    >
+                                                        <Icon size={16} className="text-primary" />
+                                                        {label}
+                                                    </Link>
+                                                ))
+                                            ) : (
+                                                <div className="px-5 py-4 text-xs text-white/40">
+                                                    No advanced settings for this competition's format
+                                                    {!competition?.structure && ' (structure not set)'}.
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </div>
                         <button
                             onClick={handleSave}
                             disabled={isSaving}
-                            className="flex items-center gap-2 bg-primary text-black px-8 py-4 rounded-2xl font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 bg-primary text-black px-4 py-3 md:px-8 md:py-4 rounded-2xl font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
                         >
                             {isSaving ? 'Saving...' : (
                                 <>
@@ -280,9 +424,7 @@ export default function CompetitionTeamsPage() {
                                                     className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between group hover:border-primary/50 transition-all shadow-xl"
                                                 >
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                                                            <span className="text-2xl">{entry.team?.logo || '🛡️'}</span>
-                                                        </div>
+                                                        <TeamLogo logo={entry.team?.logo} name={entry.team?.name || 'Team'} size="md" />
                                                         <div>
                                                             <p className="text-sm font-black uppercase tracking-tight">{entry.team?.name}</p>
                                                             <p className="text-[10px] text-white/40 font-bold uppercase">{entry.team?.university}</p>
@@ -324,7 +466,9 @@ export default function CompetitionTeamsPage() {
                             <div className="space-y-4">
                                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Total Teams</p>
-                                    <p className="text-2xl font-display italic text-primary">{competitionTeams.length}</p>
+                                    <p className={`text-2xl font-display italic ${teamCountColor(competitionTeams.length, competition.numberOfTeams)}`}>
+                                        {competitionTeams.length}{!!competition.numberOfTeams && `/${competition.numberOfTeams}`}
+                                    </p>
                                 </div>
                                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Target Teams</p>
@@ -392,7 +536,7 @@ export default function CompetitionTeamsPage() {
                                         className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-primary/50 transition-all group disabled:opacity-30"
                                     >
                                         <div className="flex items-center gap-4">
-                                            <span className="text-2xl">{team.logo || '🛡️'}</span>
+                                            <TeamLogo logo={team.logo} name={team.name} size="sm" />
                                             <div className="text-left">
                                                 <p className="text-sm font-black uppercase tracking-tight">{team.name}</p>
                                                 <p className="text-[10px] text-white/40 font-bold uppercase">{team.university}</p>

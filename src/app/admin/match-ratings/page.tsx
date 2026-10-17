@@ -43,14 +43,17 @@ export default function MatchRatingsListPage() {
     const fetchMatches = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/matches?status=FINISHED&limit=50');
+            const response = await fetch('/api/matches?status=FINISHED&limit=50&includeRatingsStatus=1');
 
             if (!response.ok) {
                 throw new Error('Failed to fetch matches');
             }
 
             const data = await response.json();
-            setMatches(data.matches || []);
+            // BACKLOG-254: /api/matches returns a bare array, not { matches: [...] } --
+            // this was reading data.matches (always undefined), so the list was
+            // silently empty regardless of how many finished matches existed.
+            setMatches(Array.isArray(data) ? data : []);
         } catch (err) {
             setError(getClientErrorMessage(err, 'Failed to load matches'));
         } finally {
@@ -133,8 +136,16 @@ export default function MatchRatingsListPage() {
                                 <div className="p-6">
                                     {/* Teams */}
                                     <div className="flex items-center justify-between mb-4">
-                                        {/* Home Team */}
-                                        <div className="flex items-center gap-3 flex-1">
+                                        {/* Home Team. BACKLOG-345: this wrapper (and its away-team
+                                            sibling below) were `flex-1` with no min-w-0 -- the inner
+                                            truncate div has min-w-0, but the outer wrapper itself
+                                            didn't, so the flex algorithm still gave it more width
+                                            than the 327px card could show, silently clipped by the
+                                            card's own overflow-hidden (not a page-level scrollbar,
+                                            so the earlier scan for that alone missed it -- team
+                                            crest + name was rendered fully off the visible card,
+                                            same "clipped, not scrollable" pattern as BACKLOG-336). */}
+                                        <div className="flex items-center gap-3 flex-1 min-w-0">
                                             <div className="w-12 h-12 relative rounded-lg overflow-hidden bg-white/5">
                                                 <Image
                                                     src={match.homeTeam.logo}
@@ -162,7 +173,7 @@ export default function MatchRatingsListPage() {
                                         </div>
 
                                         {/* Away Team */}
-                                        <div className="flex items-center gap-3 flex-1 flex-row-reverse">
+                                        <div className="flex items-center gap-3 flex-1 min-w-0 flex-row-reverse">
                                             <div className="w-12 h-12 relative rounded-lg overflow-hidden bg-white/5">
                                                 <Image
                                                     src={match.awayTeam.logo}

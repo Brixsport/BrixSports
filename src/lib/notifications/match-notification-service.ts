@@ -5,7 +5,7 @@
 
 import { db } from '@/db';
 import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, teams, players, users, userPreferences, notificationSendLog } from '@/db/schema';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray, ne, isNull } from 'drizzle-orm';
 import webpush from 'web-push';
 import { nanoid } from 'nanoid';
 import type { NotificationKey } from './notification-rules';
@@ -70,9 +70,10 @@ interface MatchEventNotification {
     minute?: number;
     homeScore?: number;
     awayScore?: number;
-    // Not yet used for targeting (roadmap item 4, NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md) --
-    // added now while the call sites already have both IDs in scope, so a future
-    // followed-player audience query doesn't need touching every call site again.
+    // BACKLOG-342: used for targeting -- see the playerFavorites query below,
+    // which joins on these. (Originally added for a "followed player" audience
+    // that never shipped a UI, roadmap item 4 / NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md;
+    // the favorite-player path shipped instead and reuses the same fields.)
     playerId?: string;
     relatedPlayerId?: string;
     // Item 2, session 53: competition-follow cascade -- following a competition should
@@ -114,6 +115,10 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
             );
 
         // Also get users who have favorited either team via the userFavorites table
+        // Fan Account Blueprint, ADR-001 Decision 1: notificationsEnabled
+        // defaults true and is nullable pre-migration for any row written
+        // before this column existed -- `ne(..., false)` (not `eq(..., true)`)
+        // so a NULL/legacy row still matches, only an explicit false excludes.
         const teamFavorites = await db
             .select({
                 userId: userFavorites.userId,
@@ -126,6 +131,10 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                     or(
                         eq(userFavorites.favoriteId, event.homeTeamId),
                         eq(userFavorites.favoriteId, event.awayTeamId)
+                    ),
+                    or(
+                        ne(userFavorites.notificationsEnabled, false),
+                        isNull(userFavorites.notificationsEnabled)
                     )
                 )
             );
@@ -178,13 +187,39 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                 )
             : [];
 
+        // BACKLOG-342: users who favorited (via the real, live `userFavorites`
+        // path -- the profile-page star, BACKLOG-296 -- as opposed to the
+        // `userFollows` player-follow path above, which is dead code with no
+        // UI to create a row) either player involved in this event. Same
+        // query-time-join architecture, no `notificationsEnabled` column on
+        // this table (mirrors `teamFavorites` above, not `playerFollowers`) --
+        // the master `userPreferences.matchAlerts`/`notifications` mute still
+        // applies downstream to everyone in `potentialUserIds` regardless.
+        // Naturally scoped to events the player was directly involved in:
+        // MATCH_START/HALF_TIME/MATCH_END never carry a playerId, so this
+        // query is empty for those and only ever matches GOAL/card/sub/
+        // penalty-type events -- the same scoping this file's own
+        // `playerFollowers` block above already settled on.
+        const playerFavorites = playerIds.length > 0
+            ? await db
+                .select({ userId: userFavorites.userId })
+                .from(userFavorites)
+                .where(
+                    and(
+                        eq(userFavorites.favoriteType, 'player'),
+                        inArray(userFavorites.favoriteId, playerIds)
+                    )
+                )
+            : [];
+
         // Combine and deduplicate user IDs
         const potentialUserIds = Array.from(new Set([
             ...teamFollowers.map(f => f.userId),
             ...teamFavorites.map(f => f.userId),
             ...primaryTeamFans.map(f => f.userId),
             ...competitionFollowers.map(f => f.userId),
-            ...playerFollowers.map(f => f.userId)
+            ...playerFollowers.map(f => f.userId),
+            ...playerFavorites.map(f => f.userId)
         ]));
 
         // Filter out users who have disabled matchAlerts in their preferences

@@ -25,12 +25,21 @@ export default function ManagerDashboard() {
     useEffect(() => {
         async function fetchData() {
             try {
-                const [matchesRes, loggersRes] = await Promise.all([
-                    fetch('/api/matches'),
+                // BACKLOG-283: this page derives activeOps from status=LIVE and
+                // approvalQueue from status=FINISHED (+ pending approval) -- a
+                // bare `/api/matches` (default limit 50, newest-first) could
+                // silently drop older pending-approval matches once total
+                // matches (100+, mostly historical backfill) exceeded 50.
+                // Fetching each status directly is correct rather than paginating
+                // through the full bare list.
+                const [liveRes, finishedRes, loggersRes] = await Promise.all([
+                    fetch('/api/matches?status=LIVE&limit=200'),
+                    fetch('/api/matches?status=FINISHED&limit=200'),
                     fetch('/api/loggers')
                 ]);
 
-                const matchesData = await matchesRes.json();
+                const [liveData, finishedData] = await Promise.all([liveRes.json(), finishedRes.json()]);
+                const matchesData = [...liveData, ...finishedData];
                 const loggersData = await loggersRes.json();
 
                 setMatches(matchesData);

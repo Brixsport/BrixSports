@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
+import { isBackscopedPath } from '@/lib/backscopedFeatures';
 
 if (!env.jwtSecret) {
     throw new Error('JWT_SECRET is not configured');
@@ -19,6 +20,24 @@ async function verifyToken(token: string) {
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+
+    // ── Backscoped-feature guard (BACKLOG-408, all environments) ───────────
+    // notFound() on a page only removes the page -- the API routes underneath
+    // kept running with whatever auth they had (BACKLOG-397/398/399's shared
+    // root cause). Checked first, before the staging gate, so an unauthenticated
+    // staging request gets the same 404 as prod rather than a /login redirect
+    // that would otherwise hint the route exists. Not an auth check -- these
+    // features don't exist yet, there's nothing to authorize into. See
+    // .agents/dev/BACKSCOPE_API_GUARD_SPEC.md and src/lib/backscopedFeatures.ts.
+    if (isBackscopedPath(pathname)) {
+        if (pathname.startsWith('/api/')) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+        // Rewrite to a path with no matching route -- Next.js renders the app's
+        // own not-found.tsx with a real 404 status, and the URL bar keeps the
+        // original path rather than exposing an internal rewrite target.
+        return NextResponse.rewrite(new URL('/_backscoped', request.url));
+    }
 
     // ── Staging-wide auth gate ─────────────────────────────────────────────
     // When NEXT_PUBLIC_ENV === 'staging', every route requires a valid JWT
@@ -87,7 +106,30 @@ export async function middleware(request: NextRequest) {
         try {
             const { payload } = await jwtVerify(token, JWT_SECRET);
 
-            if (payload.role !== 'admin' && payload.role !== 'logger_manager') {
+            // logger_manager's only real surface is /admin/manager (see
+            // src/app/admin/manager/page.tsx) -- it fetches /api/matches and
+            // /api/loggers, both gated separately and never under /api/admin/*.
+            // Previously this check let logger_manager through the ENTIRE
+            // /admin/** and /api/admin/** tree, not just its own page.
+            const isAdmin = payload.role === 'admin';
+            const isScopedLoggerManager =
+                payload.role === 'logger_manager' &&
+                (pathname === '/admin/manager' || pathname.startsWith('/admin/manager/'));
+
+            // BACKLOG-306 follow-up: a real logger's dashboard (src/app/logger/
+            // page.tsx) links "Adjust Ratings" to /admin/match-ratings/[id] --
+            // that page, and all 3 API routes it calls
+            // (matches/[id]/ratings/route.ts, .../adjust, .../initialize),
+            // already explicitly check for `role === 'admin' || role === 'logger'`.
+            // This blanket /admin/** gate never got the matching carve-out, so a
+            // real logger clicking that link was silently redirected to `/`
+            // before the page (or its already-permissive API calls) ever ran --
+            // same shape as the logger_manager gap this file already fixed once.
+            const isScopedRatingsLogger =
+                payload.role === 'logger' &&
+                (pathname === '/admin/match-ratings' || pathname.startsWith('/admin/match-ratings/'));
+
+            if (!isAdmin && !isScopedLoggerManager && !isScopedRatingsLogger) {
                 if (pathname.startsWith('/api/')) {
                     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
                 }
@@ -104,7 +146,15 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    return NextResponse.next();
+    // BACKLOG-317: admin/layout.tsx runs its own independent server-side auth
+    // check (defense-in-depth, CLAUDE.md's own rule -- middleware is a first
+    // layer only) and has no way to know the current pathname on its own
+    // (App Router layouts don't receive it as a prop). Thread it through via
+    // header so that layout can apply the same scoped logger carve-out this
+    // file just gained, instead of only ever allowing admin/logger_manager.
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-pathname', pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

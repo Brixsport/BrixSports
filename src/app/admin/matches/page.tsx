@@ -68,6 +68,10 @@ function AdminMatchesPageContent() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [matches, setMatches] = useState<Match[]>([]);
+    const [totalMatchCount, setTotalMatchCount] = useState(0);
+    const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const MATCHES_PAGE_SIZE = 50;
     const [teams, setTeams] = useState<Team[]>([]);
     const [competitions, setCompetitions] = useState<Competition[]>([]);
     const { toasts, removeToast, success, error } = useToast();
@@ -106,6 +110,10 @@ function AdminMatchesPageContent() {
         round: '',
         groupName: '',
         matchday: null as number | null,
+        // BACKLOG-153: score-correction fields, edit modal only -- Create always
+        // forces 0-0 (handleSubmit), these only matter once openEditModal populates them.
+        homeScore: 0,
+        awayScore: 0,
         // Per-match overrides — null means "use competition match settings"
         extraTimeEnabledOverride: null as boolean | null,
         penaltiesEnabledOverride: null as boolean | null,
@@ -155,22 +163,68 @@ function AdminMatchesPageContent() {
         setIsLoading(true);
         try {
             const [matchesRes, teamsRes, compsRes] = await Promise.all([
-                fetch('/api/matches'),
+                fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=0`),
                 fetch('/api/teams'),
                 fetch('/api/competitions')
             ]);
 
-            if (matchesRes.ok) setMatches(await matchesRes.json());
+            if (matchesRes.ok) {
+                setMatches(await matchesRes.json());
+                setTotalMatchCount(parseInt(matchesRes.headers.get('X-Total-Count') || '0', 10));
+            }
             if (teamsRes.ok) setTeams(await teamsRes.json());
             if (compsRes.ok) {
                 const compsData = await compsRes.json();
                 setCompetitions(compsData.competitions);
             }
+            fetchStatusCounts();
         } catch (err) {
             error('Failed to load matches data. Please try again.');
             console.error('Error fetching data:', err);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // BACKLOG-276: Live/Upcoming/Finished cards previously counted only the
+    // loaded page (matches.filter(...)), silently undercounting once more
+    // than MATCHES_PAGE_SIZE matches existed for a status. limit=1 per
+    // status is enough to read the real total off X-Total-Count.
+    const fetchStatusCounts = async () => {
+        const statuses = ['LIVE', 'UPCOMING', 'HALF_TIME', 'FINISHED'];
+        try {
+            const results = await Promise.all(
+                statuses.map(s => fetch(`/api/matches?status=${s}&limit=1`))
+            );
+            const counts: Record<string, number> = {};
+            statuses.forEach((s, i) => {
+                counts[s] = parseInt(results[i].headers.get('X-Total-Count') || '0', 10);
+            });
+            setStatusCounts(counts);
+        } catch (err) {
+            console.error('Error fetching status counts:', err);
+        }
+    };
+
+    // BACKLOG-276: this page previously fetched a bare `/api/matches` (no
+    // limit/offset), silently capped at the API's default of 50 with no
+    // indication more existed -- "Total Matches" showed the loaded count,
+    // not the real total. Now paginated, with the real total from the
+    // X-Total-Count header driving the stat card and the Load More button.
+    const loadMoreMatches = async () => {
+        setIsLoadingMore(true);
+        try {
+            const res = await fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=${matches.length}`);
+            if (res.ok) {
+                const nextPage: Match[] = await res.json();
+                setMatches(prev => [...prev, ...nextPage]);
+                setTotalMatchCount(parseInt(res.headers.get('X-Total-Count') || '0', 10));
+            }
+        } catch (err) {
+            error('Failed to load more matches. Please try again.');
+            console.error('Error loading more matches:', err);
+        } finally {
+            setIsLoadingMore(false);
         }
     };
 
@@ -213,6 +267,8 @@ function AdminMatchesPageContent() {
                     round: '',
                     groupName: '',
                     matchday: null,
+                    homeScore: 0,
+                    awayScore: 0,
                     extraTimeEnabledOverride: null,
                     penaltiesEnabledOverride: null,
                     allowDrawsOverride: null,
@@ -268,11 +324,19 @@ function AdminMatchesPageContent() {
 
     const openEditModal = (match: Match) => {
         setEditingMatch(match);
+        // Some matches (real ones, confirmed live -- see BACKLOG entry) carry an
+        // unparseable startTime, e.g. from an old import. `new Date(...)` on that
+        // is a real Date object (not null), so this silently threw a RangeError
+        // inside .toISOString() with no error shown to the admin -- the Edit
+        // button just did nothing. Guard it: an invalid date falls back to an
+        // empty string, which the datetime-local input already renders as blank.
+        const parsedStart = new Date(match.startTime);
+        const startTimeValue = isNaN(parsedStart.getTime()) ? '' : parsedStart.toISOString().slice(0, 16);
         setFormData({
             sport: match.sport,
             homeTeamId: match.homeTeamId,
             awayTeamId: match.awayTeamId,
-            startTime: new Date(match.startTime).toISOString().slice(0, 16),
+            startTime: startTimeValue,
             venue: match.venue,
             matchType: match.matchType,
             competition: match.competition,
@@ -285,6 +349,8 @@ function AdminMatchesPageContent() {
             round: match.round || '',
             groupName: match.groupName || '',
             matchday: match.matchday || null,
+            homeScore: match.homeScore ?? 0,
+            awayScore: match.awayScore ?? 0,
             extraTimeEnabledOverride: null,
             penaltiesEnabledOverride: null,
             allowDrawsOverride: null,
@@ -337,7 +403,15 @@ function AdminMatchesPageContent() {
                             competitionLevel: formData.competitionLevel as any,
                             friendlyType: formData.friendlyType as any,
                             friendlyDescription: formData.friendlyDescription,
-                            startTime: new Date(formData.startTime).toISOString()
+                            // Same guard as openEditModal (BACKLOG-343 follow-up) -- currently only
+                            // held together by the datetime-local input's `required` HTML attribute,
+                            // not by code, so it's silent-by-luck rather than silent-by-design.
+                            startTime: (() => {
+                                const parsed = new Date(formData.startTime);
+                                return isNaN(parsed.getTime()) ? editingMatch.startTime : parsed.toISOString();
+                            })(),
+                            homeScore: formData.homeScore,
+                            awayScore: formData.awayScore,
                         }
                         : m
                 ));
@@ -390,20 +464,26 @@ function AdminMatchesPageContent() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-                    <StatCard label="Total Matches" value={matches.length.toString()} icon={<Calendar className="text-primary" size={24} />} />
-                    <StatCard label="Live" value={matches.filter(m => m.status === 'LIVE').length.toString()} icon={<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />} />
-                    <StatCard label="Upcoming" value={matches.filter(m => m.status === 'UPCOMING').length.toString()} icon={<Calendar className="text-blue-500" size={24} />} />
-                    <StatCard label="Finished" value={matches.filter(m => m.status === 'FINISHED').length.toString()} icon={<Trophy className="text-yellow-500" size={24} />} />
+                    <StatCard label="Total Matches" value={totalMatchCount.toString()} icon={<Calendar className="text-primary" size={24} />} />
+                    <StatCard label="Live" value={(statusCounts.LIVE ?? 0).toString()} icon={<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />} />
+                    <StatCard label="Upcoming" value={(statusCounts.UPCOMING ?? 0).toString()} icon={<Calendar className="text-blue-500" size={24} />} />
+                    <StatCard label="Finished" value={(statusCounts.FINISHED ?? 0).toString()} icon={<Trophy className="text-yellow-500" size={24} />} />
                 </div>
 
+                {/* BACKLOG-343: the 5-pill status filter row (px-4 py-2, no wrap) had a
+                    natural width wider than a 375px viewport, pushing the page-level
+                    horizontal scrollbar out -- same class of bug as /admin/loggers'
+                    nav tab bar (BACKLOG-336). Same treatment: tight padding/text by
+                    default, full sizing from sm:, overflow-x-auto + scrollbar-hide as
+                    the safety net rather than truncating the status labels. */}
                 <div className="flex items-center gap-3 mb-8">
-                    <Filter size={18} className="text-white/60" />
-                    <div className="flex gap-2">
+                    <Filter size={18} className="text-white/60 shrink-0" />
+                    <div className="flex gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
                         {['all', 'LIVE', 'UPCOMING', 'HALF_TIME', 'FINISHED'].map((status) => (
                             <button
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === status
+                                className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === status
                                     ? 'bg-primary text-black'
                                     : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'
                                     }`}
@@ -428,42 +508,70 @@ function AdminMatchesPageContent() {
                                 >
                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-4 mb-6">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
+                                            {/* Live device report: the competition/round label was the
+                                                one span in this header row with no min-w-0/truncate --
+                                                a long "{competition} · {round}" string (e.g. "NPUGA
+                                                (BASKETBALL) · Quarter-Final") rendered at its full
+                                                natural width, pushing the row past the viewport at any
+                                                width tight enough, or at default width once the OS-level
+                                                text-size accessibility setting scales it up (confirmed
+                                                live: 135% font-size reproduces a 27px page overflow here
+                                                that doesn't show at 100%). Same shrink-to-fit pattern as
+                                                the team names below -- min-w-0 on this row so the label
+                                                can shrink, shrink-0 on the three fixed badges before it. */}
+                                            <div className="flex items-center gap-4 mb-6 min-w-0">
+                                                <span className={`shrink-0 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
                                                     match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-500' :
                                                         'bg-white/20 text-white/60'
                                                     }`}>
                                                     {match.status}
                                                 </span>
-                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
-                                                <div className="w-1 h-1 rounded-full bg-white/10" />
-                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
+                                                <span className="shrink-0 text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
+                                                <div className="shrink-0 w-1 h-1 rounded-full bg-white/10" />
+                                                <span className="min-w-0 truncate text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                                             </div>
 
-                                            <div className="flex items-center gap-12 mb-6">
-                                                <div className="flex-1 text-right">
-                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
+                                            {/* BACKLOG-343: these two flex-1 columns had no min-w-0, so
+                                                Tailwind's `truncate` (which needs a constrained/shrinkable
+                                                width to do anything) never actually engaged -- a long team
+                                                name rendered at its full intrinsic width and pushed the
+                                                whole card, and the page, past the viewport. min-w-0 lets the
+                                                flex item shrink below its content size so truncate can clip
+                                                it with an ellipsis instead, matching the same fix already
+                                                applied correctly on /admin/match-ratings.
+                                                BACKLOG-343 follow-up, live feedback: min-w-0 stopped
+                                                the overflow but at text-2xl + gap-12 + a 120px-min score box,
+                                                the column left for each name on mobile was so narrow that
+                                                truncate clipped real names down to one or two characters
+                                                ("C.") -- technically not overflowing, but unreadable. Same
+                                                "shrink to fit" direction as BACKLOG-336/343's other fixes:
+                                                smaller text/gaps/score-box padding at the default breakpoint
+                                                give the truncated text actual room instead of an ellipsis
+                                                doing all the work; full desktop sizing restored from sm:. */}
+                                            <div className="flex items-center gap-2 sm:gap-12 mb-6">
+                                                <div className="flex-1 min-w-0 text-right">
+                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
                                                 </div>
-                                                <div className="px-6 py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[120px] flex items-center justify-center">
+                                                <div className="px-2 sm:px-6 py-1 sm:py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[64px] sm:min-w-[120px] flex items-center justify-center shrink-0">
                                                     {match.status === 'UPCOMING' ? (
-                                                        <span className="text-white/20 text-sm font-black italic">VS</span>
+                                                        <span className="text-white/20 text-xs sm:text-sm font-black italic">VS</span>
                                                     ) : (
-                                                        <div className="flex items-center gap-4">
-                                                            <span className="text-3xl font-display italic">{match.homeScore}</span>
-                                                            <span className="text-white/20 text-xl font-display">-</span>
-                                                            <span className="text-3xl font-display italic">{match.awayScore}</span>
+                                                        <div className="flex items-center gap-1 sm:gap-4">
+                                                            <span className="text-lg sm:text-3xl font-display italic">{match.homeScore}</span>
+                                                            <span className="text-white/20 text-sm sm:text-xl font-display">-</span>
+                                                            <span className="text-lg sm:text-3xl font-display italic">{match.awayScore}</span>
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="flex-1">
-                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
                                                 </div>
                                             </div>
 
                                             <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-white/20">
                                                 <div className="flex items-center gap-2">
                                                     <Calendar size={14} className="text-primary" />
-                                                    <span>{new Date(match.startTime).toLocaleString()}</span>
+                                                    <span>{isNaN(new Date(match.startTime).getTime()) ? '—' : new Date(match.startTime).toLocaleString()}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <MapPin size={14} className="text-primary" />
@@ -472,8 +580,18 @@ function AdminMatchesPageContent() {
                                             </div>
                                         </div>
 
+                                        {/* BACKLOG-343: this action-icon row is always flex-row (the
+                                            outer md:flex-col wrapper is a no-op -- it has only this one
+                                            child, so direction never visibly changes). Up to 6 fixed p-3
+                                            icon buttons in one line has enough natural width that on some
+                                            cards -- ones with a longer venue/date row pushing the info
+                                            column's own min-content width up -- the tablet-width card
+                                            (~753-777px available) couldn't fit both columns, overflowing
+                                            the page by up to ~25px. flex-wrap lets the row reflow onto a
+                                            second line only when it doesn't fit; at full desktop width
+                                            everything already fits on one line, so this is a no-op there. */}
                                         <div className="flex flex-row md:flex-col gap-2">
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-wrap justify-end gap-2">
                                                 <Link
                                                     href={`/admin/match-lineups`}
                                                     className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-blue-500/20 text-blue-400 transition-colors"
@@ -525,6 +643,21 @@ function AdminMatchesPageContent() {
                                     <Calendar size={48} className="mx-auto mb-6 opacity-10" />
                                     <h4 className="font-display italic text-2xl uppercase mb-2">No matches found</h4>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/20">Expand your filters or schedule a new fixture</p>
+                                </div>
+                            )}
+
+                            {matches.length < totalMatchCount && (
+                                <div className="flex flex-col items-center gap-3 py-8">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                        Showing {matches.length} of {totalMatchCount}
+                                    </p>
+                                    <button
+                                        onClick={loadMoreMatches}
+                                        disabled={isLoadingMore}
+                                        className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors disabled:opacity-50"
+                                    >
+                                        {isLoadingMore ? 'Loading...' : 'Load More'}
+                                    </button>
                                 </div>
                             )}
                         </>
@@ -844,6 +977,31 @@ function AdminMatchesPageContent() {
                                         onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
                                         className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
                                         placeholder="Venue name"
+                                    />
+                                </div>
+                                <div>
+                                    {/* BACKLOG-153: admin had no way to correct a bad live score --
+                                        PATCH /api/matches/[id] already accepted homeScore/awayScore,
+                                        this UI just never exposed it. */}
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">{getTeamDisplay(editingMatch, 'home')} Score</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={formData.homeScore}
+                                        onChange={(e) => setFormData({ ...formData, homeScore: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">{getTeamDisplay(editingMatch, 'away')} Score</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={formData.awayScore}
+                                        onChange={(e) => setFormData({ ...formData, awayScore: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                     />
                                 </div>
                             </div>

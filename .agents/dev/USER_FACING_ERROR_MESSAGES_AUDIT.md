@@ -2,6 +2,8 @@
 
 **Written:** session 49, 2026-08-06, by a read-only research agent, prompted directly by `BUG-198` (login page showing a raw `"Failed to fetch"` browser string to users). Scope: how widespread is that pattern across the rest of the app? Research only — no fixes applied, no BACKLOG.md entries filed by this pass.
 
+**Re-verified and fixed: session 61, 2026-08-28 (`BACKLOG-313`).** Every item in this document has been confirmed fixed — the recommended shared utility exists (`src/lib/client-error.ts`'s `getClientErrorMessage()`), all client-side instances listed below now call it, all server-side raw-error-leak instances listed below are clean, and `/api/notifications/diagnose`'s missing auth check is closed. This was **not a re-implementation** — most of the fix work here had already happened in an earlier, undocumented session; this pass verified it directly (grep + read every flagged line, not trusting the doc) and found + fixed 7 more instances of the same two bug shapes (raw unguarded error leak; silent failure with no user feedback) in files this original audit didn't cover: `FootballLogger.tsx`, `MatchLoggerUI.tsx`, `match-ratings/[id]/page.tsx` (a third catch), `api/matches/[id]/ratings/route.ts`, and four hooks (`useUserProfile`, `useUserActivity`, `useLoggerAnalytics`, `useLiveStandings`). Full detail: `BACKLOG.md`'s `BACKLOG-313` entry and `BUILD_JOURNAL.md`'s Session 61 entry. The instance tables below are left as originally written (historical record of what was found) — do not treat an unmarked row as still-open; check the session 61 note first.
+
 ---
 
 ## 1. Summary

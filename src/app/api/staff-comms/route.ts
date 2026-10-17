@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { staffComms, users } from '@/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 
 export async function GET(request: NextRequest) {
     try {
@@ -19,6 +20,12 @@ export async function GET(request: NextRequest) {
 
         if (!matchId) {
             return NextResponse.json({ error: 'Match ID is required' }, { status: 400 });
+        }
+
+        // Staff comms are for staff only: admins, and loggers assigned to this match. A valid
+        // session alone (e.g. a self-registered fan account) is not enough.
+        if (authUser.role !== 'admin' && !(authUser.role === 'logger' && (await isLoggerAssigned(matchId, authUser.id)))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const comms = await db
@@ -40,7 +47,8 @@ export async function GET(request: NextRequest) {
             .from(staffComms)
             .leftJoin(users, eq(staffComms.userId, users.id))
             .where(eq(staffComms.matchId, matchId))
-            .orderBy(desc(staffComms.createdAt));
+            .orderBy(desc(staffComms.createdAt))
+            .limit(200);
 
         return NextResponse.json(comms);
     } catch (error) {
@@ -70,8 +78,12 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        if (authUser.role !== 'admin' && !(authUser.role === 'logger' && (await isLoggerAssigned(matchId, authUser.id)))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const newComm = {
-            id: uuidv4(),
+            id: nanoid(),
             matchId,
             userId,
             content,

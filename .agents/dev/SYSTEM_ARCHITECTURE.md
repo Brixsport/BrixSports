@@ -743,7 +743,7 @@ Logger assignment flow:
 | `/admin/match-ratings` | Match Ratings | ⚠️ Partial | Manual rating adjustments | Intersects rating calculator casing bugs |
 | `/admin/bulk-register` | Bulk Register | ✅ Working | Bulk team/player creation | TD-007: placement review needed |
 | `/admin/track-events` | Track Events | ❓ Unknown | Track & field event logging | Scope unclear |
-| `/admin/manager` | Manager Center | 🔲 Stub | Team manager interface | Not fully built |
+| `/admin/manager` | Manager Center | ✅ Working | Team manager interface | Live and real (445-line page), confirmed 2026-09-09 product-thinking audit -- this "Stub" label was stale (BACKLOG-360) |
 | `/admin/push-diagnose` | Push Diagnostics | ✅ Working | Debug push notifications | Dev/ops tool |
 | `/admin/livestreams` | Livestreams | 🔲 Stub | Livestream management | Not connected to active feature |
 

@@ -4,6 +4,9 @@ import { users, loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from '@/lib/env';
+import { setAuthCookie } from '@/lib/auth-cookie';
+import { isLoggerStatusActive } from '@/lib/logger-login';
+import { isTokenVersionCurrent } from '@/lib/token-version';
 
 if (!env.jwtSecret) {
     throw new Error('JWT_SECRET is not configured');
@@ -53,6 +56,9 @@ export async function POST(request: NextRequest) {
             if (!logger) {
                 return NextResponse.json({ error: 'Logger not found' }, { status: 404 });
             }
+            if (!isLoggerStatusActive(logger.status)) {
+                return NextResponse.json({ error: 'Logger account is disabled' }, { status: 401 });
+            }
             // Logger tokens use { id } to match what /api/loggers/auth signs
             newToken = await new SignJWT({ id: logger.id, email: logger.email, role: logger.role })
                 .setProtectedHeader({ alg: 'HS256' })
@@ -67,7 +73,11 @@ export async function POST(request: NextRequest) {
             if (!user) {
                 return NextResponse.json({ error: 'User not found' }, { status: 404 });
             }
-            newToken = await new SignJWT({ userId: user.id, email: user.email, role: user.role })
+            // A token from before a password change/reset cannot be refreshed back to life.
+            if (!isTokenVersionCurrent(payload.tv, user.tokenVersion)) {
+                return NextResponse.json({ error: 'Session is no longer valid' }, { status: 401 });
+            }
+            newToken = await new SignJWT({ userId: user.id, email: user.email, role: user.role, tv: user.tokenVersion })
                 .setProtectedHeader({ alg: 'HS256' })
                 .setIssuedAt()
                 .setExpirationTime('7d')
@@ -83,13 +93,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Set new token in cookie
-        response.cookies.set('authToken', newToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
-            path: '/',
-        });
+        setAuthCookie(response, request, newToken);
 
         return response;
     } catch (error) {

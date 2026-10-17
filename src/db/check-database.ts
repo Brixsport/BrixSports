@@ -16,8 +16,9 @@ async function checkDatabase() {
         const allPlayers = await db.select().from(players);
         console.log(`\n👥 PLAYERS (${allPlayers.length} total):`);
         const playersByTeam = allPlayers.reduce((acc, player) => {
-            if (!acc[player.teamId]) acc[player.teamId] = [];
-            acc[player.teamId].push(player);
+            const teamKey = player.teamId ?? 'unassigned';
+            if (!acc[teamKey]) acc[teamKey] = [];
+            acc[teamKey].push(player);
             return acc;
         }, {} as Record<string, any[]>);
 

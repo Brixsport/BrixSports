@@ -2,6 +2,59 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { getPushService } from '@/lib/notifications/push-service';
+
+// BACKLOG-150 follow-up: the schema already flips an anonymous push subscription's
+// userId to a real account for free on a same-browser re-subscribe (endpoint is
+// globally unique -- see anonymous-subscriber.ts's own comment), but nothing ever
+// triggered that re-subscribe. Best-effort, fire-and-forget: only acts if this
+// browser already has an active push subscription (an anonymous viewer who never
+// enabled push has nothing to hand off), and never surfaces an error to the login/
+// signup flow -- a failed handoff just leaves the subscription anonymous, same as
+// today, not a regression.
+function reSubscribePushForHandoff(userId: string) {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        return;
+    }
+    getPushService()
+        .isSubscribed()
+        .then((subscribed) => {
+            if (subscribed) {
+                return getPushService().subscribe(userId);
+            }
+        })
+        .catch((error) => {
+            console.error('[AuthContext] Push subscription handoff failed:', error);
+        });
+}
+
+const OAUTH_HANDOFF_COOKIE = 'oauth_handoff';
+
+// Reads the handoff cookie and expires it. The server may have scoped it to a
+// parent domain that script cannot see, so every plausible Domain is expired,
+// plus the host-only variant.
+function readAndClearHandoffCookie(): string | null {
+    const match = document.cookie.match(/(?:^|;\s*)oauth_handoff=([^;]*)/);
+    if (!match) return null;
+
+    let value: string | null = null;
+    try {
+        value = decodeURIComponent(match[1]) || null;
+    } catch {
+        value = null;
+    }
+
+    const expire = (domain?: string) => {
+        document.cookie =
+            `${OAUTH_HANDOFF_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax` + (domain ? `; Domain=${domain}` : '');
+    };
+    expire();
+    const labels = window.location.hostname.split('.');
+    for (let i = 0; i <= labels.length - 2; i++) {
+        expire(labels.slice(i).join('.'));
+    }
+    return value;
+}
 
 interface User {
     id: string;
@@ -95,6 +148,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Initial auth check
     useEffect(() => {
+        // Pick up the one-time token handoff from the Google OAuth callback
+        // (src/app/api/auth/callback/google/route.ts): a server redirect can set
+        // the httpOnly cookie but can't touch localStorage, and several client
+        // paths (FavoritesContext, push-service) read localStorage directly and
+        // never even attempt a request without it. The handoff is a 60 second
+        // cookie set by that callback; it is read once and deleted. A token in the
+        // URL is never accepted, so a crafted link cannot sign anyone in.
+        if (typeof window !== 'undefined') {
+            const handoff = readAndClearHandoffCookie();
+            if (handoff) {
+                localStorage.setItem('authToken', handoff);
+            }
+        }
         checkAuth();
     }, [checkAuth]);
 
@@ -118,6 +184,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
             if (response.ok) {
+                // BACKLOG-464 item 2: the refresh route rotates the cookie AND returns
+                // the new token in the body. verifyAuth prefers a Bearer header over the
+                // cookie, so a stale localStorage copy would 401 every Bearer caller once
+                // the original token expires. Only overwrite an existing copy -- a
+                // cookie-only session (no localStorage token) stays cookie-only.
+                try {
+                    const body = await response.json();
+                    if (
+                        typeof body?.token === 'string' &&
+                        body.token.length > 0 &&
+                        localStorage.getItem('authToken')
+                    ) {
+                        localStorage.setItem('authToken', body.token);
+                    }
+                } catch (parseError) {
+                    // Body unreadable -- the cookie was still rotated; don't fail the refresh.
+                    console.warn('[AuthContext] refreshSession could not read refresh body:', parseError);
+                }
                 await checkAuth();
             } else if (response.status === 401 || response.status === 403) {
                 // BUG-217: genuinely expired/invalid session -- safe to log out.
@@ -153,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 setUser(data.user);
                 setIsAuthModalOpen(false);
+                reSubscribePushForHandoff(data.user.id);
 
                 // Redirect to return URL if set
                 if (returnUrl) {
@@ -189,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 setUser(data.user);
                 setIsAuthModalOpen(false);
+                reSubscribePushForHandoff(data.user.id);
 
                 // Redirect to return URL if set
                 if (returnUrl) {

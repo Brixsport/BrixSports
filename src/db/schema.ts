@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, foreignKey, unique } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, foreignKey, unique, index } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
 // Organizations table
@@ -229,7 +229,18 @@ export const competitions = sqliteTable('competitions', {
     name: text('name').notNull(),
     sport: text('sport'),
     isMultiSport: integer('is_multi_sport', { mode: 'boolean' }).default(false),
-    format: text('format').notNull(), // 'league' | 'knockout' | 'group_knockout'
+    format: text('format').notNull(), // 'league' | 'knockout' | 'group_knockout' -- decorative label, no code consumers (confirmed session 61 audit); NOT the same as `structure` below
+    // BACKLOG-302: the real, code-consumed competition shape -- 'pure-league' |
+    // 'group-knockout' | 'final-only-ko' | 'swiss-top8'. Nullable: null means
+    // not yet classified (a brand-new or test/stub competition), NOT "no
+    // structure" -- admin UI must treat null as "hide format-specific
+    // controls," never assume a default. Added precisely because `format`
+    // above was confirmed wrong for 2 of 8 real competitions (BUSA League
+    // Basketball labeled group-knockout with zero brackets ever created;
+    // BUSALYMPICS Football labeled group-knockout but is actually a
+    // round-robin + single Final) -- a decorative field silently drifting
+    // from reality is exactly the failure mode this column exists to avoid.
+    structure: text('structure'),
     season: text('season').notNull(),
     logo: text('logo'),
     startDate: integer('start_date', { mode: 'timestamp' }),
@@ -364,7 +375,12 @@ export const matches = sqliteTable('matches', {
     shootoutAwayScore: integer('shootout_away_score').default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
+}, (table) => ({
+    // BACKLOG-465 item 3: hot public-read paths (sport/status filters on the
+    // list routes, newest-first ordering). Applied via dev/migrate-add-hot-indexes.mjs.
+    sportStatusIdx: index('idx_matches_sport_status').on(table.sport, table.status),
+    createdAtIdx: index('idx_matches_created_at').on(table.createdAt),
+}));
 
 // Match-Logger Assignments table
 export const matchLoggerAssignments = sqliteTable('match_logger_assignments', {
@@ -394,7 +410,12 @@ export const matchEvents = sqliteTable('match_events', {
     loggerId: text('logger_id').references(() => loggers.id),
     loggerName: text('logger_name'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
+}, (table) => ({
+    // BACKLOG-465 item 3: per-match event timeline reads and dedup/aggregate
+    // lookups. Applied via dev/migrate-add-hot-indexes.mjs.
+    matchMinuteIdx: index('idx_match_events_match_minute').on(table.matchId, table.minute, table.second),
+    matchPlayerTypeIdx: index('idx_match_events_match_player_type').on(table.matchId, table.playerId, table.type, table.createdAt),
+}));
 
 // Loggers table
 export const loggers = sqliteTable('loggers', {
@@ -423,6 +444,8 @@ export const standings = sqliteTable('standings', {
     goalsAgainst: integer('goals_against').default(0),
     goalDifference: integer('goal_difference').default(0),
     points: integer('points').default(0),
+    yellowCards: integer('yellow_cards').default(0),
+    redCards: integer('red_cards').default(0),
     groupName: text('group_name'), // Nullable until draw is complete
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
@@ -439,6 +462,10 @@ export const bracketNodes = sqliteTable('bracket_nodes', {
     title: text('title').notNull(),
     matchId: text('match_id').references(() => matches.id),
     nextMatchId: text('next_match_id'),
+    // BACKLOG-278: winner-only nextMatchId can't express a 3rd-place match
+    // (fed by both semifinal LOSERS, not a winner). Nullable, unused by
+    // existing brackets.
+    loserNextMatchId: text('loser_next_match_id'),
     homeTeamId: text('home_team_id').references(() => teams.id),
     awayTeamId: text('away_team_id').references(() => teams.id),
     homeScore: integer('home_score'),
@@ -447,6 +474,27 @@ export const bracketNodes = sqliteTable('bracket_nodes', {
     round: text('round'),
     position: integer('position'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Competition Draws (BACKLOG-278) — a reviewable, editable-before-publish
+// staging area for a computed league-phase draw (see src/lib/competitionDraw.ts).
+// Deliberately NOT written straight into `matches` — a real draw ceremony
+// might need a correction before it's final. `matches.status` was considered
+// and rejected as a place to model this (that enum is load-bearing for the
+// logger, public livescore, notifications, and standings recalc).
+export const competitionDraws = sqliteTable('competition_draws', {
+    id: text('id').primaryKey(),
+    competitionId: text('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+    sport: text('sport').notNull(),
+    algorithm: text('algorithm').notNull().default('POT_CIRCLE_V1'),
+    seedOrder: text('seed_order').notNull(), // JSON string[] — ceremony seed order
+    pots: text('pots'), // JSON string[][], nullable — algorithm-specific (POT_CIRCLE_V1 only, for now)
+    pairings: text('pairings').notNull(), // JSON DrawPairing[] — computed round/home/away
+    status: text('status').notNull().default('DRAFT'), // 'DRAFT' | 'PUBLISHED' | 'SUPERSEDED'
+    publishedMatchIds: text('published_match_ids'), // JSON string[], set only by the publish step (BACKLOG-279)
+    createdBy: text('created_by').notNull().references(() => users.id),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
 // Users table
@@ -460,6 +508,10 @@ export const users = sqliteTable('users', {
     bio: text('bio'),
     favoriteTeamId: text('favorite_team_id').references(() => teams.id),
     role: text('role').default('user'),
+    // Bumped on password change/reset; a JWT whose `tv` differs is rejected.
+    tokenVersion: integer('token_version').notNull().default(0),
+    // True once the person proved they control the address (Google sign-in or a reset link).
+    emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
@@ -498,6 +550,12 @@ export const userFavorites = sqliteTable('user_favorites', {
     favoriteType: text('favorite_type').notNull(),
     favoriteId: text('favorite_id').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    // Fan Account Blueprint, ADR-001 Decision 1: per-team alert control at the
+    // point of favoriting, mirroring userFollows.notificationsEnabled below.
+    // Default true matches this column's pre-migration real behavior exactly
+    // (every favorite was already unconditionally alert-eligible) -- see
+    // dev/add-userfavorites-notifications-column.mjs, RUNLOG.md 2026-09-10.
+    notificationsEnabled: integer('notifications_enabled', { mode: 'boolean' }).default(true),
 });
 
 // User Follows table
@@ -879,6 +937,21 @@ export const notificationSendLog = sqliteTable('notification_send_log', {
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// Fan Account Blueprint Phase 3, ADR-001 Decision 2: one row per dismissal,
+// not a shared JSON-array column -- a JSON blob is a read-modify-write on one
+// row, and two dismiss events firing close together would race exactly the
+// way BACKLOG-316's bracket-node claim did before its atomic fix. Follows the
+// same "many small events, not a denormalized blob" convention as
+// notificationSendLog above. Unique on (userId, tourId) so a double-fire
+// can't create duplicates -- enforced at the DB layer via a unique index
+// (dev/add-fan-tour-dismissals-table.mjs), not just app-level dedup.
+export const fanTourDismissals = sqliteTable('fan_tour_dismissals', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tourId: text('tour_id').notNull(), // e.g. 'favourites-intro'
+    dismissedAt: integer('dismissed_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 // Password Reset Tokens table
 export const passwordResetTokens = sqliteTable('password_reset_tokens', {
     id: text('id').primaryKey(),
@@ -1131,6 +1204,8 @@ export type Standing = typeof standings.$inferSelect;
 export type NewStanding = typeof standings.$inferInsert;
 export type BracketNode = typeof bracketNodes.$inferSelect;
 export type NewBracketNode = typeof bracketNodes.$inferInsert;
+export type CompetitionDraw = typeof competitionDraws.$inferSelect;
+export type NewCompetitionDraw = typeof competitionDraws.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type UserPreference = typeof userPreferences.$inferSelect;
@@ -1201,6 +1276,7 @@ export { matchPredictions, predictionLeaderboard, predictionComments } from './s
 export { userXI, userXILikes, userXIComments } from './schema-xi';
 export { userLineups, userLineupLikes, userLineupComments } from './schema-user-lineups';
 export { playerRatings, ratingHistory } from './schema-ratings';
+export { teamRatings } from './schema-ratings';
 export {
     fplGameweeks,
     fplPlayerData,

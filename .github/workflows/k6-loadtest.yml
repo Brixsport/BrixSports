@@ -1,0 +1,281 @@
+name: k6 load test (staging)
+
+# Read-only k6 load tests against the STAGING deployment, run from GitHub-hosted runners (clean
+# network, a different public IP per runner, so latency numbers are not distorted by a laptop
+# connection and the rate-limit scenario can see more than one source IP when shards > 1).
+#
+# Triggers
+#   workflow_dispatch  Manual run from the Actions tab (only possible once this file is on the
+#                      default branch, because GitHub lists only default-branch workflows for dispatch).
+#   pull_request       Smoke scenario only (5 VUs, about 1 minute), and only when the k6 suite or this
+#                      file changes, so a PR that touches them proves the workflow on a real runner.
+#
+# Scenarios that WRITE data (loadtest/k6/02, 03, 06) are never run here: they need logger tokens and a
+# disposable match. No repository secrets are used or needed.
+#
+# Exit codes: k6 exits 99 when only thresholds were crossed. That run is reported as a warning (the
+# numbers are still uploaded and summarised), because latency thresholds are noisy on shared runners
+# and a shared staging deployment. Any other non-zero exit (usage error, a refused guard in config.js,
+# a script exception, a time cap hit) fails the job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario to run'
+        type: choice
+        default: smoke
+        options:
+          - smoke
+          - viewer-mix
+          - spike
+          - soak
+          - rate-limit
+      base_url:
+        description: 'Staging base URL (only the staging deployment is accepted)'
+        type: string
+        default: 'https://brixsports-staging.vercel.app'
+      match_id_read:
+        description: 'Match id used by the match-page viewers (read-only)'
+        type: string
+        default: 'busa-match-1'
+      max_vus:
+        description: 'Virtual user ceiling per shard (hard cap 250)'
+        type: number
+        default: 250
+      shards:
+        description: 'Parallel jobs, each on its own runner and source IP'
+        type: choice
+        default: '1'
+        options:
+          - '1'
+          - '2'
+          - '3'
+      ws_down:
+        description: 'Emulate the WebSocket being down (match page polls every 10s instead of 25s)'
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - 'loadtest/k6/**'
+      - '.github/workflows/k6-loadtest.yml'
+
+permissions:
+  contents: read
+
+# One load test against staging at a time.
+concurrency:
+  group: k6-loadtest-staging
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      shards: ${{ steps.plan.outputs.shards }}
+      scenario: ${{ steps.plan.outputs.scenario }}
+      script: ${{ steps.plan.outputs.script }}
+      k6_extra: ${{ steps.plan.outputs.k6_extra }}
+      base_url: ${{ steps.plan.outputs.base_url }}
+      match_id: ${{ steps.plan.outputs.match_id }}
+      max_vus: ${{ steps.plan.outputs.max_vus }}
+      ws_down: ${{ steps.plan.outputs.ws_down }}
+      job_timeout: ${{ steps.plan.outputs.job_timeout }}
+      k6_cap: ${{ steps.plan.outputs.k6_cap }}
+    steps:
+      - name: Validate inputs and build the run plan
+        id: plan
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_SCENARIO: ${{ inputs.scenario }}
+          IN_BASE_URL: ${{ inputs.base_url }}
+          IN_MATCH_ID: ${{ inputs.match_id_read }}
+          IN_MAX_VUS: ${{ inputs.max_vus }}
+          IN_SHARDS: ${{ inputs.shards }}
+          IN_WS_DOWN: ${{ inputs.ws_down }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=Refused::$1"; exit 1; }
+
+          # Pull requests always run the smoke scenario with the defaults.
+          if [ "$EVENT" = "pull_request" ]; then
+            IN_SCENARIO=smoke
+            IN_BASE_URL=https://brixsports-staging.vercel.app
+            IN_MATCH_ID=busa-match-1
+            IN_MAX_VUS=250
+            IN_SHARDS=1
+            IN_WS_DOWN=true
+          fi
+
+          # Target guard (first layer; config.js refuses again inside k6). Only the staging
+          # deployment URL is accepted, never an arbitrary URL.
+          staging_re='^https://brixsports-staging\.vercel\.app/?$'
+          [[ "$IN_BASE_URL" =~ $staging_re ]] || fail "base_url must be https://brixsports-staging.vercel.app"
+          lower="${IN_BASE_URL,,}"
+          case "$lower" in
+            *brixs2*|*brixsports.com*) fail "base_url looks like production" ;;
+          esac
+          base_url="${IN_BASE_URL%/}"
+
+          match_re='^[A-Za-z0-9_-]{1,64}$'
+          [[ "$IN_MATCH_ID" =~ $match_re ]] || fail "match_id_read must match ^[A-Za-z0-9_-]{1,64}$"
+
+          int_re='^[0-9]+$'
+          [[ "$IN_MAX_VUS" =~ $int_re ]] || fail "max_vus must be a whole number"
+          max_vus="$IN_MAX_VUS"
+          if [ "$max_vus" -lt 1 ]; then fail "max_vus must be at least 1"; fi
+          if [ "$max_vus" -gt 250 ]; then
+            echo "::warning title=max_vus clamped::requested $max_vus, hard cap is 250"
+            max_vus=250
+          fi
+
+          case "$IN_SHARDS" in
+            1) matrix='{"shard":[1]}' ;;
+            2) matrix='{"shard":[1,2]}' ;;
+            3) matrix='{"shard":[1,2,3]}' ;;
+            *) fail "shards must be 1, 2 or 3" ;;
+          esac
+
+          case "$IN_WS_DOWN" in
+            true) ws_down=1 ;;
+            false) ws_down=0 ;;
+            *) fail "ws_down must be true or false" ;;
+          esac
+
+          # job_timeout is the wall-clock cap of the whole job; k6_cap is the cap on the k6 process
+          # itself (job minus setup and reporting time). A hung k6 is killed at k6_cap.
+          case "$IN_SCENARIO" in
+            smoke)
+              script=01-viewer-mix.js; extra="-e SMOKE=1"; job_timeout=5; k6_cap=3 ;;
+            viewer-mix)
+              script=01-viewer-mix.js; extra=""; job_timeout=25; k6_cap=23 ;;
+            spike)
+              base=$(( max_vus / 3 )); [ "$base" -gt 80 ] && base=80; [ "$base" -lt 1 ] && base=1
+              script=04-spike-soak.js; extra="-e PROFILE=spike -e BASE_VUS=$base"; job_timeout=20; k6_cap=18 ;;
+            soak)
+              base=$max_vus; [ "$base" -gt 100 ] && base=100
+              script=04-spike-soak.js; extra="-e PROFILE=soak -e BASE_VUS=$base"; job_timeout=40; k6_cap=38 ;;
+            rate-limit)
+              script=05-rate-limit.js; extra=""; job_timeout=25; k6_cap=23 ;;
+            *) fail "unknown scenario" ;;
+          esac
+
+          {
+            echo "matrix=$matrix"
+            echo "shards=$IN_SHARDS"
+            echo "scenario=$IN_SCENARIO"
+            echo "script=$script"
+            echo "k6_extra=$extra"
+            echo "base_url=$base_url"
+            echo "match_id=$IN_MATCH_ID"
+            echo "max_vus=$max_vus"
+            echo "ws_down=$ws_down"
+            echo "job_timeout=$job_timeout"
+            echo "k6_cap=$k6_cap"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## k6 run plan"
+            echo
+            echo "- scenario: \`$IN_SCENARIO\` (\`loadtest/k6/$script\`)"
+            echo "- target: \`$base_url\` (staging only)"
+            echo "- shards: $IN_SHARDS (one runner and source IP each)"
+            echo "- VU ceiling per shard: $max_vus, WebSocket down: $ws_down, match id: \`$IN_MATCH_ID\`"
+            echo "- wall-clock cap: ${job_timeout} min per job (k6 process killed after ${k6_cap} min)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  run:
+    name: ${{ needs.prepare.outputs.scenario }} (shard ${{ matrix.shard }} of ${{ needs.prepare.outputs.shards }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.prepare.outputs.job_timeout) }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      SCENARIO: ${{ needs.prepare.outputs.scenario }}
+      SCRIPT: ${{ needs.prepare.outputs.script }}
+      K6_EXTRA: ${{ needs.prepare.outputs.k6_extra }}
+      BASE_URL: ${{ needs.prepare.outputs.base_url }}
+      MATCH_ID: ${{ needs.prepare.outputs.match_id }}
+      MAX_VUS: ${{ needs.prepare.outputs.max_vus }}
+      WS_DOWN: ${{ needs.prepare.outputs.ws_down }}
+      K6_CAP: ${{ needs.prepare.outputs.k6_cap }}
+      SHARD: ${{ matrix.shard }}
+      SHARDS: ${{ needs.prepare.outputs.shards }}
+    steps:
+      - name: Re-check the target before doing anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          staging_re='^https://brixsports-staging\.vercel\.app/?$'
+          [[ "$BASE_URL" =~ $staging_re ]] || { echo "::error::base_url is not the staging deployment"; exit 1; }
+          case "${BASE_URL,,}" in
+            *brixs2*|*brixsports.com*) echo "::error::base_url looks like production"; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install k6 v2.2.0 (pinned release, checksum verified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER=2.2.0
+          REL="https://github.com/grafana/k6/releases/download/v${VER}"
+          TAR="k6-v${VER}-linux-amd64.tar.gz"
+          WORK="$(mktemp -d)"
+          cd "$WORK"
+          curl -fsSL --retry 3 --connect-timeout 20 -o "$TAR" "${REL}/${TAR}"
+          curl -fsSL --retry 3 --connect-timeout 20 -o checksums.txt "${REL}/k6-v${VER}-checksums.txt"
+          # checksums.txt lines look like "<sha256>  <file name>"; keep only the line for our archive
+          awk -v f="$TAR" '{ n = $2; sub(/^\*/, "", n); if (n == f) print $1 "  " f }' checksums.txt > expected.txt
+          test "$(wc -l < expected.txt)" -eq 1
+          sha256sum -c expected.txt
+          mkdir -p "$RUNNER_TEMP/k6bin" extracted
+          tar -xzf "$TAR" -C extracted --strip-components=1
+          install -m 0755 extracted/k6 "$RUNNER_TEMP/k6bin/k6"
+          echo "$RUNNER_TEMP/k6bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/k6bin/k6" version
+
+      - name: Run k6
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p results
+          read -r -a extra <<< "$K6_EXTRA"
+          set +e
+          timeout --kill-after=30s "${K6_CAP}m" k6 run "loadtest/k6/$SCRIPT" \
+            -e "BASE_URL=$BASE_URL" -e CONFIRM_STAGING=yes -e "MATCH_ID_READ=$MATCH_ID" \
+            -e "WS_DOWN=$WS_DOWN" -e "MAX_VUS=$MAX_VUS" -e OUT_DIR=results \
+            "${extra[@]}" --quiet 2>&1 | tee results/k6-output.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "k6 exit code: $rc"
+          case "$rc" in
+            0) ;;
+            99) echo "::warning title=k6 thresholds crossed::shard $SHARD of $SCENARIO crossed one or more latency/error thresholds. The numbers are in the step summary and the artifact." ;;
+            124|137) echo "::error title=Time cap hit::k6 did not finish within ${K6_CAP} minutes and was stopped"; exit 1 ;;
+            *) echo "::error title=k6 failed::exit code $rc (usage error, refused by the staging guard, or a script error)"; exit 1 ;;
+          esac
+
+      - name: Write summary
+        if: always()
+        shell: bash
+        run: |
+          node loadtest/k6/ci-summary.cjs results "k6 ${SCENARIO} - shard ${SHARD} of ${SHARDS}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-${{ needs.prepare.outputs.scenario }}-shard-${{ matrix.shard }}
+          path: results/
+          retention-days: 14
+          if-no-files-found: warn

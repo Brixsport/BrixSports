@@ -78,9 +78,9 @@ export default function RelatedArticles({
                         transition={{ delay: index * 0.1 }}
                     >
                         <Link href={`/news/${article.slug}`}>
-                            <div className="group relative bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20 h-full">
+                            <div className="group relative bg-card backdrop-blur-sm border border-border rounded-2xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20 h-full">
                                 {/* Image */}
-                                <div className="relative h-48 overflow-hidden bg-slate-800">
+                                <div className="relative h-48 overflow-hidden bg-muted">
                                     {article.imageUrl ? (
                                         <img
                                             src={article.imageUrl}
@@ -89,7 +89,7 @@ export default function RelatedArticles({
                                         />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center">
-                                            <TrendingUp className="w-16 h-16 text-slate-600" />
+                                            <TrendingUp className="w-16 h-16 text-foreground/30" />
                                         </div>
                                     )}
 
@@ -101,23 +101,23 @@ export default function RelatedArticles({
                                     </div>
 
                                     {/* Gradient Overlay */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent opacity-60" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent opacity-60" />
                                 </div>
 
                                 {/* Content */}
                                 <div className="p-5">
                                     {/* Title */}
-                                    <h3 className="text-lg font-bold text-white mb-2 line-clamp-2 group-hover:text-cyan-400 transition-colors">
+                                    <h3 className="text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:text-cyan-400 transition-colors">
                                         {article.title}
                                     </h3>
 
                                     {/* Excerpt */}
-                                    <p className="text-sm text-slate-400 mb-4 line-clamp-2">
+                                    <p className="text-sm text-foreground/60 mb-4 line-clamp-2">
                                         {article.excerpt}
                                     </p>
 
                                     {/* Meta */}
-                                    <div className="flex items-center justify-between text-xs text-slate-500">
+                                    <div className="flex items-center justify-between text-xs text-foreground/40">
                                         <div className="flex items-center gap-3">
                                             {article.readingTime && (
                                                 <span className="flex items-center gap-1">

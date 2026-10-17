@@ -4,11 +4,14 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Activity, Lock, User, CheckCircle2, AlertCircle, ChevronRight, Globe, WifiOff } from 'lucide-react';
 import { MatchLoggerUI } from '@/components/MatchLoggerUI';
+import { BrandMark } from '@/components/BrandMark';
 import { BasketballLogger } from '@/components/BasketballLogger';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
 import { SessionExpiryBanner } from '@/components/logger/SessionExpiryBanner';
+import { LoggerErrorBoundary } from '@/components/logger/LoggerErrorBoundary';
+import { getQueuedEventCounts, clearAllQueuedWrites } from '@/lib/admin-offline-queue';
 
 import { Match, Logger } from '@/db/schema';
 
@@ -110,14 +113,33 @@ export default function LoggerPage() {
     }
   }, [isLoggedIn]);
 
-  const fetchAssignedMatches = async (loggerId: string) => {
+  const fetchAssignedMatches = async (loggerId: string, timeoutMs?: number) => {
+    const controller = new AbortController();
+    const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {
-      const response = await fetch(`/api/loggers/${loggerId}`);
+      const response = await fetch(`/api/loggers/${loggerId}`, { signal: controller.signal });
       const data = await response.json();
       setAssignedMatches(data.assignedMatches || []);
     } catch (err) {
       console.error('Failed to fetch assigned matches:', err);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
+  };
+
+  // The logger seeds its clock from the match object it is handed, so that object
+  // must be fresh when a match is opened or re-opened: a list fetched once at
+  // mount can still say NOT_STARTED for a match that has since gone live, and the
+  // logger would offer to start it again. A failed or slow refresh keeps the list
+  // we have; the locally saved clock is then compared against it when seeding.
+  const openMatch = async (matchId: string) => {
+    if (logger) await fetchAssignedMatches(logger.id, 5000);
+    setSelectedMatchId(matchId);
+  };
+
+  const exitMatch = () => {
+    setSelectedMatchId(null);
+    if (logger) void fetchAssignedMatches(logger.id);
   };
 
   const fetchTeams = async () => {
@@ -151,7 +173,7 @@ export default function LoggerPage() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[80px] -z-10"></div>
 
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-black font-display text-2xl -skew-x-12">B</div>
+            <BrandMark variant="logger" size={40} />
             <h1 className="font-display text-2xl tracking-tighter italic uppercase">Logger Access</h1>
           </div>
 
@@ -221,24 +243,48 @@ export default function LoggerPage() {
     // Render sport-specific logger
     let sportLogger: React.ReactNode;
     if (match.sport === 'Basketball' || (match.sport as string) === '3x3 Basketball' || (match.sport as string) === 'Basketball 3x3') {
-      sportLogger = <BasketballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
+      sportLogger = <BasketballLogger match={match} onExit={exitMatch} currentLogger={logger} />;
     } else if (match.sport === 'Football' || (match.sport as string) === 'Five-a-side' || (match.sport as string) === '5-a-side' || (match.sport as string) === '5-aside' || (match.sport as string) === 'Futsal') {
-      sportLogger = <FootballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
+      sportLogger = <FootballLogger match={match} onExit={exitMatch} currentLogger={logger} />;
     } else if (match.sport === 'Track' || (match.sport as string) === 'Track & Field') {
-      sportLogger = <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} teams={teams} players={players} />;
+      sportLogger = <TrackLogger match={match} onExit={exitMatch} teams={teams} players={players} />;
     } else {
       // Default to generic logger for other sports
-      sportLogger = <MatchLoggerUI match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} teams={teams} players={players} />;
+      sportLogger = <MatchLoggerUI match={match} onExit={exitMatch} currentLogger={logger} teams={teams} players={players} />;
     }
     return (
       <>
         <SessionExpiryBanner />
-        {sportLogger}
+        <LoggerErrorBoundary onExitMatch={exitMatch}>
+          {sportLogger}
+        </LoggerErrorBoundary>
       </>
     );
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Unsent events and period writes are stored with this logger's token. Warn
+    // before discarding them, and never leave them behind for the next session.
+    try {
+      const counts = await getQueuedEventCounts();
+      if (counts.pending > 0 && !confirm(`${counts.pending} logged event(s) have not been saved to the server yet. Logging out will discard them. Log out anyway?`)) {
+        return;
+      }
+    } catch (err) {
+      console.error('Could not read the offline queue before logout:', err);
+    }
+    try {
+      await clearAllQueuedWrites();
+    } catch (err) {
+      console.error('Could not clear the offline queue on logout:', err);
+    }
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('match_state_') || key.startsWith('bb_quarter_start_')) localStorage.removeItem(key);
+      }
+    } catch {
+      // storage unavailable: nothing to clear
+    }
     setIsLoggedIn(false);
     setLogger(null);
     setAssignedMatches([]);
@@ -345,7 +391,7 @@ export default function LoggerPage() {
                 key={match.id}
                 whileHover={isLoggable || isRateable ? { y: -5 } : {}}
                 onClick={() => {
-                  if (isLoggable) setSelectedMatchId(match.id);
+                  if (isLoggable) void openMatch(match.id);
                   // For finished matches, we'll use a direct link button instead of clicking the card
                 }}
                 className={`bg-white/5 border border-white/10 rounded-[32px] p-5 md:p-8 transition-all ${isLoggable

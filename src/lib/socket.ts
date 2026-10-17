@@ -6,7 +6,10 @@
  */
 
 import { Server as SocketIOServer } from 'socket.io';
+import * as Sentry from '@sentry/nextjs';
 import { env as appEnv } from './env';
+import { createScoreVersionClock } from './score-version';
+import { resolveWsEnv } from './ws-env';
 
 // Extend global namespace to include io
 declare global {
@@ -22,6 +25,15 @@ export function getIO(): SocketIOServer | null {
     }
     return global.io;
 }
+
+// BACKLOG-467 item 4: warn/report a missing WS config once per process, not on
+// every broadcast (this runs inside after() for every logged event).
+let wsConfigMissingReported = false;
+let wsEnvPreviewWarned = false;
+
+// Sentry reports of "WS server rejected the broadcast" are limited to one per minute per process.
+const REJECTED_REPORT_INTERVAL_MS = 60 * 1000;
+let lastRejectedReportAt = 0;
 
 /**
  * Broadcast an event via the WS server.
@@ -45,7 +57,15 @@ async function broadcast(room: string | null, event: string, data: any): Promise
     const apiKey = process.env.WS_API_KEY;
 
     if (!wsServerUrl || !apiKey) {
-        // Silently skip - WS server not configured
+        // WS server not configured -- skip, but never silently: log + report once
+        // per process so a missing WS_SERVER_URL/WS_API_KEY in a deployment is
+        // visible instead of looking like "live updates just don't work".
+        if (!wsConfigMissingReported) {
+            wsConfigMissingReported = true;
+            const missing = [!wsServerUrl && 'WS_SERVER_URL', !apiKey && 'WS_API_KEY'].filter(Boolean).join(', ');
+            console.warn(`[Socket] WS broadcast disabled: ${missing} not set. Broadcasts will be skipped.`);
+            Sentry.captureMessage(`WS broadcast disabled: ${missing} not set`, 'warning');
+        }
         return;
     }
 
@@ -61,19 +81,43 @@ async function broadcast(room: string | null, event: string, data: any): Promise
         // hostname patterns the socket connection handlers already check on the
         // incoming browser Origin, so both sides always agree on the room name. Same
         // default-to-'prod' direction as the rest of BUG-074's fix either way.
-        const wsEnv = (appEnv.appUrl.includes('staging.brixsports.com') || appEnv.appUrl.includes('brixsports-staging.vercel.app'))
-            ? 'staging'
-            : 'prod';
-        await fetch(broadcastUrl, {
+        // WS_ENV, when set, overrides that heuristic (see src/lib/ws-env.ts).
+        const resolved = resolveWsEnv(appEnv.wsEnv, appEnv.appUrl);
+        const wsEnv = resolved.env;
+        if (resolved.previewMayHitProd && !wsEnvPreviewWarned) {
+            wsEnvPreviewWarned = true;
+            console.warn(`[Socket] NEXT_PUBLIC_APP_URL (${appEnv.appUrl}) is a vercel.app URL but broadcasts go to the 'prod' rooms. Set WS_ENV=staging on this deployment if it is not production.`);
+        }
+        const res = await fetch(broadcastUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'x-api-key': apiKey,
             },
             body: JSON.stringify({ room, event, data, env: wsEnv }),
+            // BACKLOG-467 item 4: bound the call -- an unresponsive WS server must
+            // not hold the after() task (and the serverless invocation) open.
+            signal: AbortSignal.timeout(3000),
         });
+        if (!res.ok) {
+            // Every event of a match goes through here, so an outage would otherwise send one
+            // Sentry event per broadcast (hundreds per match): report at most one a minute per
+            // process and leave the rest as console warnings.
+            const now = Date.now();
+            if (now - lastRejectedReportAt >= REJECTED_REPORT_INTERVAL_MS) {
+                lastRejectedReportAt = now;
+                console.error(`[Socket] Broadcast rejected by WS server: HTTP ${res.status} (event=${event}, room=${room ?? 'global'})`);
+                Sentry.captureMessage(`WS broadcast rejected: HTTP ${res.status}`, {
+                    level: 'error',
+                    tags: { area: 'ws-broadcast' },
+                    extra: { status: res.status, event, room },
+                });
+            } else {
+                console.warn(`[Socket] Broadcast rejected by WS server: HTTP ${res.status} (event=${event}, room=${room ?? 'global'})`);
+            }
+        }
     } catch (error) {
-        // Don't crash API routes if WS broadcast fails
+        // Don't crash API routes if WS broadcast fails (includes the 3s timeout abort)
         console.warn('[Socket] Broadcast failed (WS server may be down):', (error as Error).message);
     }
 }
@@ -100,6 +144,13 @@ export function broadcastMatchEvent(matchId: string, event: any): Promise<void> 
     });
 }
 
+const scoreVersionClock = createScoreVersionClock();
+
+/** Next score broadcast version (server time in ms, strictly increasing within this process). */
+export function nextScoreVersion(): number {
+    return scoreVersionClock();
+}
+
 /**
  * Broadcast a score update
  */
@@ -110,12 +161,17 @@ export function broadcastScoreUpdate(
     // BACKLOG-105: optional shootout score, backward compatible -- existing
     // listeners that don't know about these fields simply ignore them.
     shootoutHomeScore?: number,
-    shootoutAwayScore?: number
+    shootoutAwayScore?: number,
+    // Orders broadcasts of the same match: viewers drop a score whose version is older than the
+    // one they already applied. Defaults to a fresh version at call time; a caller that has just
+    // committed the score may take one earlier with nextScoreVersion() and pass it in.
+    version: number = nextScoreVersion()
 ): Promise<void> {
     return broadcastToMatch(matchId, 'match:score:updated', {
         matchId,
         homeScore,
         awayScore,
+        version,
         ...(shootoutHomeScore !== undefined ? { shootoutHomeScore } : {}),
         ...(shootoutAwayScore !== undefined ? { shootoutAwayScore } : {}),
     });

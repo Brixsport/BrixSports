@@ -16,6 +16,7 @@ import {
     CheckCircle2,
     XCircle
 } from 'lucide-react';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface User {
     id: string;
@@ -41,9 +42,13 @@ export default function AccessControlPage() {
     );
 }
 
+const USERS_PAGE_SIZE = 50;
+
 function AccessControlPageContent() {
     const [data, setData] = useState<UsersData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [roleCounts, setRoleCounts] = useState<Record<string, number>>({});
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('all');
     const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
@@ -51,13 +56,52 @@ function AccessControlPageContent() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/admin/users');
+            const response = await fetch(`/api/admin/users?limit=${USERS_PAGE_SIZE}&offset=0`);
             const result = await response.json();
             setData(result);
+            // Awaited (was fire-and-forget) -- previously `loading` could clear once the
+            // users list resolved while this was still in flight, letting the Stats cards
+            // above the table flash real "0"s (not a loading state, roleCounts was
+            // genuinely still {}) even though the table itself already had real rows.
+            await fetchRoleCounts();
         } catch (error) {
             console.error('Failed to fetch users:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // BACKLOG-283: stat cards previously counted only the loaded page
+    // (data.users.filter(...)), silently undercounting once total users
+    // exceeded USERS_PAGE_SIZE. limit=1 per role is enough to read the
+    // real total off X-Total-Count, same pattern as /admin/matches.
+    const fetchRoleCounts = async () => {
+        try {
+            const roles = ['admin', 'logger', 'user'];
+            const results = await Promise.all(
+                roles.map(r => fetch(`/api/admin/users?role=${r}&limit=1`))
+            );
+            const counts: Record<string, number> = {};
+            roles.forEach((r, i) => {
+                counts[r] = parseInt(results[i].headers.get('X-Total-Count') || '0', 10);
+            });
+            setRoleCounts(counts);
+        } catch (error) {
+            console.error('Failed to fetch role counts:', error);
+        }
+    };
+
+    const loadMoreUsers = async () => {
+        if (!data) return;
+        setIsLoadingMore(true);
+        try {
+            const res = await fetch(`/api/admin/users?limit=${USERS_PAGE_SIZE}&offset=${data.users.length}`);
+            const result: UsersData = await res.json();
+            setData(prev => prev ? { ...result, users: [...prev.users, ...result.users] } : result);
+        } catch (error) {
+            console.error('Failed to load more users:', error);
+        } finally {
+            setIsLoadingMore(false);
         }
     };
 
@@ -96,22 +140,25 @@ function AccessControlPageContent() {
 
     const roleStats = {
         total: data?.total || 0,
-        admins: data?.users.filter(u => u.role === 'admin').length || 0,
-        loggers: data?.users.filter(u => u.role === 'logger').length || 0,
-        users: data?.users.filter(u => u.role === 'user').length || 0,
+        admins: roleCounts.admin || 0,
+        loggers: roleCounts.logger || 0,
+        users: roleCounts.user || 0,
     };
 
     return (
         <div className="p-6 lg:p-12">
             <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header */}
-                <div>
-                    <h1 className="font-display text-4xl tracking-tight italic uppercase leading-none mb-2">
-                        Access Control
-                    </h1>
-                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">
-                        User roles & permissions management
-                    </p>
+                <div className="flex items-center gap-2">
+                    <BackButton fallbackHref="/admin" forceShow />
+                    <div>
+                        <h1 className="font-display text-4xl tracking-tight italic uppercase leading-none mb-2">
+                            Access Control
+                        </h1>
+                        <p className="text-white/40 text-xs font-bold uppercase tracking-widest">
+                            User roles & permissions management
+                        </p>
+                    </div>
                 </div>
 
                 {/* Stats */}
@@ -172,74 +219,90 @@ function AccessControlPageContent() {
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
                     </div>
                 ) : (
-                    <div className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-white/5 text-[10px] font-black uppercase tracking-widest text-white/30">
-                                    <th className="p-6">User</th>
-                                    <th className="p-6">Email</th>
-                                    <th className="p-6">Role</th>
-                                    <th className="p-6">Joined</th>
-                                    <th className="p-6 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {filteredUsers.map((user) => (
-                                    <motion.tr
-                                        key={user.id}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        className="group hover:bg-white/5 transition-colors"
-                                    >
-                                        <td className="p-6">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-sm font-black">
-                                                    {user.avatar ? (
-                                                        <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
-                                                    ) : (
-                                                        user.name.charAt(0).toUpperCase()
-                                                    )}
+                    <div className="bg-white/5 border border-white/10 rounded-2xl lg:rounded-[32px] overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-white/5 text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-white/30">
+                                        <th className="p-1.5 lg:p-6">User</th>
+                                        <th className="p-1.5 lg:p-6">Email</th>
+                                        <th className="p-1.5 lg:p-6">Role</th>
+                                        <th className="hidden lg:table-cell p-1.5 lg:p-6">Joined</th>
+                                        <th className="p-1.5 lg:p-6 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {filteredUsers.map((user) => (
+                                        <motion.tr
+                                            key={user.id}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="group hover:bg-white/5 transition-colors"
+                                        >
+                                            <td className="p-1.5 lg:p-6">
+                                                <div className="flex items-center gap-1.5 lg:gap-3">
+                                                    <div className="w-6 h-6 lg:w-10 lg:h-10 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-[9px] lg:text-sm font-black shrink-0">
+                                                        {user.avatar ? (
+                                                            <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
+                                                        ) : (
+                                                            user.name.charAt(0).toUpperCase()
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] lg:text-sm font-bold truncate max-w-[65px] lg:max-w-none">{user.name}</p>
+                                                        <p className="hidden lg:block text-[10px] text-white/40 uppercase tracking-widest">
+                                                            ID: {user.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-bold">{user.name}</p>
-                                                    <p className="text-[10px] text-white/40 uppercase tracking-widest">
-                                                        ID: {user.id.slice(0, 8)}
-                                                    </p>
+                                            </td>
+                                            <td className="p-1.5 lg:p-6">
+                                                <p className="text-[9px] lg:text-sm text-white/60 truncate max-w-[95px] lg:max-w-none">{user.email}</p>
+                                            </td>
+                                            <td className="p-1.5 lg:p-6">
+                                                <RoleBadge role={user.role} />
+                                            </td>
+                                            <td className="hidden lg:table-cell p-1.5 lg:p-6">
+                                                <p className="text-xs text-white/40">
+                                                    {new Date(user.createdAt).toLocaleDateString()}
+                                                </p>
+                                            </td>
+                                            <td className="p-1.5 lg:p-6">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <select
+                                                        value={user.role}
+                                                        onChange={(e) => updateUserRole(user.id, e.target.value)}
+                                                        disabled={updatingUserId === user.id}
+                                                        className="bg-white/5 border border-white/10 rounded-md lg:rounded-lg px-1.5 py-1 lg:px-3 lg:py-1.5 text-[9px] lg:text-xs font-bold outline-none focus:border-primary transition-all disabled:opacity-50"
+                                                    >
+                                                        <option value="user">User</option>
+                                                        <option value="logger">Logger</option>
+                                                        <option value="admin">Admin</option>
+                                                    </select>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-6">
-                                            <p className="text-sm text-white/60">{user.email}</p>
-                                        </td>
-                                        <td className="p-6">
-                                            <RoleBadge role={user.role} />
-                                        </td>
-                                        <td className="p-6">
-                                            <p className="text-xs text-white/40">
-                                                {new Date(user.createdAt).toLocaleDateString()}
-                                            </p>
-                                        </td>
-                                        <td className="p-6">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <select
-                                                    value={user.role}
-                                                    onChange={(e) => updateUserRole(user.id, e.target.value)}
-                                                    disabled={updatingUserId === user.id}
-                                                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold outline-none focus:border-primary transition-all disabled:opacity-50"
-                                                >
-                                                    <option value="user">User</option>
-                                                    <option value="logger">Logger</option>
-                                                    <option value="admin">Admin</option>
-                                                </select>
-                                            </div>
-                                        </td>
-                                    </motion.tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                            </td>
+                                        </motion.tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                         {filteredUsers.length === 0 && (
                             <div className="text-center py-12 text-white/40">
                                 No users found matching your criteria
+                            </div>
+                        )}
+                        {data && data.users.length < data.total && (
+                            <div className="flex flex-col items-center gap-3 py-8 border-t border-white/5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                    Showing {data.users.length} of {data.total}
+                                </p>
+                                <button
+                                    onClick={loadMoreUsers}
+                                    disabled={isLoadingMore}
+                                    className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors disabled:opacity-50"
+                                >
+                                    {isLoadingMore ? 'Loading...' : 'Load More'}
+                                </button>
                             </div>
                         )}
                     </div>
@@ -319,9 +382,9 @@ function RoleBadge({ role }: { role: string }) {
     const config = roleConfig[role as keyof typeof roleConfig] || roleConfig.user;
 
     return (
-        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest ${config.color}`}>
+        <span className={`inline-flex items-center gap-1 lg:gap-1.5 px-1.5 py-1 lg:px-3 lg:py-1 rounded-md lg:rounded-lg border text-[10px] font-black uppercase tracking-widest ${config.color}`}>
             {config.icon}
-            {role}
+            <span className="hidden lg:inline">{role}</span>
         </span>
     );
 }

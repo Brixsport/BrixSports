@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { players, footballPlayerStats, basketballPlayerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 /**
  * GET player comparison
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
         const player1Id = searchParams.get('player1');
         const player2Id = searchParams.get('player2');
         const competition = searchParams.get('competition');
+        const season = searchParams.get('season'); // BACKLOG-229
 
         if (!player1Id || !player2Id) {
             return NextResponse.json(
@@ -74,6 +76,9 @@ export async function GET(request: NextRequest) {
                 if (competition) {
                     conditions.push(eq(basketballPlayerStats.competition, competition));
                 }
+                if (season) {
+                    conditions.push(eq(basketballPlayerStats.season, season));
+                }
 
                 const statsRows = await db
                     .select()
@@ -114,6 +119,9 @@ export async function GET(request: NextRequest) {
                 const conditions = [eq(footballPlayerStats.playerId, playerId)];
                 if (competition) {
                     conditions.push(eq(footballPlayerStats.competition, competition));
+                }
+                if (season) {
+                    conditions.push(eq(footballPlayerStats.season, season));
                 }
 
                 const statsRows = await db
@@ -176,8 +184,35 @@ export async function GET(request: NextRequest) {
             }
         };
 
-        const stats1 = await getStats(player1Id, team1);
-        const stats2 = await getStats(player2Id, team2);
+        // BACKLOG-229: distinct seasons either player actually has a stats row
+        // for, always unfiltered by the `season` param above -- lets the UI
+        // build a season picker even once a filter has narrowed getStats().
+        const getAvailableSeasons = async (playerId: string, team: any): Promise<string[]> => {
+            const sport = team?.sport || 'Football';
+            const table = sport === 'Basketball' ? basketballPlayerStats : footballPlayerStats;
+            const rows = await db
+                .selectDistinct({ season: table.season })
+                .from(table)
+                .where(eq(table.playerId, playerId));
+            return rows.map((r) => r.season).filter((s): s is string => !!s);
+        };
+
+        const [stats1, stats2, seasons1, seasons2] = await Promise.all([
+            getStats(player1Id, team1),
+            getStats(player2Id, team2),
+            getAvailableSeasons(player1Id, team1),
+            getAvailableSeasons(player2Id, team2),
+        ]);
+        const availableSeasons = Array.from(new Set([...seasons1, ...seasons2])).sort();
+
+        // BACKLOG-254: player1.rating/player2.rating below come from the raw
+        // `...player1`/`...player2` spread -- players.rating, the frozen legacy
+        // column (BACKLOG-253). Override with the real career accessor so
+        // PlayerComparison.tsx's "Overall Rating" tile isn't showing the same
+        // stale default for every player.
+        const ratingSummaries = await getPlayerRatingSummaries([player1Id, player2Id]);
+        const rating1 = ratingSummaries.get(player1Id)?.averageRating ?? null;
+        const rating2 = ratingSummaries.get(player2Id)?.averageRating ?? null;
 
         // Determine comparison summary based on primary sport
         const primarySport = team1?.sport || 'Football';
@@ -208,15 +243,19 @@ export async function GET(request: NextRequest) {
         const comparison = {
             player1: {
                 ...toPublicPlayer(player1, false),
+                rating: rating1,
                 team: team1,
                 stats: stats1,
             },
             player2: {
                 ...toPublicPlayer(player2, false),
+                rating: rating2,
                 team: team2,
                 stats: stats2,
             },
             summary,
+            availableSeasons,
+            season: season || null,
         };
 
         return NextResponse.json(comparison);

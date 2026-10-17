@@ -1,20 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWebSocket, useMatchEvents, useMatchTimer } from '@/hooks/useWebSocket';
 import { useToast } from '@/hooks/useToast';
+import { startVisiblePolling } from '@/lib/visible-poll';
 import { ToastContainer } from '@/components/admin/Toast';
 import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
-    Activity, BarChart3, Share2, Star, Bell, Trophy, Play
+    Activity, BarChart3, Share2, Star, Bell, Trophy, Play, Table2
 } from 'lucide-react';
+import { FaFutbol } from 'react-icons/fa';
 import { useFavorites } from '@/hooks/useFavorites';
-import MatchStatusBadge from '@/components/MatchStatusBadge';
+import { useAuth } from '@/contexts/AuthContext';
+import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
+import BasketballBoxScore from '@/components/BasketballBoxScore';
 import MatchLineups from '@/components/MatchLineups';
+import MatchStandingsTable from '@/components/MatchStandingsTable';
 import { HeadToHeadComparison } from '@/components/HeadToHead';
 // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls + Predictions built (Phase 7)
 // import MatchPoll from '@/components/MatchPoll';
@@ -23,11 +28,30 @@ import { LivestreamView } from '@/components/livestream/LivestreamView';
 import { useNotifications } from '@/components/Notifications';
 import { getPushService } from '@/lib/notifications/push-service';
 import { getDeviceId } from '@/lib/notifications/device-id';
+import { formatScorerLine, knownMinutes } from '@/lib/eventMinute';
+import {
+    shouldApplyMatchResponse,
+    matchPollIntervalMs,
+    selectUnseenLiveEvents,
+    prependNewEvents,
+    resolveDisplayPeriod,
+    applyTimerToMatch,
+} from '@/lib/match-detail-sync';
+import { TeamLogo, isValidLogo } from '@/lib/utils/team-logo';
 
 // BACKLOG-150: which matchIds this device has an active anonymous "notify me"
 // subscription for. localStorage is the right store here -- device-scoped by
 // definition, no account to persist server-side preferences against.
 const NOTIFY_STORAGE_KEY = 'brixsports_notify_matches';
+// Team logo for the match header: the plain image when there is a usable logo, otherwise the
+// shared initials tile, so an empty logo never renders a broken <img src="">.
+function HeaderTeamLogo({ logo, name, compact, className }: { logo?: string | null; name: string; compact: boolean; className: string }) {
+    if (isValidLogo(logo)) {
+        return <img src={logo!} alt={name} className={className} />;
+    }
+    return <TeamLogo logo={null} name={name} size={compact ? 'sm' : 'lg'} />;
+}
+
 function getNotifiedMatchIds(): Set<string> {
     try {
         return new Set(JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY) || '[]'));
@@ -50,14 +74,57 @@ interface MatchData {
     eyePoints: any[];
 }
 
+type TabId = 'overview' | 'timeline' | 'boxscore' | 'stats' | 'lineups' | 'h2h' | 'table';
+const TAB_IDS: TabId[] = ['overview', 'timeline', 'boxscore', 'stats', 'lineups', 'h2h', 'table'];
+
 export default function MatchDetailClient() {
     const params = useParams();
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const matchId = params.id as string;
+
+    // BACKLOG-294: URL-addressable tabs -- ?tab= is the source of truth (shareable/
+    // bookmarkable, back button steps through tab history), but the RENDERED tab is
+    // buffered through local state rather than reading useSearchParams() directly.
+    // BACKLOG-337 (found live-verifying BACKLOG-326/331, 2026-09-05): reading
+    // searchParams.get('tab') straight into render was consistently ONE CLICK
+    // BEHIND -- router.replace() updates the address bar synchronously (a plain
+    // history.replaceState under the hood) but the content this component actually
+    // rendered kept showing the PREVIOUS tab until another click forced a further
+    // re-render, live-reproduced 3/3 times on a real basketball match (URL read back
+    // via window.location.href always matched the tab just clicked; the visible
+    // content always matched the tab clicked before that). Root cause: nothing forced
+    // a re-render between the URL changing and the next user action -- useSearchParams()
+    // is reactive to same-render navigations but this component had no state of its own
+    // depending on it, so React had no reason to re-run this component on that update
+    // alone. Fixed with the standard optimistic-local-state pattern: clicking a tab
+    // updates local state immediately (instant, synchronous with the click) and
+    // separately calls router.replace to keep the URL in sync; an effect syncs local
+    // state to the URL on mount and on browser back/forward (?tab= changing without a
+    // click here).
+    const rawTab = searchParams.get('tab');
+    const urlTab: TabId = TAB_IDS.includes(rawTab as TabId) ? (rawTab as TabId) : 'overview';
+    const [activeTab, setActiveTabState] = useState<TabId>(urlTab);
+    useEffect(() => {
+        setActiveTabState(urlTab);
+    }, [urlTab]);
+    const setActiveTab = useCallback((tab: TabId) => {
+        setActiveTabState(tab);
+        const next = new URLSearchParams(searchParams.toString());
+        next.set('tab', tab);
+        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    }, [searchParams, pathname, router]);
 
     const [matchData, setMatchData] = useState<MatchData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h'>('overview');
+    // BACKLOG-394: distinguishes a genuinely-missing match (404, real content
+    // absence) from a transient load failure (network error, 500, etc.) on the
+    // INITIAL load only -- BUG-236 already made every later silent background
+    // poll (10s disconnect poll, 25s reconciliation poll) preserve last-known
+    // matchData on failure instead of reverting to null, so this only needed
+    // to cover the first fetch, not every subsequent one.
+    const [loadError, setLoadError] = useState<'not-found' | 'load-failed' | null>(null);
     // BACKLOG-207: replaces the dead single Heart (pure local useState, no API
     // call, reset on reload) with two real per-team follow stars -- toggleTeam()
     // already works and is already the exact thing sendMatchEventNotification()
@@ -66,18 +133,57 @@ export default function MatchDetailClient() {
     const [isNotifySubscribed, setIsNotifySubscribed] = useState(false);
     const [notifyLoading, setNotifyLoading] = useState(false);
     const [h2hData, setH2hData] = useState<any>(null);
-    const [scrollY, setScrollY] = useState(0);
-    const [lastScrollY, setLastScrollY] = useState(0);
-    const [headerVisible, setHeaderVisible] = useState(true);
+    // BACKLOG-338: the header used to fully retract off-screen on scroll-down
+    // (translateY(-100%)) and reappear on scroll-up. Since `position: sticky`
+    // never reserves flow space for a translated element, the timeline content
+    // below sat at a fixed document offset regardless of the header's visual
+    // state -- so there was a real, measured window (scrollY 100 to ~header's
+    // own height) where the header had already retracted but content hadn't
+    // scrolled up far enough to fill the space, producing a visible gap of bare
+    // background. Richard's direction: don't hide the header at all -- collapse
+    // it into a compact permanent navbar instead (team/score/tabs only, goal
+    // scorer list dropped), same pattern as SofaScore/ESPN match pages. Nothing
+    // ever translates off-screen now, which also structurally removes the gap.
+    const [isCompact, setIsCompact] = useState(false);
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
-    const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
+    const { events: liveEvents } = useMatchEvents(matchId);
     const { time: matchTime, isStale: isMatchTimeStale } = useMatchTimer(matchId);
     const { addNotification } = useNotifications();
+    // BACKLOG-365 item 1: consequence note at the moment of favoriting, same
+    // shared message MatchOverlay/SearchOverlay use.
+    // BACKLOG-464 item 3: only announce the change once the server confirmed it
+    // (toggleTeam resolves true only on a confirmed write). Anonymous viewers have
+    // no server-side follow, so "you'll get alerts" would be false -- no message.
+    const handleFollowTeam = useCallback(async (team: { id: string; name: string }) => {
+        const isNowFollowing = !isFavoriteTeam(team.id);
+        const confirmed = await toggleTeam(team.id);
+        if (confirmed) {
+            addNotification(getFollowTeamNotification(team.name, isNowFollowing));
+        }
+    }, [isFavoriteTeam, toggleTeam, addNotification]);
     const { toasts, warning, success, removeToast } = useToast();
     const prevConnected = useRef<boolean | null>(null);
     const disconnectToastFired = useRef(false);
     const prevConnectedForSync = useRef<boolean | null>(null);
+
+    // Viewers poll the cookie-free, edge-cached public route. Admin and logger sessions keep
+    // using the session-aware route so they still get draft lineups and logger names.
+    const { user: sessionUser } = useAuth();
+    const isStaff = sessionUser?.role === 'admin' || sessionUser?.role === 'logger';
+    const isStaffRef = useRef(false);
+    isStaffRef.current = isStaff;
+
+    // Request sequencing for fetchMatchData. A poll can finish after newer WebSocket state has been applied,
+    // or after the page moved to another match; these refs let the response be recognised and dropped.
+    const matchIdRef = useRef(matchId);
+    matchIdRef.current = matchId;
+    const requestSeq = useRef(0);
+    const lastAppliedSeq = useRef(0);
+    // When a WebSocket message last changed the match state; a silent poll that started earlier is stale.
+    const lastWsMutationAt = useRef(0);
+    // Live event ids already merged into the page state (so a poll that drops one does not get it re-added).
+    const seenLiveEventIds = useRef<Set<string>>(new Set());
 
     const isUpcoming = matchData?.match?.status === 'UPCOMING';
 
@@ -86,6 +192,17 @@ export default function MatchDetailClient() {
             setActiveTab('overview');
         }
     }, [isUpcoming]);
+
+    // BACKLOG-326: basketball drops Timeline/Lineups entirely (Box Score/Stats
+    // replace them) -- same pattern as the isUpcoming redirect above, so a
+    // stale/shared URL pointing at either corrects itself instead of staying
+    // stuck on an unreachable tab.
+    const matchSport = matchData?.match?.sport;
+    useEffect(() => {
+        if (matchSport === 'Basketball' && (activeTab === 'timeline' || activeTab === 'lineups')) {
+            setActiveTab('overview');
+        }
+    }, [matchSport, activeTab]);
 
     const handleShare = async () => {
         const shareData = {
@@ -170,21 +287,22 @@ export default function MatchDetailClient() {
     };
 
     // Update match time in real-time
+    // (a finished match is left alone, so a late tick cannot push a live period into its status)
     useEffect(() => {
-        if (matchData && matchTime) {
-            setMatchData(prev => ({
-                ...prev!,
-                match: {
-                    ...prev!.match,
-                    minute: matchTime.minute,
-                    extraTime: matchTime.extraTime,
-                    status: matchTime.period || prev!.match.status
-                },
-            }));
-        }
+        if (!matchTime) return;
+        setMatchData(prev => {
+            if (!prev) return prev;
+            const nextMatch = applyTimerToMatch(prev.match, matchTime);
+            return nextMatch === prev.match ? prev : { ...prev, match: nextMatch };
+        });
     }, [matchTime]);
 
-    // Handle scroll for hide/show header behavior
+    // Collapse the header into a compact navbar (team/score/tabs only) past a
+    // small scroll threshold, and expand it again near the top. No direction
+    // tracking needed -- unlike the old hide/show behavior, the header never
+    // leaves the DOM's visual flow, so there's no "which way are we scrolling"
+    // state to get wrong, and no gap can ever open up beneath it.
+    const COMPACT_THRESHOLD = 40;
     useEffect(() => {
         let ticking = false;
 
@@ -192,23 +310,7 @@ export default function MatchDetailClient() {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
                     const currentScrollY = window.scrollY;
-
-                    // Determine scroll direction
-                    if (currentScrollY > lastScrollY && currentScrollY > 100) {
-                        // Scrolling down & past threshold - hide header
-                        setHeaderVisible(false);
-                    } else if (currentScrollY < lastScrollY) {
-                        // Scrolling up - show header
-                        setHeaderVisible(true);
-                    }
-
-                    // Always show header at top of page
-                    if (currentScrollY < 50) {
-                        setHeaderVisible(true);
-                    }
-
-                    setScrollY(currentScrollY);
-                    setLastScrollY(currentScrollY);
+                    setIsCompact(currentScrollY > COMPACT_THRESHOLD);
                     ticking = false;
                 });
                 ticking = true;
@@ -217,41 +319,52 @@ export default function MatchDetailClient() {
 
         window.addEventListener('scroll', handleScroll, { passive: true });
         return () => window.removeEventListener('scroll', handleScroll);
-    }, [lastScrollY]);
+    }, []);
 
     // Fetch match data
     useEffect(() => {
         fetchMatchData();
     }, [matchId]);
 
-    // Update events in real-time — dedup by id OR (type+minute+playerId) to handle
-    // temp-ID vs permanent-ID discrepancy from dual broadcast paths.
+    // The session resolves after the first load. When it turns out to be staff, refetch once from
+    // the session-aware route so draft lineups and logger names appear without waiting for a poll.
     useEffect(() => {
-        if (matchData && latestEvent) {
-            const exists = matchData.events.some(e =>
-                e.id === latestEvent.id ||
-                (e.type === latestEvent.type &&
-                    e.minute === latestEvent.minute &&
-                    e.playerId === latestEvent.playerId &&
-                    e.teamId === latestEvent.teamId)
-            );
-            if (!exists) {
-                setMatchData(prev => ({
-                    ...prev!,
-                    events: [latestEvent, ...prev!.events],
-                }));
-            }
-        }
-    }, [latestEvent]);
+        if (isStaff) fetchMatchData(true);
+    }, [isStaff]);
+
+    // Update events in real-time. Walks the hook's whole event list (two messages that land in the same
+    // render both arrive here) and dedups by event id only: a second goal by the same player in the same
+    // minute is a different event with a different id.
+    const hasMatchData = matchData !== null;
+    useEffect(() => {
+        seenLiveEventIds.current = new Set();
+        lastWsMutationAt.current = 0;
+    }, [matchId]);
+    useEffect(() => {
+        if (!hasMatchData) return;
+        // The hook keeps its list when the page moves to another match; only this match's events count.
+        const forThisMatch = liveEvents.filter((e: any) => !e.matchId || e.matchId === matchId);
+        const { fresh, seen } = selectUnseenLiveEvents(forThisMatch, seenLiveEventIds.current);
+        if (fresh.length === 0) return;
+        seenLiveEventIds.current = seen;
+        lastWsMutationAt.current = Date.now();
+        setMatchData(prev => {
+            if (!prev) return prev;
+            const events = prependNewEvents(prev.events, fresh);
+            return events === prev.events ? prev : { ...prev, events };
+        });
+    }, [liveEvents, hasMatchData, matchId]);
 
     // BUG-080: HTTP polling fallback when WS is disconnected during a live match.
     // Silent — does NOT show loading spinner, just merges fresh data into state.
+    // With the socket down this poll is the only live source, so it runs every ~4s (viewers fetch the
+    // edge-cached public route, which absorbs the load). Staff keep the session-aware route.
     useEffect(() => {
         const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (isConnected || !isLiveStatus) return;
 
-        const interval = setInterval(() => fetchMatchData(true), 10000);
-        return () => clearInterval(interval);
+        // Paused while the tab is hidden, jittered, and an immediate refetch when it becomes visible again.
+        return startVisiblePolling(() => { fetchMatchData(true); }, matchPollIntervalMs(false));
     }, [isConnected, matchData?.match?.status]);
 
     // BUG-108: low-frequency reconciliation poll, runs even while WS IS connected —
@@ -261,13 +374,12 @@ export default function MatchDetailClient() {
     // purely client-side from the logger's own tab, so a perfectly healthy viewer
     // connection is no guarantee every DB-persisted event was ever pushed. Slower than
     // BUG-080's disconnect-only poll above (25s vs 10s) since this is a defense-in-depth
-    // check, not the primary recovery path — the two never run simultaneously.
+    // check, not the primary recovery path — the two never run simultaneously (4s when disconnected, above).
     useEffect(() => {
         const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (!isConnected || !isLiveStatus) return;
 
-        const interval = setInterval(() => fetchMatchData(true), 25000);
-        return () => clearInterval(interval);
+        return startVisiblePolling(() => { fetchMatchData(true); }, matchPollIntervalMs(true));
     }, [isConnected, matchData?.match?.status]);
 
     // On WS reconnect: silently sync missed events from DB once.
@@ -308,6 +420,7 @@ export default function MatchDetailClient() {
     useEffect(() => {
         const handleScoreUpdate = (data: any) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 return {
@@ -327,6 +440,7 @@ export default function MatchDetailClient() {
 
         const handleStatusChange = (data: any) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 return { ...prev, match: { ...prev.match, status: data.status } };
@@ -343,6 +457,7 @@ export default function MatchDetailClient() {
         // insurance if that emit-name bug is ever fixed at the source instead.
         const handleMatchUpdate = (data: any) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 const nextMatch: any = { ...prev.match };
@@ -366,6 +481,7 @@ export default function MatchDetailClient() {
         // reconciliation poll (BUG-108) happened to refetch -- not instant.
         const handleEventDeleted = (data: { matchId: string; eventId: string }) => {
             if (data.matchId !== matchId) return;
+            lastWsMutationAt.current = Date.now();
             setMatchData(prev => {
                 if (!prev) return prev;
                 return { ...prev, events: prev.events.filter((e: any) => e.id !== data.eventId) };
@@ -385,11 +501,31 @@ export default function MatchDetailClient() {
         };
     }, [matchId, on, off]);
 
+    const h2hFetchedKey = useRef<string | null>(null);
+
     const fetchMatchData = async (silent = false) => {
+        // Sequence number and start time decide, once the response is back, whether it is still current.
+        const seq = ++requestSeq.current;
+        const startedAt = Date.now();
+        const requestedMatchId = matchId;
+        const matchChanged = () => matchIdRef.current !== requestedMatchId;
         try {
             if (!silent) setLoading(true);
-            const response = await fetch(`/api/matches/${matchId}`);
+            const response = await fetch(isStaffRef.current ? `/api/matches/${matchId}` : `/api/matches/${matchId}/public`);
             const data = await response.json();
+
+            // A response for another match, from before a newer one was applied, or (for a silent poll)
+            // from before a WebSocket message changed the state, must not overwrite what is on screen.
+            if (!shouldApplyMatchResponse({
+                requestSeq: seq,
+                lastAppliedSeq: lastAppliedSeq.current,
+                startedAt,
+                lastWsMutationAt: lastWsMutationAt.current,
+                silent,
+                matchChanged: matchChanged(),
+            })) {
+                return;
+            }
 
             // BUG-236: neither path checked response.ok or that `data` actually has the
             // shape a successful match fetch has before using it. A 404/error response
@@ -404,9 +540,18 @@ export default function MatchDetailClient() {
             // real initial load should fall through to the existing "Match not found" UI.
             if (!response.ok || !data?.match || !Array.isArray(data?.events)) {
                 console.error('fetchMatchData: unexpected response shape', { status: response.status, silent, data });
-                if (!silent) setMatchData(null);
+                if (!silent) {
+                    setMatchData(null);
+                    // BACKLOG-394 P0-3: a 404 means the match genuinely doesn't exist;
+                    // any other bad response (500, malformed body, etc.) is a load
+                    // failure that deserves a retry, not the same "not found" message.
+                    setLoadError(response.status === 404 ? 'not-found' : 'load-failed');
+                }
                 return;
             }
+
+            if (!silent) setLoadError(null);
+            lastAppliedSeq.current = seq;
 
             if (silent) {
                 // BUG-113: diff/merge instead of a wholesale replace on every silent poll —
@@ -425,36 +570,79 @@ export default function MatchDetailClient() {
                 setMatchData(data);
             }
 
-            // Fetch head-to-head data
+            // Fetch head-to-head data once per team pairing, not on every poll cycle:
+            // it is static for the life of the match.
             if (data.match?.homeTeam && data.match?.awayTeam) {
-                try {
-                    const h2hRes = await fetch(
-                        `/api/head-to-head?team1=${data.match.homeTeam.id}&team2=${data.match.awayTeam.id}&competition=${data.match.competition}`
-                    );
-                    const h2hData = await h2hRes.json();
-                    setH2hData(h2hData);
-                } catch (h2hError) {
-                    console.error('Error fetching H2H data:', h2hError);
+                const h2hKey = `${data.match.homeTeam.id}:${data.match.awayTeam.id}:${data.match.competition}`;
+                if (h2hFetchedKey.current !== h2hKey) {
+                    h2hFetchedKey.current = h2hKey;
+                    try {
+                        const h2hParams = new URLSearchParams({
+                            team1: String(data.match.homeTeam.id),
+                            team2: String(data.match.awayTeam.id),
+                            competition: String(data.match.competition ?? ''),
+                        });
+                        const h2hRes = await fetch(`/api/head-to-head?${h2hParams}`);
+                        if (!h2hRes.ok) {
+                            // An error body is not head-to-head data: keep what we have and retry next cycle.
+                            h2hFetchedKey.current = null;
+                        } else {
+                            const h2hBody = await h2hRes.json();
+                            if (!matchChanged()) setH2hData(h2hBody);
+                        }
+                    } catch (h2hError) {
+                        // Allow the next fetch cycle to retry.
+                        h2hFetchedKey.current = null;
+                        console.error('Error fetching H2H data:', h2hError);
+                    }
                 }
             }
         } catch (error) {
             console.error('Error fetching match:', error);
+            // BACKLOG-394 P0-3: fetch() itself threw (offline, DNS, CORS) -- no
+            // response to read a status from, but this is unambiguously a load
+            // failure, never a confirmed "doesn't exist". Silent polls intentionally
+            // leave matchData/loadError untouched here (BUG-236's existing behavior).
+            if (!silent && !matchChanged()) {
+                setMatchData(null);
+                setLoadError('load-failed');
+            }
         } finally {
-            if (!silent) setLoading(false);
+            if (!silent && !matchChanged()) setLoading(false);
         }
     };
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
         );
     }
 
     if (!matchData) {
+        // BACKLOG-394 P0-3: a real load failure (network/server error) reads as
+        // honest and retriable, distinct from a confirmed-absent match -- telling
+        // a viewer on a flaky connection their match "wasn't found" when the real
+        // problem is their network is actively misleading.
+        if (loadError === 'load-failed') {
+            return (
+                <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold mb-2">Couldn't load this match</h2>
+                        <p className="text-foreground/60 text-sm mb-4">Check your connection and try again.</p>
+                        <button
+                            onClick={() => fetchMatchData()}
+                            className="text-primary hover:underline"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            );
+        }
         return (
-            <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
+            <div className="min-h-screen bg-background flex items-center justify-center text-foreground">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold mb-2">Match not found</h2>
                     <button
@@ -468,13 +656,59 @@ export default function MatchDetailClient() {
         );
     }
 
-    const { match, events, timeTracking, eyePoints } = matchData;
+    const { events, timeTracking, eyePoints } = matchData;
+    // The API left-joins teams, so a match whose team row is missing arrives with a null team.
+    const match = {
+        ...matchData.match,
+        homeTeam: matchData.match.homeTeam ?? { id: matchData.match.homeTeamId ?? '', name: 'Home Team', shortName: '', logo: null },
+        awayTeam: matchData.match.awayTeam ?? { id: matchData.match.awayTeamId ?? '', name: 'Away Team', shortName: '', logo: null },
+    };
     const isLive = LIVE_STATES.has(match.status);
+
+    // BACKLOG-326: basketball has no Timeline/Lineups tabs -- fall back to
+    // Overview for a stale/shared URL pointing at either (e.g. bookmarked
+    // before a match's sport metadata changed, or the ?tab= param edited by
+    // hand). Every other tab is valid for every sport.
+    const isBasketball = match.sport === 'Basketball';
+    const effectiveTab: TabId = isBasketball && (activeTab === 'timeline' || activeTab === 'lineups')
+        ? 'overview'
+        : activeTab;
 
     // Red card indicators next to team names — same pattern as MatchOverlay.tsx,
     // never ported to this full detail page header.
     const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
     const awayRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
+
+    // BACKLOG-294: header always flanks the score with a per-team goal-scorer
+    // list ("Wareez 59'" / "Lazzy 33', 71'" / "Surefunmi 75'") -- missing live entirely.
+    // Own goals credit the OPPOSING team's list with an "(OG)" suffix, same own-goal
+    // detection LiveMatchTimeline's generateGoalCommentary already uses.
+    const buildScorerSummary = (teamId: string) => {
+        const byPlayer = new Map<string, number[]>();
+        for (const e of (events || [])) {
+            if ((e.type ?? '').toUpperCase().replace(/\s+/g, '_') !== 'GOAL') continue;
+            const isOwnGoal = e.detail?.toLowerCase().includes('own goal') ?? false;
+            const scoringTeamId = isOwnGoal
+                ? (e.teamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId)
+                : e.teamId;
+            if (scoringTeamId !== teamId) continue;
+            // BACKLOG-294: jersey/known-as name, not the full real name -- matches the
+            // same preference LiveMatchTimeline/KeyEventsList now use everywhere else.
+            const rawName = e.player?.jerseyName ?? e.player?.name ?? e.playerSnapshot?.jerseyName ?? e.playerSnapshot?.name ?? 'Unknown';
+            const key = isOwnGoal ? `${rawName} (OG)` : rawName;
+            if (!byPlayer.has(key)) byPlayer.set(key, []);
+            byPlayer.get(key)!.push(e.minute);
+        }
+        // A goal with no known minute (backfilled) is listed by name only; those scorers sort last.
+        return Array.from(byPlayer.entries())
+            .map(([name, minutes]) => {
+                const known = knownMinutes(minutes);
+                return { name, minutes, firstMinute: known.length > 0 ? known[0] : Infinity };
+            })
+            .sort((a, b) => (a.firstMinute === b.firstMinute ? 0 : a.firstMinute - b.firstMinute));
+    };
+    const homeScorers = buildScorerSummary(match.homeTeamId);
+    const awayScorers = buildScorerSummary(match.awayTeamId);
 
     // BUG-197 root cause: shootoutHomeScore/shootoutAwayScore default to 0 (not
     // null) on every match, shootout or not (schema.ts), so the only thing that
@@ -499,7 +733,19 @@ export default function MatchDetailClient() {
     // ?? forever, even after the 10s polling fallback (BUG-080) refreshes match.* with
     // a newer DB-persisted checkpoint. DB fields (match.minute/extraTime/currentPeriod)
     // are the fallback for initial page load, no logger connected, and any stale WS value.
-    const displayPeriod = (!isMatchTimeStale && matchTime?.period) ? matchTime.period : (match.currentPeriod ?? match.status);
+    // BACKLOG-386: currentPeriod defaults to the literal string 'NOT_STARTED' in the
+    // schema, so `match.currentPeriod ?? match.status` never falls through to status
+    // for a match whose currentPeriod was never updated (bulk-imported/backfilled
+    // matches inserted with status: 'FINISHED' but no currentPeriod write) — it shows
+    // "Not Started" forever regardless of the real status. A FINISHED match's period
+    // is never ambiguous, so status wins outright once the match is actually over.
+    // A FINISHED status outranks everything, including a live period the WS timer last reported.
+    const displayPeriod = resolveDisplayPeriod({
+        status: match.status,
+        currentPeriod: match.currentPeriod,
+        timerPeriod: matchTime?.period,
+        timerIsStale: isMatchTimeStale,
+    });
     const liveMinute = (!isMatchTimeStale && matchTime?.minute != null) ? matchTime.minute : match.minute;
     const liveExtraTime = (!isMatchTimeStale && matchTime?.extraTime != null) ? matchTime.extraTime : match.extraTime;
 
@@ -547,21 +793,17 @@ export default function MatchDetailClient() {
         PERIOD_LABELS[period] ?? period.replace(/_/g, ' ');
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
+        <div className="min-h-screen bg-background text-foreground">
             <ToastContainer toasts={toasts} onClose={removeToast} />
-            {/* Sticky Header - Slides up/down based on scroll direction */}
-            <div
-                className="sticky top-0 z-40 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]/90 backdrop-blur-xl border-b border-white/10 transition-transform duration-300 ease-out"
-                style={{
-                    transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
-                }}
-            >
-                <div className="max-w-7xl mx-auto px-4 py-4">
+            {/* Sticky Header - permanently pinned like a navbar; collapses to a
+                compact team/score bar on scroll instead of hiding (BACKLOG-338) */}
+            <div className="sticky top-0 z-40 bg-gradient-to-b from-background via-background/95 to-background/90 backdrop-blur-xl border-b border-border">
+                <div className={`max-w-7xl mx-auto px-4 transition-[padding] duration-300 ease-out ${isCompact ? 'pt-2 pb-1' : 'py-4'}`}>
                     {/* Top bar */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className={`flex items-center justify-between transition-all duration-300 ease-out ${isCompact ? 'mb-1' : 'mb-4'}`}>
                         <button
                             onClick={() => router.back()}
-                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+                            className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
                         >
                             <ArrowLeft className="w-5 h-5" />
                             <span>Back</span>
@@ -573,7 +815,7 @@ export default function MatchDetailClient() {
                                 disabled={notifyLoading}
                                 aria-label={isNotifySubscribed ? 'Turn off notifications for this match' : 'Notify me about this match'}
                                 title={isNotifySubscribed ? 'Turn off notifications for this match' : 'Notify me about this match'}
-                                className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${isNotifySubscribed ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${isNotifySubscribed ? 'bg-blue-500/20 text-blue-400' : 'bg-muted text-foreground/60 hover:bg-muted/70'
                                     }`}
                             >
                                 <Bell className={`w-5 h-5 ${isNotifySubscribed ? 'fill-current' : ''}`} />
@@ -581,31 +823,40 @@ export default function MatchDetailClient() {
 
                             <button
                                 onClick={handleShare}
-                                className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 transition-colors"
+                                className="p-2 rounded-lg bg-muted text-foreground/60 hover:bg-muted/70 transition-colors"
                             >
                                 <Share2 className="w-5 h-5" />
                             </button>
                         </div>
                     </div>
 
-                    {/* Match Info - Always visible */}
+                    {/* BACKLOG-399/401: match-detail page had zero <h1> -- team
+                        names below render inside plain divs, not a heading.
+                        Visually hidden, no visual design change; screen
+                        readers get a real page heading. */}
+                    <h1 className="sr-only">
+                        {match.homeTeam.name} vs {match.awayTeam.name} — {match.homeScore}-{match.awayScore}
+                    </h1>
+
+                    {/* Match Info - Always visible, shrinks when compact */}
                     <div className="flex items-center justify-between gap-4">
                         {/* Home Team */}
                         <div className="flex items-center gap-3 flex-1">
-                            <img
-                                src={match.homeTeam.logo}
-                                alt={match.homeTeam.name}
-                                className="w-12 h-12 object-contain"
+                            <HeaderTeamLogo
+                                logo={match.homeTeam.logo}
+                                name={match.homeTeam.name}
+                                compact={isCompact}
+                                className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                             {/* Star sits outside the sm:block name wrapper below -- it's an
                                 interactive control, not space-saving decorative text, and must
                                 stay visible at every viewport width (BUG-214: was nested inside
                                 "hidden sm:block", making it invisible on any real phone). */}
                             <button
-                                onClick={() => toggleTeam(match.homeTeam.id)}
+                                onClick={() => handleFollowTeam(match.homeTeam)}
                                 aria-label={isFavoriteTeam(match.homeTeam.id) ? `Unfollow ${match.homeTeam.name}` : `Follow ${match.homeTeam.name} — get alerts for this team's matches`}
                                 title={isFavoriteTeam(match.homeTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
-                                className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                                className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-foreground/30 hover:text-foreground/60'}`}
                             >
                                 <Star className={`w-4 h-4 ${isFavoriteTeam(match.homeTeam.id) ? 'fill-current' : ''}`} />
                             </button>
@@ -620,7 +871,7 @@ export default function MatchDetailClient() {
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-sm text-white/60">{match.homeTeam.shortName}</div>
+                                <div className="text-sm text-foreground/60">{match.homeTeam.shortName}</div>
                             </div>
                         </div>
 
@@ -629,17 +880,17 @@ export default function MatchDetailClient() {
                             {/* BACKLOG-105/Richard's call: this is a single-match detail view, not a
                                 scanned list -- the PEN X-Y line already makes the result unambiguous,
                                 so no winner-color treatment here (that's a homepage/list-view thing). */}
-                            <div className="flex items-center gap-4">
-                                <div className="text-4xl font-black">{match.homeScore}</div>
-                                <div className="text-2xl text-white/40">-</div>
-                                <div className="text-4xl font-black">{match.awayScore}</div>
+                            <div className={`flex items-center transition-all duration-300 ease-out ${isCompact ? 'gap-2' : 'gap-4'}`}>
+                                <div className={`font-black transition-all duration-300 ease-out ${isCompact ? 'text-2xl' : 'text-4xl'}`}>{match.homeScore}</div>
+                                <div className={`text-foreground/40 transition-all duration-300 ease-out ${isCompact ? 'text-lg' : 'text-2xl'}`}>-</div>
+                                <div className={`font-black transition-all duration-300 ease-out ${isCompact ? 'text-2xl' : 'text-4xl'}`}>{match.awayScore}</div>
                             </div>
                             {hasShootoutResult && (
-                                <div className="text-xs text-white/50 font-bold uppercase tracking-wider mt-0.5">
+                                <div className="text-xs text-foreground/50 font-bold uppercase tracking-wider mt-0.5">
                                     PEN {match.shootoutHomeScore}-{match.shootoutAwayScore}
                                 </div>
                             )}
-                            <div className="text-sm text-white/60 mt-1 uppercase font-bold tracking-wider">
+                            <div className="text-sm text-foreground/60 mt-1 uppercase font-bold tracking-wider">
                                 {isLive ? (
                                     <span className="flex items-center gap-1.5 justify-center">
                                         <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
@@ -681,36 +932,66 @@ export default function MatchDetailClient() {
                                     )}
                                     {match.awayTeam.name}
                                 </div>
-                                <div className="text-sm text-white/60">{match.awayTeam.shortName}</div>
+                                <div className="text-sm text-foreground/60">{match.awayTeam.shortName}</div>
                             </div>
                             {/* Star sits outside the sm:block name wrapper above -- see the
                                 matching comment on the home-team side (BUG-214). */}
                             <button
-                                onClick={() => toggleTeam(match.awayTeam.id)}
+                                onClick={() => handleFollowTeam(match.awayTeam)}
                                 aria-label={isFavoriteTeam(match.awayTeam.id) ? `Unfollow ${match.awayTeam.name}` : `Follow ${match.awayTeam.name} — get alerts for this team's matches`}
                                 title={isFavoriteTeam(match.awayTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
-                                className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                                className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-foreground/30 hover:text-foreground/60'}`}
                             >
                                 <Star className={`w-4 h-4 ${isFavoriteTeam(match.awayTeam.id) ? 'fill-current' : ''}`} />
                             </button>
-                            <img
-                                src={match.awayTeam.logo}
-                                alt={match.awayTeam.name}
-                                className="w-12 h-12 object-contain"
+                            <HeaderTeamLogo
+                                logo={match.awayTeam.logo}
+                                name={match.awayTeam.name}
+                                compact={isCompact}
+                                className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                         </div>
                     </div>
 
+                    {/* Goal Scorers - flanks the score; dropped when the header is
+                        compact (Richard's direction: shrink to team/score/tabs only on
+                        scroll, same pattern as SofaScore/ESPN's collapsing match header).
+                        Omitted entirely on a scoreless match rather than an empty row. */}
+                    <AnimatePresence initial={false}>
+                        {!isCompact && (homeScorers.length > 0 || awayScorers.length > 0) && (
+                            <motion.div
+                                key="goal-scorers"
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="flex items-start justify-between gap-4 mt-3 text-xs text-foreground/70 overflow-hidden"
+                            >
+                                <div className="flex-1 space-y-0.5 text-right">
+                                    {homeScorers.map(s => (
+                                        <div key={s.name}>{formatScorerLine(s.name, s.minutes)}</div>
+                                    ))}
+                                </div>
+                                <FaFutbol className="w-3 h-3 text-foreground/30 flex-shrink-0 mt-1" />
+                                <div className="flex-1 space-y-0.5">
+                                    {awayScorers.map(s => (
+                                        <div key={s.name}>{formatScorerLine(s.name, s.minutes)}</div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
                     {/* Tabs */}
-                    <div className="flex gap-2 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">
+                    <div className={`flex gap-1 border-t border-border overflow-x-auto scrollbar-hide transition-all duration-300 ease-out ${isCompact ? 'mt-1' : 'mt-4'}`}>
                         <button
                             onClick={() => setActiveTab('overview')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'overview'
+                            className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'overview'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
-                            <Eye className="w-4 h-4 inline mr-2" />
+                            <Eye className="w-2.5 h-2.5 inline mr-1" />
                             Overview
                             {activeTab === 'overview' && (
                                 <motion.div
@@ -724,12 +1005,12 @@ export default function MatchDetailClient() {
                         {/* {isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('predictions')}
-                                className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'predictions'
+                                className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'predictions'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
-                                <TrendingUp className="w-4 h-4 inline mr-2" />
+                                <TrendingUp className="w-2.5 h-2.5 inline mr-1" />
                                 Predictions
                                 {activeTab === 'predictions' && (
                                     <motion.div
@@ -740,18 +1021,41 @@ export default function MatchDetailClient() {
                             </button>
                         )} */}
 
-                        {/* Timeline - Only for live/finished matches */}
-                        {!isUpcoming && (
+                        {/* Timeline - Only for live/finished matches. BACKLOG-326: Figma's
+                            basketball tab set drops Timeline entirely (Box Score/Stats
+                            replace it) -- football keeps it. */}
+                        {!isUpcoming && match.sport !== 'Basketball' && (
                             <button
                                 onClick={() => setActiveTab('timeline')}
-                                className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'timeline'
+                                className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'timeline'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
-                                <Activity className="w-4 h-4 inline mr-2" />
+                                <Activity className="w-2.5 h-2.5 inline mr-1" />
                                 Timeline
                                 {activeTab === 'timeline' && (
+                                    <motion.div
+                                        layoutId="activeTab"
+                                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                                    />
+                                )}
+                            </button>
+                        )}
+
+                        {/* Box Score - BACKLOG-326: basketball-only, net-new. Per-player
+                            PTS/AST/REB for this match, derived from match_events. */}
+                        {!isUpcoming && match.sport === 'Basketball' && (
+                            <button
+                                onClick={() => setActiveTab('boxscore')}
+                                className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'boxscore'
+                                    ? 'text-primary'
+                                    : 'text-foreground/60 hover:text-foreground'
+                                    }`}
+                            >
+                                <Users className="w-2.5 h-2.5 inline mr-1" />
+                                Box Score
+                                {activeTab === 'boxscore' && (
                                     <motion.div
                                         layoutId="activeTab"
                                         className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
@@ -764,12 +1068,12 @@ export default function MatchDetailClient() {
                         {!isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('stats')}
-                                className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'stats'
+                                className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'stats'
                                     ? 'text-primary'
-                                    : 'text-white/60 hover:text-white'
+                                    : 'text-foreground/60 hover:text-foreground'
                                     }`}
                             >
-                                <BarChart3 className="w-4 h-4 inline mr-2" />
+                                <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
                                 Stats
                                 {activeTab === 'stats' && (
                                     <motion.div
@@ -779,16 +1083,35 @@ export default function MatchDetailClient() {
                                 )}
                             </button>
                         )}
+                        {/* BACKLOG-326: no Lineups tab for basketball -- Box Score replaces it. */}
+                        {match.sport !== 'Basketball' && (
+                            <button
+                                onClick={() => setActiveTab('lineups')}
+                                className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'lineups'
+                                    ? 'text-primary'
+                                    : 'text-foreground/60 hover:text-foreground'
+                                    }`}
+                            >
+                                <Users className="w-2.5 h-2.5 inline mr-1" />
+                                Lineups
+                                {activeTab === 'lineups' && (
+                                    <motion.div
+                                        layoutId="activeTab"
+                                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                                    />
+                                )}
+                            </button>
+                        )}
                         <button
-                            onClick={() => setActiveTab('lineups')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'lineups'
+                            onClick={() => setActiveTab('h2h')}
+                            className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'h2h'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
-                            <Users className="w-4 h-4 inline mr-2" />
-                            Lineups
-                            {activeTab === 'lineups' && (
+                            <Trophy className="w-2.5 h-2.5 inline mr-1" />
+                            H2H
+                            {activeTab === 'h2h' && (
                                 <motion.div
                                     layoutId="activeTab"
                                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
@@ -796,15 +1119,15 @@ export default function MatchDetailClient() {
                             )}
                         </button>
                         <button
-                            onClick={() => setActiveTab('h2h')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'h2h'
+                            onClick={() => setActiveTab('table')}
+                            className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'table'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
-                            <Trophy className="w-4 h-4 inline mr-2" />
-                            H2H
-                            {activeTab === 'h2h' && (
+                            <Table2 className="w-2.5 h-2.5 inline mr-1" />
+                            Table
+                            {activeTab === 'table' && (
                                 <motion.div
                                     layoutId="activeTab"
                                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
@@ -814,12 +1137,12 @@ export default function MatchDetailClient() {
                         {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls built (Phase 7) */}
                         {/* <button
                             onClick={() => setActiveTab('polls')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'polls'
+                            className={`px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'polls'
                                 ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
+                                : 'text-foreground/60 hover:text-foreground'
                                 }`}
                         >
-                            <BarChart3 className="w-4 h-4 inline mr-2" />
+                            <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
                             Polls
                             {activeTab === 'polls' && (
                                 <motion.div
@@ -835,7 +1158,7 @@ export default function MatchDetailClient() {
             {/* Content - Now naturally scrollable with the page */}
             <div className="max-w-7xl mx-auto px-4 py-8">
                 <AnimatePresence mode="wait">
-                    {activeTab === 'overview' && (
+                    {effectiveTab === 'overview' && (
                         <motion.div
                             key="overview"
                             initial={{ opacity: 0, y: 20 }}
@@ -858,34 +1181,36 @@ export default function MatchDetailClient() {
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-8">
-                                    <div className="text-center">
-                                        <Eye className="w-16 h-16 mx-auto mb-4 text-white/20" />
-                                        <h3 className="text-xl font-bold mb-2">Match Overview</h3>
-                                        <p className="text-white/60 mb-6">
-                                            {isLive ? 'Match is currently live!' : isUpcoming ? 'Match starts soon' : 'Match has ended'}
-                                        </p>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="text-sm text-white/40 mb-1">Venue</div>
-                                                <div className="font-bold">{match.venue}</div>
-                                            </div>
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="text-sm text-white/40 mb-1">Competition</div>
-                                                <div className="font-bold">{match.competition}</div>
-                                            </div>
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="text-sm text-white/40 mb-1">Status</div>
-                                                <div className="font-bold capitalize">{PERIOD_LABELS_FULL[displayPeriod] ?? getPeriodLabel(displayPeriod)}</div>
-                                            </div>
+                                // BACKLOG-390 #5: was decoration-first (large centered eye icon +
+                                // "Match Overview" heading + one status line) with the actually
+                                // useful Venue/Competition/Status facts pushed below the fold on a
+                                // completed match. Facts now lead; the status line is a small
+                                // caption beneath them instead of a full-height hero.
+                                <div className="bg-muted border border-border rounded-[24px] p-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-card rounded-xl p-4">
+                                            <div className="text-sm text-foreground/40 mb-1">Venue</div>
+                                            <div className="font-bold">{match.venue}</div>
                                         </div>
+                                        <div className="bg-card rounded-xl p-4">
+                                            <div className="text-sm text-foreground/40 mb-1">Competition</div>
+                                            <div className="font-bold">{match.competition}</div>
+                                        </div>
+                                        <div className="bg-card rounded-xl p-4">
+                                            <div className="text-sm text-foreground/40 mb-1">Status</div>
+                                            <div className="font-bold capitalize">{PERIOD_LABELS_FULL[displayPeriod] ?? getPeriodLabel(displayPeriod)}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-2 text-foreground/60 text-sm mt-6">
+                                        <Eye className="w-4 h-4 shrink-0" />
+                                        {isLive ? 'Match is currently live!' : isUpcoming ? 'Match starts soon' : 'Match has ended'}
                                     </div>
                                 </div>
                             )}
                         </motion.div>
                     )}
 
-                    {activeTab === 'timeline' && (
+                    {effectiveTab === 'timeline' && (
                         <motion.div
                             key="timeline"
                             initial={{ opacity: 0, y: 20 }}
@@ -902,7 +1227,22 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'stats' && (
+                    {effectiveTab === 'boxscore' && (
+                        <motion.div
+                            key="boxscore"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <BasketballBoxScore
+                                events={events}
+                                homeTeam={match.homeTeam}
+                                awayTeam={match.awayTeam}
+                            />
+                        </motion.div>
+                    )}
+
+                    {effectiveTab === 'stats' && (
                         <motion.div
                             key="stats"
                             initial={{ opacity: 0, y: 20 }}
@@ -915,12 +1255,13 @@ export default function MatchDetailClient() {
                                     sport={match.sport}
                                     homeTeam={match.homeTeam}
                                     awayTeam={match.awayTeam}
+                                    events={events}
                                 />
                             ) : (
-                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                                    <BarChart3 className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                <div className="bg-muted border border-border rounded-[24px] p-12 text-center">
+                                    <BarChart3 className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
                                     <h3 className="text-xl font-bold mb-2">Match Statistics Unavailable</h3>
-                                    <p className="text-white/60">
+                                    <p className="text-foreground/60">
                                         Statistics will be available once the match starts and events are logged.
                                     </p>
                                 </div>
@@ -928,7 +1269,7 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'lineups' && (
+                    {effectiveTab === 'lineups' && (
                         <motion.div
                             key="lineups"
                             initial={{ opacity: 0, y: 20 }}
@@ -945,7 +1286,7 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'h2h' && (
+                    {effectiveTab === 'h2h' && (
                         <motion.div
                             key="h2h"
                             initial={{ opacity: 0, y: 20 }}
@@ -963,14 +1304,30 @@ export default function MatchDetailClient() {
                                     showRecentMatches={true}
                                 />
                             ) : (
-                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                                    <Trophy className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                <div className="bg-muted border border-border rounded-[24px] p-12 text-center">
+                                    <Trophy className="w-16 h-16 mx-auto mb-4 text-foreground/20" />
                                     <h3 className="text-xl font-bold mb-2">Head-to-Head Data Unavailable</h3>
-                                    <p className="text-white/60">
+                                    <p className="text-foreground/60">
                                         No historical data available for these teams yet.
                                     </p>
                                 </div>
                             )}
+                        </motion.div>
+                    )}
+
+                    {effectiveTab === 'table' && (
+                        <motion.div
+                            key="table"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <MatchStandingsTable
+                                competitionId={match.competitionId}
+                                sport={match.sport}
+                                homeTeamId={match.homeTeam.id}
+                                awayTeamId={match.awayTeam.id}
+                            />
                         </motion.div>
                     )}
 

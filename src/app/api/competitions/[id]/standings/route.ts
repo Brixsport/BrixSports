@@ -8,7 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { standings, teams, competitions } from '@/db/schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, and, or, isNull } from 'drizzle-orm';
+import { STANDINGS_ORDER_BY } from '@/lib/standingsService';
 
 interface RouteParams {
     params: {
@@ -47,13 +48,13 @@ export async function GET(
             })
             .from(standings)
             .leftJoin(teams, eq(standings.teamId, teams.id))
-            .where(eq(standings.competition, competition.name))
-            .orderBy(
-                standings.groupName,
-                desc(standings.points),
-                desc(standings.goalDifference),
-                desc(standings.goalsFor)
-            );
+            // Match by competition id; rows with no id yet fall back to the competition name.
+            .where(or(
+                eq(standings.competitionId, competitionId),
+                and(isNull(standings.competitionId), eq(standings.competition, competition.name))
+            ))
+            .orderBy(standings.groupName, ...STANDINGS_ORDER_BY)
+            .limit(500);
 
         // Format the response
         const standingsTable = competitionStandings.map((row, index) => ({

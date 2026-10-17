@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { transfers, players, teams } from '@/db/schema';
 import { eq, desc, and, or, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { toPublicH2HTeam } from '@/lib/public-h2h';
 
 // GET /api/transfers - Get all transfers with filters
 export async function GET(request: NextRequest) {
@@ -108,8 +109,8 @@ export async function GET(request: NextRequest) {
                         position: t.player.position,
                         image: t.player.image,
                     } : null,
-                    fromTeam: fromTeam?.[0] || null,
-                    toTeam: toTeam?.[0] || null,
+                    fromTeam: toPublicH2HTeam(fromTeam?.[0]) || null,
+                    toTeam: toPublicH2HTeam(toTeam?.[0]) || null,
                 };
             })
         );

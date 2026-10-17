@@ -3,6 +3,9 @@ import { db } from '@/db';
 import { fplLeagues, fplLeagueMembers, fplTeams } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
+// Public-safe user columns — never select password/email in any relational join.
+const SAFE_USER_COLUMNS = { id: true, name: true, avatar: true } as const;
+
 // GET /api/fpl/leagues - Get leagues
 export async function GET(request: NextRequest) {
     try {
@@ -17,12 +20,12 @@ export async function GET(request: NextRequest) {
             const league = await db.query.fplLeagues.findFirst({
                 where: eq(fplLeagues.id, leagueId),
                 with: {
-                    admin: true,
+                    admin: { columns: SAFE_USER_COLUMNS },
                     members: {
                         with: {
                             team: {
                                 with: {
-                                    user: true,
+                                    user: { columns: SAFE_USER_COLUMNS },
                                 },
                             },
                         },
@@ -46,7 +49,7 @@ export async function GET(request: NextRequest) {
                     eq(fplLeagues.season, season)
                 ),
                 with: {
-                    admin: true,
+                    admin: { columns: SAFE_USER_COLUMNS },
                 },
             });
 
@@ -64,7 +67,7 @@ export async function GET(request: NextRequest) {
                 with: {
                     league: {
                         with: {
-                            admin: true,
+                            admin: { columns: SAFE_USER_COLUMNS },
                         },
                     },
                 },
@@ -80,7 +83,7 @@ export async function GET(request: NextRequest) {
                 eq(fplLeagues.season, season)
             ),
             with: {
-                admin: true,
+                admin: { columns: SAFE_USER_COLUMNS },
             },
             orderBy: [desc(fplLeagues.currentMembers)],
             limit: 50,
@@ -137,7 +140,7 @@ export async function POST(request: NextRequest) {
         const newLeague = await db.query.fplLeagues.findFirst({
             where: eq(fplLeagues.id, leagueId),
             with: {
-                admin: true,
+                admin: { columns: SAFE_USER_COLUMNS },
             },
         });
 
@@ -183,7 +186,7 @@ export async function PATCH(request: NextRequest) {
         const updatedLeague = await db.query.fplLeagues.findFirst({
             where: eq(fplLeagues.id, leagueId),
             with: {
-                admin: true,
+                admin: { columns: SAFE_USER_COLUMNS },
             },
         });
 

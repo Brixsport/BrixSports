@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { BrandMark } from '@/components/BrandMark';
 
 // Templates for quick notification creation
 const NOTIFICATION_TEMPLATES = [
@@ -633,9 +634,7 @@ export default function NotificationComposerPage() {
 
                 {/* App Header */}
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                    <span className="font-bold text-sm">B</span>
-                  </div>
+                  <BrandMark variant="viewer" size={32} className="rounded-lg" />
                   <span className="text-xs font-bold">BrixSports</span>
                 </div>
 

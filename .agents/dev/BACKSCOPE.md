@@ -301,3 +301,17 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 **Why it matters:** NDPR (Nigeria Data Protection Regulation) — like most privacy regimes BrixSports' peers operate under — expects a way for a user to request deletion of their data, even if that path is manual/contact-based rather than a self-service button.
 **Not a blocker for anything in flight** — doesn't need to gate the form or feature it was noticed alongside. Filed here as a real gap to eventually close: at minimum, a documented contact-based deletion process (e.g. "email privacy@brixsports.com to request deletion, admin fulfills manually"); a self-service delete-account flow would be the fuller fix.
 **Decision:** deferred — noted here, no code changed, no functionality blocked.
+
+---
+
+## "Off-Roster" / Non-Career Match Mode — Players Not Tied to Their Real Club Profile
+
+**Flagged:** 2026-08-21 (session 53) — Richard's own idea, surfaced while discussing test/stub data for a different purpose (beta-testing scripts), not something requested to be built now.
+
+**The idea:** some real match events genuinely don't fit the current model, where every match's players/teams resolve to real, permanent `players`/`teams` rows tied to a university/competition. Richard's framing: like FIFA's non-career modes, where a player can appear in a match without it touching their real club career record — e.g. a one-off friendly, an exhibition, or a different sport/format entirely from a player's real registered one. Rather than requiring a brand-new player/team profile to be created in the permanent roster system for every such stub/ad-hoc event, this mode would let a match reference lightweight, disposable team/player entries that never touch the real roster, stats, or club-affiliation data.
+
+**Why it's not the same as `matchType: 'friendly'` (already exists):** the existing friendly-match flag still uses real `teams`/`players` rows (confirmed earlier this session — the 6 NULL-`competitionId` matches audited were all genuinely friendly, using real teams/dummy generic ones already in the roster). Richard's ask is a step further: matches whose participants shouldn't be required to exist as real roster rows at all.
+
+**Not scoped or designed** — no schema shape, no UI, no decision on whether this reuses `players`/`teams` with a "non-career"/stub flag vs. a fully separate lightweight table. Explicitly not something to build now; Richard's own call was "we don't focus on that for now but can add to backscope doc."
+
+**Decision:** deferred, idea-stage only — noted here for a future session to actually scope, no code changed.

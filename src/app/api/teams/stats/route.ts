@@ -52,17 +52,21 @@ function calculateTeamStats(team: any, allMatches: any[], allStandings: any[]) {
         m.homeTeamId === team.id || m.awayTeamId === team.id
     );
 
-    const standing = allStandings.find(s => s.teamId === team.id);
+    // This route has no competitionId filter (only /teams/stats?sport=..., no per-team
+    // call ever passes one) -- `.find()` on a team's standings rows picked one arbitrary
+    // row for any team in more than one competition. Sum across every row for that team
+    // instead, same "overall" approach as /api/teams/[id]'s own fix for the same bug class.
+    const teamStandings = allStandings.filter(s => s.teamId === team.id);
 
     // Basic stats from standings
-    const played = standing?.played ?? 0;
-    const won = standing?.won ?? 0;
-    const drawn = standing?.drawn ?? 0;
-    const lost = standing?.lost ?? 0;
-    const goalsFor = standing?.goalsFor ?? 0;
-    const goalsAgainst = standing?.goalsAgainst ?? 0;
-    const goalDifference = standing?.goalDifference ?? 0;
-    const points = standing?.points ?? 0;
+    const played = teamStandings.reduce((sum, s) => sum + (s.played ?? 0), 0);
+    const won = teamStandings.reduce((sum, s) => sum + (s.won ?? 0), 0);
+    const drawn = teamStandings.reduce((sum, s) => sum + (s.drawn ?? 0), 0);
+    const lost = teamStandings.reduce((sum, s) => sum + (s.lost ?? 0), 0);
+    const goalsFor = teamStandings.reduce((sum, s) => sum + (s.goalsFor ?? 0), 0);
+    const goalsAgainst = teamStandings.reduce((sum, s) => sum + (s.goalsAgainst ?? 0), 0);
+    const goalDifference = goalsFor - goalsAgainst;
+    const points = teamStandings.reduce((sum, s) => sum + (s.points ?? 0), 0);
 
     // Calculate advanced stats
     const winPercentage = played > 0 ? ((won / played) * 100).toFixed(1) : '0.0';

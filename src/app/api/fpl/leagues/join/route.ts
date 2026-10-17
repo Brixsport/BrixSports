@@ -3,6 +3,9 @@ import { db } from '@/db';
 import { fplLeagues, fplLeagueMembers, fplTeams } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
+// Public-safe user columns — never select password/email in any relational join.
+const SAFE_USER_COLUMNS = { id: true, name: true, avatar: true } as const;
+
 // POST /api/fpl/leagues/join - Join a league
 export async function POST(request: NextRequest) {
     try {
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
                 league: true,
                 team: {
                     with: {
-                        user: true,
+                        user: { columns: SAFE_USER_COLUMNS },
                     },
                 },
             },

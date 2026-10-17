@@ -193,6 +193,18 @@ Several items above are now stale — corrected here rather than edited in place
 
 ---
 
+## Update — Session 55, Tier 0 Backlog Closed Out (2026-08-25)
+
+Following this project's own convention: corrected here, not rewritten in place.
+
+- ~~**`BUG-149` — homepage never refreshes live match data**~~ (line ~167) and ~~**`BUG-153` — period/status live-broadcast typo**~~ (line ~168) — **RESOLVED**, struck through in `BACKLOG.md`. No longer the two Critical-Flow-severity items driving Tier 0 priority as of the 47D table above.
+- ~~**`BUG-219`/`BUG-220`/`BUG-221`/`BUG-222`**~~ (Lineup Builder publish crash, no-publish-path + unenforced lock, unauthenticated draft-lineup leak, unauthenticated predictions write) — all **RESOLVED**, live-verified against staging session 51 continuation, 2026-08-20. `CLAUDE.md`'s Lineup Builder 🔴 flag downgraded accordingly: still 🔴 for `BACKLOG-220`'s remaining architecture cleanup (dead duplicate rendering code, non-atomic write race, no formation-change confirm — OPEN), but the crash/security bugs that originally justified the flag are gone.
+- ~~**`BACKLOG-097` escalation — standings never recalculate; `teams` vs `standings` disagreement**~~ (line ~174) — **RESOLVED in two passes.** Session 53 (`feature/season-readiness`) wired real recalculation into the match-FINISHED transition (`standingsService.ts`). Session 55 found and fixed a **follow-up gap that survived that fix**: `teams`' own stat columns are a cross-competition aggregate under a hardcoded 3/1/0 point rule, while `standings` is correctly per-competition — any team in 2+ competitions still showed different numbers on `/teams` vs `/teams/[id]`. Fixed by retiring the `teams`-column reads on both `/api/teams/[id]` and `/api/teams/stats` in favor of `standings`-table aggregation; `/api/matches/backfill` was separately found bypassing the recalculation trigger entirely and now calls it too. Full detail: `BACKLOG.md` `BACKLOG-097`.
+- **BUG-239/241/242/243/244/245 (session 55, all Tier 0 or its direct PWA/auth adjacency)** — all RESOLVED and live-verified (239/241/242/243 against real staging match data; 244's structural fix and 245 source-confirmed, both pending a dedicated live-verify pass). See `BACKLOG.md` for each.
+- **Corrected: "Team Manager role has no permission boundary... has full super-admin access" (line ~104) is stale and was never accurate as stated.** A session-55 admin/permissions security audit greped the entire `src/` tree for `team_manager` — zero occurrences, anywhere, in any route handler or role check. The role isn't wrongly granted admin access; it's **not implemented at all** — no code path checks for it, grants it anything, or restricts it. The real, current, narrower finding from the same audit: `logger_manager` (a role that *does* exist in code, `middleware.ts`/`admin/layout.tsx`) was scoped too broadly — granted the entire `/admin/**` + `/api/admin/**` tree instead of just its own `/admin/manager` page. Fixed as `BUG-245`, session 55. Team Manager itself remains an unimplemented row in the Actor Model — a real gap (the role can't function at all yet), but not the "over-privileged" security hole this line described.
+
+---
+
 ## Locked Decisions (do not relitigate)
 
 These were explicitly decided in planning sessions and are not open questions.

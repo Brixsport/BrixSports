@@ -1,7 +1,16 @@
 // Rating Calculator - Auto-calculate player ratings based on ALL match events
 // Every event type affects the final rating
 
-interface PlayerStats {
+// BACKLOG-321: passesCompleted/Failed, dribblesCompleted/Failed, tacklesMissed,
+// cornersWon/Conceded, freeKicksWon/Conceded, and offsides were removed from
+// here (and their scoring blocks below) -- confirmed dead, not just unused:
+// no 'Pass'/'Dribble' event type exists in FootballEventType at all, and
+// Corner/Free Kick/Offside are always logged team-level (playerId: null,
+// FootballLogger.tsx's requiresPlayerSelection()), so they could never match
+// a specific player's filtered events regardless of keyword. They looked like
+// live signals but had structurally zero possible data path with the current
+// logger UI -- removed rather than left as permanent, silent no-ops.
+export interface PlayerStats {
     playerId: string;
     position: string;
     goals: number;
@@ -16,20 +25,10 @@ interface PlayerStats {
     minutesPlayed: number;
     // Additional event types that affect ratings
     saves?: number;              // GK saves
-    passesCompleted?: number;   // Successful passes
-    passesFailed?: number;      // Failed/incomplete passes
     tackles?: number;           // Successful tackles
-    tacklesMissed?: number;     // Failed tackle attempts
     interceptions?: number;     // Interceptions
     clearances?: number;        // Defensive clearances
     blocks?: number;            // Shot/goal blocks
-    dribblesCompleted?: number; // Successful dribbles
-    dribblesFailed?: number;    // Failed dribbles
-    cornersWon?: number;        // Corners won
-    cornersConceded?: number;   // Corners conceded
-    freeKicksWon?: number;      // Free kicks won (fouled)
-    freeKicksConceded?: number; // Free kicks conceded (fouling)
-    offsides?: number;          // Offside calls
     ownGoals?: number;          // Own goals
     penaltiesScored?: number;    // Penalty goals
     penaltiesMissed?: number;    // Penalty misses
@@ -46,17 +45,38 @@ interface RatingBreakdown {
     positionBonus: number;
 }
 
+// BACKLOG-318: configurable via /admin/settings' "Algorithm Configuration"
+// (src/lib/ratingConfig.ts, server-only -- deliberately not imported here
+// since this file is imported by a 'use client' page). Callers that don't
+// pass a config (or pass a partial one) fall back to these -- keeps this
+// class usable standalone with no DB dependency.
+export interface RatingCalculatorConfig {
+    baseRating: number;
+    maxRating: number;
+    minRating: number;
+    eyePointWeight: number;
+}
+
 export class RatingCalculator {
     private static readonly BASE_RATING = 6.0;
     private static readonly MAX_RATING = 10.0;
     private static readonly MIN_RATING = 1.0;
+    private static readonly EYE_POINT_WEIGHT = 0.4;
 
     /**
      * Calculate auto-rating based on logged events
      * Improved algorithm with better scaling and position-specific logic
      */
-    static calculateAutoRating(stats: PlayerStats): { rating: number; breakdown: RatingBreakdown } {
-        let rating = this.BASE_RATING;
+    static calculateAutoRating(
+        stats: PlayerStats,
+        config?: Partial<RatingCalculatorConfig>
+    ): { rating: number; breakdown: RatingBreakdown } {
+        const baseRating = config?.baseRating ?? this.BASE_RATING;
+        const maxRating = config?.maxRating ?? this.MAX_RATING;
+        const minRating = config?.minRating ?? this.MIN_RATING;
+        const eyePointWeight = config?.eyePointWeight ?? this.EYE_POINT_WEIGHT;
+
+        let rating = baseRating;
         const breakdown: RatingBreakdown = {
             goals: 0,
             assists: 0,
@@ -97,6 +117,15 @@ export class RatingCalculator {
                     goalValue += baseValue * 1.3; // Midfielder goal is good
                 } else if (isAttacking) {
                     goalValue += baseValue * 1.1; // Forward goal is expected
+                } else {
+                    // BACKLOG-320: a position string that matches none of the
+                    // substring checks above (e.g. 'LW'/'RW'/'RM'/'LM' -- none
+                    // contain 'wing', and bare 'AM' doesn't contain 'cam')
+                    // previously fell through every branch and scored zero
+                    // credit for a real goal. Same multiplier as isAttacking --
+                    // an unrecognized position is far more likely a wide/attacking
+                    // role than a defensive one given this app's real data.
+                    goalValue += baseValue * 1.1;
                 }
             }
 
@@ -134,7 +163,7 @@ export class RatingCalculator {
         // Special moments (key passes, tackles, saves, etc.)
         if (stats.eyePoints > 0) {
             // Eye points are valuable but capped to prevent inflation
-            const eyeValue = Math.min(stats.eyePoints * 0.4, 1.5);
+            const eyeValue = Math.min(stats.eyePoints * eyePointWeight, 1.5);
             breakdown.eyePoints = eyeValue;
             rating += eyeValue;
         }
@@ -175,32 +204,12 @@ export class RatingCalculator {
             rating += saveValue;
         }
 
-        // ========== PASSES ==========
-        // Completed passes are good, failed passes are bad
-        if (stats.passesCompleted && stats.passesCompleted > 0) {
-            // More passes = better, but with diminishing returns
-            const passValue = Math.min(stats.passesCompleted * 0.02, 0.5);
-            breakdown.assists += passValue; // Track in assists field
-            rating += passValue;
-        }
-        if (stats.passesFailed && stats.passesFailed > 5) {
-            // Penalty for excessive failed passes
-            const passPenalty = -Math.min((stats.passesFailed - 5) * 0.03, 0.4);
-            breakdown.assists += passPenalty;
-            rating += passPenalty;
-        }
-
         // ========== DEFENSIVE ACTIONS ==========
         // Tackles
         if (stats.tackles && stats.tackles > 0) {
             const tackleValue = Math.min(stats.tackles * 0.15, 0.8);
             breakdown.fouls += tackleValue; // Reuse fouls field
             rating += tackleValue;
-        }
-        if (stats.tacklesMissed && stats.tacklesMissed > 3) {
-            const missedPenalty = -Math.min((stats.tacklesMissed - 3) * 0.05, 0.3);
-            breakdown.fouls += missedPenalty;
-            rating += missedPenalty;
         }
 
         // Interceptions
@@ -224,54 +233,7 @@ export class RatingCalculator {
             rating += blockValue;
         }
 
-        // ========== DRIBBLING ==========
-        if (stats.dribblesCompleted && stats.dribblesCompleted > 0) {
-            const dribbleValue = Math.min(stats.dribblesCompleted * 0.08, 0.5);
-            breakdown.positionBonus += dribbleValue;
-            rating += dribbleValue;
-        }
-        if (stats.dribblesFailed && stats.dribblesFailed > 3) {
-            const dribblePenalty = -Math.min((stats.dribblesFailed - 3) * 0.04, 0.3);
-            breakdown.positionBonus += dribblePenalty;
-            rating += dribblePenalty;
-        }
-
-        // ========== SET PIECES ==========
-        // Corners won (attacking pressure)
-        if (stats.cornersWon && stats.cornersWon > 0) {
-            const cornerValue = Math.min(stats.cornersWon * 0.05, 0.3);
-            breakdown.positionBonus += cornerValue;
-            rating += cornerValue;
-        }
-        // Corners conceded (defensive pressure allowed)
-        if (stats.cornersConceded && stats.cornersConceded > 3) {
-            const cornerPenalty = -Math.min((stats.cornersConceded - 3) * 0.04, 0.3);
-            breakdown.positionBonus += cornerPenalty;
-            rating += cornerPenalty;
-        }
-
-        // Free kicks won (drawn fouls - positive)
-        if (stats.freeKicksWon && stats.freeKicksWon > 0) {
-            const fkwValue = Math.min(stats.freeKicksWon * 0.06, 0.4);
-            breakdown.positionBonus += fkwValue;
-            rating += fkwValue;
-        }
-        // Free kicks conceded (committed fouls - negative, but already counted in fouls)
-        // This is additional for set-piece fouls
-        if (stats.freeKicksConceded && stats.freeKicksConceded > 2) {
-            const fkcPenalty = -Math.min((stats.freeKicksConceded - 2) * 0.05, 0.3);
-            breakdown.fouls += fkcPenalty;
-            rating += fkcPenalty;
-        }
-
         // ========== DISCIPLINE & ERRORS ==========
-        // Offsides
-        if (stats.offsides && stats.offsides > 2) {
-            const offsidePenalty = -Math.min((stats.offsides - 2) * 0.08, 0.4);
-            breakdown.positionBonus += offsidePenalty;
-            rating += offsidePenalty;
-        }
-
         // Own goals (severe penalty)
         if (stats.ownGoals && stats.ownGoals > 0) {
             const ogPenalty = -stats.ownGoals * 2.0;
@@ -330,7 +292,7 @@ export class RatingCalculator {
         }
 
         // Cap rating between MIN and MAX
-        rating = Math.max(this.MIN_RATING, Math.min(this.MAX_RATING, rating));
+        rating = Math.max(minRating, Math.min(maxRating, rating));
 
         return {
             rating: Math.round(rating * 10) / 10, // Round to 1 decimal
@@ -423,8 +385,10 @@ export class RatingCalculator {
     /**
      * Validate final rating
      */
-    static validateRating(rating: number): boolean {
-        return rating >= this.MIN_RATING && rating <= this.MAX_RATING;
+    static validateRating(rating: number, config?: Partial<Pick<RatingCalculatorConfig, 'minRating' | 'maxRating'>>): boolean {
+        const minRating = config?.minRating ?? this.MIN_RATING;
+        const maxRating = config?.maxRating ?? this.MAX_RATING;
+        return rating >= minRating && rating <= maxRating;
     }
 
     /**

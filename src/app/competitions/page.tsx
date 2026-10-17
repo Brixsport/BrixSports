@@ -1,47 +1,37 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Clock, MapPin } from 'lucide-react';
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
-import MatchCalendar from '@/components/MatchCalendar';
-import { isSameDay } from 'date-fns';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Trophy, Star, ChevronDown, ChevronUp, Loader2, Activity, ArrowLeft } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { useFavorites } from '@/hooks/useFavorites';
+import { useResilientFetch } from '@/hooks/useResilientFetch';
+import { LoadFailedState } from '@/components/resilience/ReadPathStates';
+import { parseSafeDate, safeToLocale } from '@/lib/safe-date';
 
-type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
+type SportType = 'All' | 'Football' | 'Basketball' | 'Other';
 
 interface Competition {
   id: string;
   name: string;
-  sport: SportType | null;
+  sport: 'Football' | 'Basketball' | 'Track' | null;
   isMultiSport?: boolean;
   season?: string;
   status?: string;
-  description?: string;
   logo?: string | null;
 }
 
-interface Standing {
-  id: string;
-  teamId: string;
-  team: {
-    name: string;
-    shortName: string;
-    logo: string;
-    university: string;
-  };
-  played: number;
-  won: number;
-  drawn: number;
-  lost: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference: number;
-  points: number;
+// BACKLOG-229: mirrors api/competitions' own buildCompetitionGroups() shape --
+// one row per competition series (deduped across seasons), not one per raw row.
+interface CompetitionGroup {
+  groupKey: string;
+  name: string;
+  sport: Competition['sport'];
+  latest: Competition;
+  seasons: Competition[];
 }
 
-interface Match {
+interface NearestMatch {
   id: string;
   homeTeam: { name: string; shortName: string; logo: string };
   awayTeam: { name: string; shortName: string; logo: string };
@@ -49,473 +39,208 @@ interface Match {
   awayScore: number;
   startTime: string;
   status: string;
-  venue: string;
-  competition: string;
 }
 
-interface BracketNode {
-  id: string;
-  title: string;
-  status: string;
-  homeTeam: any;
-  awayTeam: any;
-  homeScore: number;
-  awayScore: number;
+interface CompetitionsResponse {
+  groups: CompetitionGroup[];
 }
 
-interface BracketRound {
-  round: string;
-  matches: BracketNode[];
-}
+const isCompetitionsResponse = (body: unknown): body is CompetitionsResponse =>
+  typeof body === 'object' && body !== null && Array.isArray((body as { groups?: unknown }).groups);
 
-function CompetitionsContent() {
+export default function CompetitionsDirectoryPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const initialComp = searchParams.get('competition');
+  const { isFavoriteCompetition, toggleCompetition } = useFavorites();
 
-  const [view, setView] = useState<'standings' | 'matches' | 'brackets'>('standings');
-  const [selectedSport, setSelectedSport] = useState<SportType>('All');
-  const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [selectedComp, setSelectedComp] = useState<Competition | null>(null);
-  const [standings, setStandings] = useState<Standing[]>([]);
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [brackets, setBrackets] = useState<BracketRound[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  // BACKLOG-471: a failed fetch must show a retry state, never "No competitions found".
+  const { data, isLoading: loading, loadError, retry } = useResilientFetch<CompetitionsResponse>(
+    '/api/competitions',
+    { validate: isCompetitionsResponse }
+  );
+  const groups = data?.groups ?? [];
+  const loadFailed = loadError !== null && data === null;
+  const [sportFilter, setSportFilter] = useState<SportType>('All');
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [nearestMatches, setNearestMatches] = useState<Record<string, NearestMatch[]>>({});
+  const [matchesLoading, setMatchesLoading] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState<Record<string, boolean>>({});
 
-  // 1. Fetch all competitions on mount
-  useEffect(() => {
-    const fetchAllData = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/competitions');
-        const data = await res.json();
+  const filteredGroups = groups.filter((g) => {
+    if (sportFilter === 'All') return true;
+    if (sportFilter === 'Other') return g.sport !== 'Football' && g.sport !== 'Basketball';
+    return g.sport === sportFilter;
+  });
 
-        if (data.competitions) {
-          setCompetitions(data.competitions);
+  // BACKLOG-289: the inline match preview is fetched only for the row the user
+  // actually expands, on demand -- never eagerly for the whole list, to avoid
+  // N+1 requests across the directory.
+  const loadPreview = async (group: CompetitionGroup) => {
+    if (nearestMatches[group.groupKey] || !group.sport) return;
 
-          let defaultComp = null;
-          // Try from URL
-          if (initialComp) {
-            defaultComp = data.competitions.find((c: Competition) => c.name === initialComp);
-          }
+    try {
+      setMatchesLoading(group.groupKey);
+      setPreviewFailed((prev) => ({ ...prev, [group.groupKey]: false }));
+      const res = await fetch(`/api/${group.sport.toLowerCase()}/matches?competitionId=${group.latest.id}&competition=${encodeURIComponent(group.latest.name)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const all: NearestMatch[] = body.success && body.matches ? body.matches : [];
+      const now = Date.now();
+      // Unparseable startTime sorts last instead of poisoning the comparator with NaN.
+      const distance = (m: NearestMatch) => {
+        const d = parseSafeDate(m.startTime);
+        return d ? Math.abs(d.getTime() - now) : Number.MAX_SAFE_INTEGER;
+      };
+      const nearest = [...all].sort((a, b) => distance(a) - distance(b)).slice(0, 3);
+      setNearestMatches((prev) => ({ ...prev, [group.groupKey]: nearest }));
+    } catch (err) {
+      // Not cached: a failure is not "no nearby matches", and collapse/expand or the retry button re-fetches.
+      console.error('Error fetching nearest matches:', err);
+      setPreviewFailed((prev) => ({ ...prev, [group.groupKey]: true }));
+    } finally {
+      setMatchesLoading(null);
+    }
+  };
 
-          // Fallback to first available (BUSA preferred)
-          if (!defaultComp) {
-            const busa = data.competitions.find((c: Competition) => c.name.toUpperCase().includes('BUSA'));
-            defaultComp = busa || data.competitions[0];
-          }
-
-          if (defaultComp) {
-            setSelectedComp(defaultComp);
-            // If it's a specific sport competition, set that sport
-            if (defaultComp.sport) {
-              setSelectedSport(defaultComp.sport as SportType);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching competitions:', err);
-        setError('Failed to load competitions');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAllData();
-  }, []);
-
-  // 2. When selectedComp changes, fetch data
-  useEffect(() => {
-    if (!selectedComp) return;
-
-    const fetchDetails = async () => {
-      try {
-        setLoading(true);
-
-        // Fetch Standings
-        const standingsRes = await fetch(`/api/${selectedSport.toLowerCase()}/standings?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
-        const sData = await standingsRes.json();
-        if (sData.success) setStandings(sData.standings || []);
-        else setStandings([]);
-
-        // Fetch Matches
-        const matchesRes = await fetch(`/api/${selectedSport.toLowerCase()}/matches?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
-        const mData = await matchesRes.json();
-        if (mData.success && mData.matches) {
-          setMatches(mData.matches);
-        } else {
-          setMatches([]);
-        }
-
-        // Fetch Brackets
-        const bracketRes = await fetch(`/api/brackets?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${selectedSport}`);
-        const bData = await bracketRes.json();
-        if (bData.rounds) setBrackets(bData.rounds);
-        else setBrackets([]);
-
-      } catch (err) {
-        console.error('Error fetching details:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDetails();
-  }, [selectedComp, selectedSport]);
-
-  // Filter competitions for the current sport tab
-  const filteredCompetitions = selectedSport === 'All'
-    ? competitions
-    : competitions.filter(c => c.isMultiSport || c.sport === selectedSport);
-
-  if (loading && competitions.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-primary animate-spin" />
-      </div>
-    );
-  }
+  const handleExpand = async (group: CompetitionGroup) => {
+    if (expandedKey === group.groupKey) {
+      setExpandedKey(null);
+      return;
+    }
+    setExpandedKey(group.groupKey);
+    await loadPreview(group);
+  };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
-      <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 border-b border-white/5 pb-8">
-          <div className="flex items-center gap-4">
-            {selectedComp?.logo && (
-              <div className="w-14 h-14 md:w-20 md:h-20 shrink-0 bg-white/5 rounded-2xl border border-white/10 p-2 flex items-center justify-center">
-                <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
-              </div>
-            )}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Trophy size={14} className="text-primary" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                  {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
-                </span>
-              </div>
-              <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none mb-2">
-                {selectedComp?.name || 'Competition Viewer'}
-              </h1>
-              <p className="text-white/60 text-sm max-w-xl">
-                {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
-              </p>
-            </div>
-          </div>
-
-          {/* View Toggle */}
-          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto">
-            <button
-              onClick={() => setView('standings')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'standings' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
-            >
-              <ListOrdered size={14} />
-              <span>Standings</span>
-            </button>
-            <button
-              onClick={() => setView('matches')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'matches' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
-            >
-              <Calendar size={14} />
-              <span>Matches</span>
-            </button>
-            <button
-              onClick={() => setView('brackets')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'brackets' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
-            >
-              <LayoutGrid size={14} />
-              <span>Brackets</span>
-            </button>
-          </div>
-        </header>
-
-        {/* Sport & Competition Selector */}
-        <div className="space-y-4 md:space-y-6">
-          <div className="flex justify-center overflow-x-auto">
-            <div className="inline-flex bg-white/5 p-1 rounded-2xl border border-white/10 gap-1">
-              {(['All', 'Football', 'Basketball', 'Track'] as SportType[]).map((sport) => (
-                <button
-                  key={sport}
-                  onClick={() => {
-                    setSelectedSport(sport);
-                    const firstForSport = sport === 'All'
-                      ? competitions[0]
-                      : competitions.find(c => c.sport === sport);
-                    if (firstForSport) setSelectedComp(firstForSport);
-                  }}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
-                >
-                  <Activity size={12} />
-                  {sport}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {filteredCompetitions.length > 0 && (
-            <div className="flex justify-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {filteredCompetitions.map((comp) => (
-                <button
-                  key={comp.id}
-                  onClick={() => {
-                    setSelectedComp(comp);
-                    if (comp.sport && comp.sport !== selectedSport) {
-                      setSelectedSport(comp.sport as SportType);
-                    }
-                  }}
-                  className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap transition-all border ${selectedComp?.id === comp.id ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-white/40 hover:text-white'}`}
-                >
-                  {comp.name}
-                </button>
-              ))}
-            </div>
-          )}
+    <div className="min-h-screen bg-background text-foreground pb-24">
+      <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            aria-label="Back"
+            className="shrink-0 p-2 -ml-2 rounded-full hover:bg-muted transition-colors text-foreground/60 hover:text-foreground"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <Trophy size={18} className="text-primary" />
+          <h1 className="font-display text-xl italic uppercase tracking-widest">Competitions</h1>
         </div>
 
-        {/* Content Area */}
-        <AnimatePresence mode="wait">
-          {view === 'standings' && (
-            <motion.div
-              key="standings"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-white/5 border border-white/10 rounded-[40px] overflow-hidden"
+        {/* Sport filter -- flex-1 per tab so all 4 fit the row width, no
+            horizontal scroll (matches the Figma directory screen). */}
+        <div className="flex bg-muted p-1 rounded-2xl border border-border">
+          {(['All', 'Football', 'Basketball', 'Other'] as SportType[]).map((sport) => (
+            <button
+              key={sport}
+              onClick={() => setSportFilter(sport)}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${sportFilter === sport ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
-              {standings.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[600px]">
-                    <thead>
-                      <tr className="border-b border-white/10 bg-white/5">
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Team</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'L' : 'D'}</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'PCT' : 'L'}</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD/DIFF</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {standings.map((row, idx) => (
-                        <tr
-                          key={row.id}
-                          className="border-b border-white/5 hover:bg-white/5 transition-colors group"
-                        >
-                          <td className="px-6 py-4">
-                            <span className={`text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
-                              {idx + 1}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                                <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-black uppercase tracking-tight truncate">{row.team.name}</p>
-                                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{row.team.university}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-center font-bold text-white/80">{row.played}</td>
-                          <td className="px-4 py-4 text-center font-bold text-primary">{row.won}</td>
-                          <td className="px-4 py-4 text-center font-bold text-white/60">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
-                          <td className="px-4 py-4 text-center font-bold text-white/40">{selectedSport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
-                          <td className="px-4 py-4 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
-                          <td className="px-6 py-4 text-center">
-                            <span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-display italic text-lg border border-primary/20">
-                              {row.points}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-24 text-center">
-                  <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                  <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No standings data available</p>
-                </div>
-              )}
-            </motion.div>
-          )}
+              <Activity size={12} className="shrink-0" />
+              <span className="truncate">{sport}</span>
+            </button>
+          ))}
+        </div>
 
-          {view === 'matches' && (
-            <motion.div
-              key="matches"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              {/* Fixtures Calendar / Date Picker */}
-              {matches.length > 0 && (
-                <MatchCalendar
-                  fixtures={matches}
-                  selectedDate={selectedDate || new Date(matches[0].startTime)}
-                  onDateSelect={(date) => setSelectedDate(date)}
-                />
-              )}
-
-              {/* Optional: Info about current filter */}
-              {selectedDate && (
-                <p className="text-xs text-white/50 text-center">
-                  Showing fixtures for{' '}
-                  {selectedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}{' '}
-                  <button
-                    onClick={() => setSelectedDate(null)}
-                    className="underline text-primary ml-1"
-                  >
-                    Clear
-                  </button>
-                </p>
-              )}
-
-              {matches.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {matches
-                    .filter((match) =>
-                      selectedDate
-                        ? isSameDay(new Date(match.startTime), selectedDate)
-                        : true
-                    )
-                    .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
-                    .map((match) => (
-                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-primary/30 transition-all">
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="flex items-center gap-2 text-[10px] text-white/40 font-bold uppercase tracking-widest">
-                          <Calendar size={12} />
-                          <span>{new Date(match.startTime).toLocaleDateString()}</span>
-                          <span className="w-1 h-1 bg-white/20 rounded-full" />
-                          <Clock size={12} />
-                          <span>{new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : match.status === 'FINISHED' ? 'bg-white/10 text-white/40' : 'bg-primary/20 text-primary'}`}>
-                          {match.status}
-                        </span>
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="w-10 h-10 text-primary animate-spin" />
+          </div>
+        ) : loadFailed ? (
+          <LoadFailedState title="Couldn't load competitions" onRetry={retry} />
+        ) : filteredGroups.length === 0 ? (
+          <div className="p-16 text-center bg-muted border border-border rounded-[32px]">
+            <Trophy className="w-10 h-10 text-foreground/10 mx-auto mb-4" />
+            <p className="text-foreground/20 font-black uppercase tracking-widest text-xs italic">No competitions found</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredGroups.map((group) => {
+              const isExpanded = expandedKey === group.groupKey;
+              const preview = nearestMatches[group.groupKey];
+              return (
+                <div key={group.groupKey} className="bg-muted border border-border rounded-2xl overflow-hidden">
+                  <div className="flex items-center gap-3 p-3">
+                    <button
+                      onClick={() => router.push(`/competitions/${group.latest.id}`)}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
+                      <div className="w-11 h-11 shrink-0 bg-muted rounded-xl border border-border p-1.5 flex items-center justify-center">
+                        <TeamLogo logo={group.latest.logo} name={group.name} size="md" />
                       </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="text-right flex-1">
-                            <p className="font-bold text-sm uppercase truncate">{match.homeTeam?.name || 'Home'}</p>
-                          </div>
-                          <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
-                          </div>
-                        </div>
-
-                        <div className="px-4 text-center">
-                          <div className="bg-white/5 px-4 py-1 rounded-lg border border-white/10">
-                            <span className="font-display italic text-xl">
-                              {match.homeScore} - {match.awayScore}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
-                          </div>
-                          <div className="text-left flex-1">
-                            <p className="font-bold text-sm uppercase truncate">{match.awayTeam?.name || 'Away'}</p>
-                          </div>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-black uppercase tracking-tight truncate">{group.name}</p>
+                        <p className="text-[10px] text-foreground/40 font-bold uppercase tracking-widest truncate">
+                          {group.latest.season || group.latest.status || group.sport || 'Multi-Sport'}
+                        </p>
                       </div>
+                    </button>
 
-                      <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-2 text-[10px] text-white/40 font-bold uppercase tracking-widest">
-                        <MapPin size={12} />
-                        <span>{match.venue || 'TBD'}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-24 text-center bg-white/5 border border-white/10 rounded-[40px]">
-                  <Calendar className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                  <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No matches scheduled</p>
-                </div>
-              )}
-            </motion.div>
-          )}
+                    <button
+                      onClick={() => toggleCompetition(group.latest.id)}
+                      aria-label={isFavoriteCompetition(group.latest.id) ? 'Remove from favourites' : 'Add to favourites'}
+                      className="shrink-0 p-2 rounded-full hover:bg-muted transition-colors"
+                    >
+                      <Star
+                        size={18}
+                        className={isFavoriteCompetition(group.latest.id) ? 'text-primary fill-primary' : 'text-foreground/40'}
+                      />
+                    </button>
 
-          {view === 'brackets' && (
-            <motion.div
-              key="brackets"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
-              {brackets.length > 0 ? (
-                <div className="relative overflow-x-auto pb-8">
-                  <div className="min-w-[1000px] relative p-8">
-                    <div className="flex justify-around items-start gap-12">
-                      {brackets.map((round) => (
-                        <div key={round.round} className="flex-1 space-y-8">
-                          <h3 className="text-[10px] font-black uppercase tracking-widest text-primary text-center mb-12">
-                            {round.round.replace('_', ' ')}
-                          </h3>
-                          <div className="space-y-8">
-                            {round.matches.map((match) => (
-                              <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:border-primary/30 transition-all">
-                                <div className="flex justify-between items-center mb-4">
-                                  <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{match.title}</span>
-                                  <span className={`text-[8px] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : 'bg-white/10 text-white/40'}`}>
-                                    {match.status}
-                                  </span>
-                                </div>
-                                <div className="space-y-3">
-                                  <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                      <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[10px] font-black uppercase text-white/60">{match.homeTeam?.name || 'TBD'}</span>
-                                    </div>
-                                    <span className="font-display italic text-lg">{match.homeScore ?? '-'}</span>
-                                  </div>
-                                  <div className="h-px bg-white/5" />
-                                  <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                      <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[10px] font-black uppercase text-white/60">{match.awayTeam?.name || 'TBD'}</span>
-                                    </div>
-                                    <span className="font-display italic text-lg">{match.awayScore ?? '-'}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <button
+                      onClick={() => handleExpand(group)}
+                      aria-label={isExpanded ? 'Collapse nearest matches' : 'Show nearest matches'}
+                      className="shrink-0 p-2 rounded-full hover:bg-muted transition-colors text-foreground/40 hover:text-foreground"
+                    >
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
                   </div>
+
+                  {isExpanded && (
+                    <div className="border-t border-border/50 px-3 pb-3 pt-1 space-y-1">
+                      {matchesLoading === group.groupKey ? (
+                        <div className="py-4 flex justify-center">
+                          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                        </div>
+                      ) : previewFailed[group.groupKey] ? (
+                        <div className="py-4 text-center" role="alert">
+                          <p className="text-[10px] text-foreground/40 font-black uppercase tracking-widest mb-2">Couldn&apos;t load matches</p>
+                          <button
+                            type="button"
+                            onClick={() => loadPreview(group)}
+                            className="text-[10px] font-black uppercase tracking-widest text-primary underline"
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      ) : !preview || preview.length === 0 ? (
+                        <p className="text-[10px] text-foreground/20 font-black uppercase tracking-widest text-center py-4">No nearby matches</p>
+                      ) : (
+                        preview.map((match) => (
+                          <div key={match.id} className="flex items-center justify-between py-2 text-xs">
+                            <span className="text-foreground/40 font-bold uppercase tracking-widest text-[10px] w-16 shrink-0">
+                              {safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric' }, 'TBD')}
+                            </span>
+                            <div className="flex-1 flex items-center gap-2 min-w-0">
+                              <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
+                              <span className="truncate font-bold">{match.homeTeam?.name || 'TBD'}</span>
+                            </div>
+                            <span className="px-2 text-foreground/40 font-black shrink-0">
+                              {match.status === 'UPCOMING' ? 'vs' : `${match.homeScore}-${match.awayScore}`}
+                            </span>
+                            <div className="flex-1 flex items-center gap-2 min-w-0 justify-end">
+                              <span className="truncate font-bold text-right">{match.awayTeam?.name || 'TBD'}</span>
+                              <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="py-24 px-4 text-center bg-white/5 border border-white/10 rounded-[40px]">
-                  <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                  <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No bracket data available</p>
-                  <p className="text-white/10 text-[10px] mt-2 italic">Knockout stages have not started yet.</p>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
-  );
-}
-
-export default function CompetitionsPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-primary animate-spin" />
-      </div>
-    }>
-      <CompetitionsContent />
-    </Suspense>
   );
 }

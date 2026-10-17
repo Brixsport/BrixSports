@@ -1,0 +1,80 @@
+name: Critical Flows Smoke Test
+
+# Gates PRs into dev/main on the Three Critical Flows working end to end, not just on
+# tsc passing. Runs tests/smoke/critical-flows.ts against the staging preview Vercel
+# builds for the PR's own commit, so the check exercises the code that is about to be
+# merged and not whatever was last deployed to the dev alias.
+#
+# The job waits for that preview (up to 12 minutes) and fails if it never becomes
+# ready or if its build failed; re-run the job once the build has finished. The URL
+# is only accepted when it belongs to the staging project (see
+# scripts/ci/resolve-preview-url.mjs), because the production project also builds a
+# preview per commit and this test writes and deletes real rows.
+#
+# Escape hatch: set the repository variable SMOKE_USE_ALIAS to "true" to test the
+# already-deployed dev alias (STAGING_BASE_URL) instead, for example during a Vercel
+# incident.
+#
+# Tradeoff, on record: every run writes and deletes throwaway rows in the shared
+# staging database, and runs are serialised so two PRs do not interleave their rows.
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  deployments: read
+
+concurrency:
+  group: smoke-test-staging
+  cancel-in-progress: false
+
+jobs:
+  smoke-test:
+    name: Three Critical Flows (staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Runs before the install and before any staging secret is in scope.
+      - name: Wait for the staging preview of this commit
+        if: ${{ vars.SMOKE_USE_ALIAS != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/resolve-preview-url.mjs
+
+      - name: Use the dev alias
+        if: ${{ vars.SMOKE_USE_ALIAS == 'true' }}
+        run: echo "BASE_URL=${{ vars.STAGING_BASE_URL }}" >> "$GITHUB_ENV"
+
+      # The committed lockfile was generated with `legacy-peer-deps=true` (a developer-level
+      # npm setting), so it has no `webpack` entry for @sentry/webpack-plugin's required
+      # peer. A plain `npm ci` on the runner resolves peers and rejects the lock ("Missing:
+      # webpack ... from lock file"). Install the same way the lock was made.
+      #
+      # --ignore-scripts: this job runs the PR's own code next to staging secrets, so
+      # dependency install scripts must not run. The smoke test needs none of them
+      # (esbuild ships its binary as a platform package, @sentry/cli's download is for
+      # builds only). The install step carries no secrets; they are set on the single
+      # step below.
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: Run critical-flows smoke test
+        env:
+          TURSO_CONNECTION_URL: ${{ secrets.TURSO_CONNECTION_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npx tsx tests/smoke/critical-flows.ts

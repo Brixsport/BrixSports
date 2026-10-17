@@ -9,13 +9,31 @@ export function isValidLogo(logo: string | null | undefined): boolean {
     return true;
 }
 
-const SIZE_PX: Record<string, number> = { sm: 32, md: 40, lg: 48 };
+const SIZE_PX: Record<string, number> = { xs: 24, sm: 32, md: 40, lg: 48 };
 
-function getInitials(name: string): string {
-    return name
-        .split(' ')
+// A team with no `color` set fell back to a flat gray (#374151) with no border --
+// every uncolored team's avatar read as the same undifferentiated "blob." Hashing
+// the name into a consistent hue gives each team its own stable color instead
+// (same team always gets the same color, no randomness), and a thin border
+// gives the disc definition against either a light or dark page background.
+export function hashColor(name: string): string {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 45%, 38%)`;
+}
+
+const FALLBACK_BORDER = '1px solid rgba(128, 128, 128, 0.35)';
+
+export function getInitials(name: string): string {
+    // Match alphanumeric words only, so punctuation-heavy names like
+    // "BUSALYMPICS (FOOTBALL)" produce "BF", not "B(" from a naive
+    // space-split grabbing the paren as a "word".
+    const words = name.match(/[A-Za-z0-9]+/g) || [];
+    return words
         .map((w) => w[0])
-        .filter(Boolean)
         .slice(0, 2)
         .join('')
         .toUpperCase();
@@ -25,13 +43,14 @@ interface TeamLogoProps {
     logo?: string | null;
     name: string;
     color?: string | null;
-    size?: 'sm' | 'md' | 'lg';
+    size?: 'xs' | 'sm' | 'md' | 'lg';
     className?: string;
 }
 
 export function TeamLogo({ logo, name, color, size = 'md', className = '' }: TeamLogoProps) {
     const px = SIZE_PX[size] ?? 40;
     const initials = getInitials(name);
+    const fallbackColor = color || hashColor(name);
     const initialsRef = useRef<HTMLDivElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
 
@@ -41,7 +60,8 @@ export function TeamLogo({ logo, name, color, size = 'md', className = '' }: Tea
             style={{
                 width: px,
                 height: px,
-                backgroundColor: color || '#374151',
+                backgroundColor: fallbackColor,
+                border: FALLBACK_BORDER,
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -85,7 +105,8 @@ export function TeamLogo({ logo, name, color, size = 'md', className = '' }: Tea
                     inset: 0,
                     width: px,
                     height: px,
-                    backgroundColor: color || '#374151',
+                    backgroundColor: fallbackColor,
+                    border: FALLBACK_BORDER,
                     borderRadius: '50%',
                     alignItems: 'center',
                     justifyContent: 'center',

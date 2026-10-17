@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 import { db } from '@/db';
 import { playerTeamAffiliations, players, teams } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
-import { resolveAffiliationType, CURRENT_SEASON } from '@/lib/rosterService';
+import { resolveAffiliationType, getCurrentSeason } from '@/lib/rosterService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,6 +74,7 @@ export async function POST(
         }
 
         const affiliationType = await resolveAffiliationType(teamId);
+        const currentSeason = await getCurrentSeason();
         const results: EntryResult[] = [];
 
         for (let i = 0; i < body.entries.length; i++) {
@@ -119,7 +120,7 @@ export async function POST(
                     position: entry.position ?? null,
                     nicknames: JSON.stringify(entry.nicknames ?? []),
                     startDate: new Date(),
-                    season: CURRENT_SEASON,
+                    season: currentSeason,
                     createdAt: new Date(),
                 });
 
@@ -186,7 +187,7 @@ export async function POST(
                     position: entry.position.trim(),
                     nicknames: JSON.stringify(entry.nicknames ?? []),
                     startDate: new Date(),
-                    season: CURRENT_SEASON,
+                    season: currentSeason,
                     createdAt: new Date(),
                 });
 

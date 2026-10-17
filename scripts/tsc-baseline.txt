@@ -1,0 +1,5 @@
+# tsc baseline for scripts/tsc-baseline-check.mjs (BACKLOG-468 item 2).
+# One normalized error per line: <file>: error <code>: <message> (no line/col).
+# Regenerate with: node scripts/tsc-baseline-check.mjs --update
+# Only ever shrink this file; never add entries to hide a new error.
+# The baseline is empty: tsc is at 0 errors, so any new error fails the gate.

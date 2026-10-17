@@ -16,7 +16,9 @@ interface PerformanceData {
     goals?: number;
     assists?: number;
     fouls?: number;
-    rating: number;
+    // BACKLOG-315: real per-match rating from playerRatings, null when the
+    // match genuinely hasn't been rated yet -- never a fabricated number.
+    rating: number | null;
     minutesPlayed: number;
 }
 
@@ -64,18 +66,22 @@ export function PlayerPerformanceGraphs({
 
     if (data.length === 0) {
         return (
-            <div className="text-center p-12 text-white/40">
+            <div className="text-center p-12 text-foreground/40">
                 No performance data available
             </div>
         );
     }
 
-    // Calculate statistics
-    const avgRating = data.reduce((sum, d) => sum + d.rating, 0) / data.length;
+    // Calculate statistics. BACKLOG-315: rating can be null (not yet rated) --
+    // average and trend only consider matches that actually have a real rating.
+    const ratedMatches = data.filter((d): d is PerformanceData & { rating: number } => d.rating != null);
+    const avgRating = ratedMatches.length > 0
+        ? ratedMatches.reduce((sum, d) => sum + d.rating, 0) / ratedMatches.length
+        : null;
     const totalPoints = data.reduce((sum, d) => sum + (d.points || d.goals || 0), 0);
     const totalAssists = data.reduce((sum, d) => sum + (d.assists || 0), 0);
-    const trend = data.length >= 2
-        ? data[data.length - 1].rating - data[0].rating
+    const trend = ratedMatches.length >= 2
+        ? ratedMatches[ratedMatches.length - 1].rating - ratedMatches[0].rating
         : 0;
 
     const maxValue = Math.max(...data.map(d => {
@@ -83,7 +89,7 @@ export function PlayerPerformanceGraphs({
             case 'points': return d.points || 0;
             case 'goals': return d.goals || 0;
             case 'assists': return d.assists || 0;
-            case 'rating': return d.rating;
+            case 'rating': return d.rating ?? 0;
             default: return 0;
         }
     }));
@@ -95,7 +101,7 @@ export function PlayerPerformanceGraphs({
                 <StatCard
                     icon={<Award />}
                     label="Avg Rating"
-                    value={avgRating.toFixed(1)}
+                    value={avgRating != null ? avgRating.toFixed(1) : 'N/A'}
                     color="text-primary"
                 />
                 <StatCard
@@ -125,8 +131,8 @@ export function PlayerPerformanceGraphs({
                         key={metric}
                         onClick={() => setSelectedMetric(metric as any)}
                         className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${selectedMetric === metric
-                                ? 'bg-primary text-black'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-foreground/60 hover:bg-muted/70'
                             }`}
                     >
                         {metric.charAt(0).toUpperCase() + metric.slice(1)}
@@ -135,14 +141,14 @@ export function PlayerPerformanceGraphs({
             </div>
 
             {/* Line Graph */}
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+            <div className="bg-muted border border-border rounded-3xl p-6">
                 <h3 className="text-lg font-display italic uppercase mb-6">
                     Performance Over Time
                 </h3>
 
                 <div className="relative h-64">
                     {/* Y-axis labels */}
-                    <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-xs text-white/40 pr-2">
+                    <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-xs text-foreground/40 pr-2">
                         <span>{maxValue.toFixed(0)}</span>
                         <span>{(maxValue * 0.75).toFixed(0)}</span>
                         <span>{(maxValue * 0.5).toFixed(0)}</span>
@@ -155,7 +161,7 @@ export function PlayerPerformanceGraphs({
                         {/* Grid lines */}
                         <div className="absolute inset-0 flex flex-col justify-between">
                             {[0, 1, 2, 3, 4].map(i => (
-                                <div key={i} className="border-t border-white/5"></div>
+                                <div key={i} className="border-t border-border/50"></div>
                             ))}
                         </div>
 
@@ -170,7 +176,7 @@ export function PlayerPerformanceGraphs({
                                             case 'points': return d.points || 0;
                                             case 'goals': return d.goals || 0;
                                             case 'assists': return d.assists || 0;
-                                            case 'rating': return d.rating;
+                                            case 'rating': return d.rating ?? 0;
                                             default: return 0;
                                         }
                                     })();
@@ -192,11 +198,12 @@ export function PlayerPerformanceGraphs({
                                         case 'points': return d.points || 0;
                                         case 'goals': return d.goals || 0;
                                         case 'assists': return d.assists || 0;
-                                        case 'rating': return d.rating;
+                                        case 'rating': return d.rating ?? 0;
                                         default: return 0;
                                     }
                                 })();
                                 const y = 100 - (value / maxValue) * 100;
+                                const isUnratedPoint = selectedMetric === 'rating' && d.rating == null;
 
                                 return (
                                     <motion.circle
@@ -205,20 +212,20 @@ export function PlayerPerformanceGraphs({
                                         cy={`${y}%`}
                                         r="4"
                                         fill="currentColor"
-                                        className="text-primary cursor-pointer"
+                                        className={isUnratedPoint ? 'text-foreground/20 cursor-pointer' : 'text-primary cursor-pointer'}
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
                                         transition={{ delay: i * 0.05 }}
                                         whileHover={{ scale: 1.5 }}
                                     >
-                                        <title>{`${d.match}: ${value.toFixed(1)}`}</title>
+                                        <title>{`${d.match}: ${isUnratedPoint ? 'N/A' : value.toFixed(1)}`}</title>
                                     </motion.circle>
                                 );
                             })}
                         </svg>
 
                         {/* X-axis labels */}
-                        <div className="absolute -bottom-6 left-0 right-0 flex justify-between text-xs text-white/40">
+                        <div className="absolute -bottom-6 left-0 right-0 flex justify-between text-xs text-foreground/40">
                             {data.map((d, i) => {
                                 if (i % Math.ceil(data.length / 5) === 0 || i === data.length - 1) {
                                     return (
@@ -235,7 +242,7 @@ export function PlayerPerformanceGraphs({
             </div>
 
             {/* Bar Chart - Recent Matches */}
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+            <div className="bg-muted border border-border rounded-3xl p-6">
                 <h3 className="text-lg font-display italic uppercase mb-6">
                     Recent Matches
                 </h3>
@@ -247,10 +254,11 @@ export function PlayerPerformanceGraphs({
                                 case 'points': return d.points || 0;
                                 case 'goals': return d.goals || 0;
                                 case 'assists': return d.assists || 0;
-                                case 'rating': return d.rating;
+                                case 'rating': return d.rating ?? 0;
                                 default: return 0;
                             }
                         })();
+                        const isUnrated = selectedMetric === 'rating' && d.rating == null;
                         const percentage = (value / maxValue) * 100;
 
                         return (
@@ -262,10 +270,10 @@ export function PlayerPerformanceGraphs({
                                 className="space-y-1"
                             >
                                 <div className="flex items-center justify-between text-sm">
-                                    <span className="text-white/80 truncate max-w-[200px]">{d.match}</span>
-                                    <span className="text-primary font-bold">{value.toFixed(1)}</span>
+                                    <span className="text-foreground/80 truncate max-w-[200px]">{d.match}</span>
+                                    <span className="text-primary font-bold">{isUnrated ? 'N/A' : value.toFixed(1)}</span>
                                 </div>
-                                <div className="h-6 bg-white/5 rounded-full overflow-hidden">
+                                <div className="h-6 bg-border rounded-full overflow-hidden">
                                     <motion.div
                                         className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full"
                                         initial={{ width: 0 }}
@@ -284,10 +292,10 @@ export function PlayerPerformanceGraphs({
 
 function StatCard({ icon, label, value, color }: any) {
     return (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <div className="bg-muted border border-border rounded-2xl p-4">
             <div className={`${color} mb-2`}>{icon}</div>
             <div className="text-2xl font-display">{value}</div>
-            <div className="text-xs text-white/60">{label}</div>
+            <div className="text-xs text-foreground/60">{label}</div>
         </div>
     );
 }

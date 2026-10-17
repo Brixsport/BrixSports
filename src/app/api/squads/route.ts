@@ -22,13 +22,21 @@ export async function GET(request: NextRequest) {
         // Get squad with player details
         const squad = await db
             .select({
-                squadPlayer: squadPlayers,
+                squadPlayer: {
+                    id: squadPlayers.id,
+                    teamId: squadPlayers.teamId,
+                    competitionId: squadPlayers.competitionId,
+                    playerId: squadPlayers.playerId,
+                    squadNumber: squadPlayers.squadNumber,
+                    role: squadPlayers.role,
+                    status: squadPlayers.status,
+                },
                 player: {
                     id: players.id,
                     name: players.name,
                     number: players.number,
                     position: players.position,
-                    avatar: players.avatar,
+                    avatar: players.image,
                     nationality: players.nationality,
                 }
             })
@@ -40,6 +48,7 @@ export async function GET(request: NextRequest) {
                 )
             )
             .leftJoin(players, eq(squadPlayers.playerId, players.id))
+            .limit(200)
             .all();
 
         return NextResponse.json({

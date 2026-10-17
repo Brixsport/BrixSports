@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import { db } from '@/db';
-import { matches, teams } from '@/db/schema';
-import { eq, and, or } from 'drizzle-orm';
+import { matches, matchLoggerAssignments, teams } from '@/db/schema';
+import { eq, and, or, inArray } from 'drizzle-orm';
 
 // GET /api/admin/assigned-matches - Get matches assigned to logger or all matches for admin
 export async function GET(request: NextRequest) {
@@ -32,13 +32,25 @@ export async function GET(request: NextRequest) {
                 .orderBy(matches.startTime)
                 .limit(50);
         } else {
-            // Loggers can only see their assigned matches
+            // Loggers can only see their assigned matches (assignment table, not the
+            // legacy matches.loggerId column)
             matchesQuery = db
                 .select()
                 .from(matches)
                 .where(
                     and(
-                        eq(matches.loggerId, user.id),
+                        inArray(
+                            matches.id,
+                            db
+                                .select({ matchId: matchLoggerAssignments.matchId })
+                                .from(matchLoggerAssignments)
+                                .where(
+                                    and(
+                                        eq(matchLoggerAssignments.loggerId, user.id),
+                                        eq(matchLoggerAssignments.status, 'active')
+                                    )
+                                )
+                        ),
                         or(
                             eq(matches.status, 'UPCOMING'),
                             eq(matches.status, 'LIVE')

@@ -4,6 +4,7 @@ import { players, playerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
+import { getPlayerRatingSummary } from '@/lib/playerRatingSummary';
 
 // GET /api/players/[id]/stats - Get player statistics
 export async function GET(
@@ -34,6 +35,9 @@ export async function GET(
 
         const [enrichedPlayer] = await enrichPlayersWithAffiliations([player.player]);
         const playerTeam = enrichedPlayer?.team ?? null;
+
+        // BACKLOG-253: real career rating, not the frozen players.rating default.
+        const ratingSummary = await getPlayerRatingSummary(playerId);
 
         // Build stats query
         let statsQuery = db
@@ -99,7 +103,7 @@ export async function GET(
                     logo: playerTeam.logo,
                 } : null,
                 image: player.player.image,
-                rating: player.player.rating,
+                rating: ratingSummary.averageRating,
             },
             stats: stats,
             totals,
@@ -153,8 +157,6 @@ export async function POST(
             );
         }
 
-        const { or } = await import('drizzle-orm');
-
         // Verify player exists
         const player = await db
             .select()
@@ -169,7 +171,11 @@ export async function POST(
             );
         }
 
-        // Check if stats already exist for this player/competition
+        // Check if stats already exist for this player/competition.
+        // competitionId is authoritative when present -- do NOT OR it with a
+        // name fallback (BACKLOG-335: two real competitions can share an exact
+        // name, and this is a write path -- matching the wrong same-named
+        // competition's existing row here would overwrite the wrong data).
         const existingStats = await db
             .select()
             .from(playerStats)
@@ -177,7 +183,7 @@ export async function POST(
                 and(
                     eq(playerStats.playerId, playerId),
                     competitionId
-                        ? or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || ''))
+                        ? eq(playerStats.competitionId, competitionId)
                         : eq(playerStats.competition, competition || '')
                 )
             )
@@ -282,8 +288,6 @@ export async function PATCH(
             );
         }
 
-        const { or } = await import('drizzle-orm');
-
         // Verify player exists
         const player = await db
             .select()
@@ -298,7 +302,11 @@ export async function PATCH(
             );
         }
 
-        // Check if stats already exist for this player/competition
+        // Check if stats already exist for this player/competition.
+        // competitionId is authoritative when present -- do NOT OR it with a
+        // name fallback (BACKLOG-335: two real competitions can share an exact
+        // name, and this is a write path -- matching the wrong same-named
+        // competition's existing row here would overwrite the wrong data).
         const existingStats = await db
             .select()
             .from(playerStats)
@@ -306,7 +314,7 @@ export async function PATCH(
                 and(
                     eq(playerStats.playerId, playerId),
                     competitionId
-                        ? or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || ''))
+                        ? eq(playerStats.competitionId, competitionId)
                         : eq(playerStats.competition, competition || '')
                 )
             )

@@ -57,10 +57,24 @@ export default function NotificationsAdminPage() {
 
         {/* Diagnostics */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-6">
-          <h2 className="font-display italic uppercase tracking-tighter text-xl mb-6 flex items-center gap-2">
-            <Bell size={20} className="text-primary" />
-            System Diagnostics
-          </h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-display italic uppercase tracking-tighter text-xl flex items-center gap-2">
+              <Bell size={20} className="text-primary" />
+              System Diagnostics
+            </h2>
+            {/* BACKLOG-358: /admin/push-diagnose is a real, working, auth-gated page
+                that had zero inbound links -- reachable only by typing the URL.
+                Richard's call: tuck it here rather than the main admin nav, since
+                it's a deeper diagnostic tool that belongs next to the existing
+                debugger, not a top-level admin destination. */}
+            <Link
+              href="/admin/push-diagnose"
+              className="text-xs font-bold uppercase tracking-widest text-white/40 hover:text-primary transition-colors flex items-center gap-1"
+            >
+              Advanced Diagnostics
+              <ArrowRight size={14} />
+            </Link>
+          </div>
           <PushNotificationDebugger />
         </section>
       </div>

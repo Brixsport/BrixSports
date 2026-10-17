@@ -4,7 +4,9 @@ import { playerRatings } from '@/db/schema-ratings';
 import { matches, players } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
+import { toPublicMatchRating } from '@/lib/public-ratings';
 
 /**
  * GET /api/matches/[id]/ratings
@@ -31,68 +33,30 @@ export async function GET(
             );
         }
 
-        // Get all ratings for this match
+        // Get all ratings for this match. Ratings are calculated when the match is set
+        // FINISHED, so an empty list is the correct answer when none exist yet.
         const ratings = await db
             .select({
-                rating: playerRatings,
-                player: players
+                playerId: playerRatings.playerId,
+                teamId: playerRatings.teamId,
+                autoRating: playerRatings.autoRating,
+                finalRating: playerRatings.finalRating,
+                isMotM: playerRatings.isMotM,
+                name: players.name,
+                jerseyName: players.jerseyName,
+                number: players.number,
+                position: players.position,
+                image: players.image
             })
             .from(playerRatings)
             .leftJoin(players, eq(playerRatings.playerId, players.id))
-            .where(eq(playerRatings.matchId, matchId));
-
-        // Check if ratings exist
-        if (ratings.length === 0 && match[0].status === 'FINISHED') {
-            console.log(`[Public Ratings] No ratings for finished match ${matchId}, attempting auto-calc...`);
-
-            try {
-                const protocol = request.headers.get('x-forwarded-proto') || 'http';
-                const host = request.headers.get('host');
-                const baseUrl = `${protocol}://${host}`;
-
-                // Trigger calculation (which also initializes if needed)
-                // Note: We use a POST to ourselves. This requires no specific auth if we allow it, 
-                // but usually ratings calculation requires logger/admin.
-                // For public safety, we might just return empty, but let's try to be helpful.
-
-                const calcRes = await fetch(`${baseUrl}/api/matches/${matchId}/ratings`, {
-                    method: 'POST',
-                    headers: { 'Cookie': request.headers.get('cookie') || '' }
-                });
-
-                if (calcRes.ok) {
-                    // Re-fetch
-                    const newRatings = await db
-                        .select({
-                            rating: playerRatings,
-                            player: players
-                        })
-                        .from(playerRatings)
-                        .leftJoin(players, eq(playerRatings.playerId, players.id))
-                        .where(eq(playerRatings.matchId, matchId));
-
-                    return NextResponse.json({
-                        matchId,
-                        matchStatus: match[0].status,
-                        ratings: newRatings.map(r => ({
-                            ...r.rating,
-                            player: r.player
-                        })),
-                        autoCalculated: true
-                    });
-                }
-            } catch (e) {
-                console.error('[Public Ratings] Auto-calc trigger failed:', e);
-            }
-        }
+            .where(eq(playerRatings.matchId, matchId))
+            .limit(200);
 
         return NextResponse.json({
             matchId,
             matchStatus: match[0].status,
-            ratings: ratings.map(r => ({
-                ...r.rating,
-                player: r.player
-            }))
+            ratings: ratings.map(toPublicMatchRating)
         });
 
     } catch (error) {
@@ -123,6 +87,9 @@ export async function POST(
         }
 
         const { id: matchId } = await params;
+        if (user.role === 'logger' && !(await isLoggerAssigned(matchId, user.id))) {
+            return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
 
         // BACKLOG-124: this used to duplicate the entire calculation inline, which is
         // also what events/route.ts's internal self-fetch (fixed the same bug) used to
@@ -134,9 +101,27 @@ export async function POST(
         try {
             result = await calculateAndSaveRatings(matchId);
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to calculate ratings';
-            const status = message === 'Match not found' ? 404 : message === 'No lineups found for this match' ? 400 : 500;
-            return NextResponse.json({ error: message }, { status });
+            console.error('[Calculate Ratings] Error:', err);
+            const rawMessage = err instanceof Error ? err.message : '';
+            // Deliberate, developer-authored validation messages (src/lib/ratingsService.ts)
+            // safe to show as-is. Anything else -- including a real DB failure -- must not
+            // reach the client verbatim.
+            if (rawMessage === 'Match not found') {
+                return NextResponse.json({ error: rawMessage }, { status: 404 });
+            }
+            if (rawMessage === 'No lineups found for this match') {
+                return NextResponse.json({ error: rawMessage }, { status: 400 });
+            }
+            // BACKLOG-255: this allow-list had gone stale relative to
+            // ratingsService.ts's actual thrown-error surface -- the sport
+            // dispatcher's unsupported-sport error fell through to a generic,
+            // unexplained 500 instead of the clear message the code already
+            // authors. An admin clicking "Calculate Ratings" on a Track & Field
+            // match deserves the real reason, not a 500.
+            if (rawMessage.startsWith('calculateAndSaveRatings: no rating model exists for sport')) {
+                return NextResponse.json({ error: rawMessage }, { status: 422 });
+            }
+            return NextResponse.json({ error: 'Failed to calculate ratings' }, { status: 500 });
         }
 
         return NextResponse.json({

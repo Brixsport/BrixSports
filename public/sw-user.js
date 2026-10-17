@@ -3,7 +3,12 @@
  * Handles caching, offline support, and push notifications for users
  */
 
-const CACHE_VERSION = 'brixsport-user-v2';
+// BUG-244: CACHE_VERSION is stamped with the Vercel commit SHA by
+// scripts/inject-sw-cache-version.mjs (see package.json "build") so every
+// deploy is a genuinely different SW script and precache can't go stale
+// again from a forgotten manual bump. This literal is the local-dev
+// fallback value only -- production always overwrites it at build time.
+const CACHE_VERSION = 'brixsport-user-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
@@ -50,11 +55,23 @@ const SHORT_TTL_API_PATTERNS = [
     // /api/matches -- confirmed via a real Cache Storage read that they were
     // falling through to the generic bucket (no 30s staleness check) instead.
     /^\/api\/(basketball|football|other)\/matches(\/|$|\?)/,
-    /^\/api\/competitions(\/|$|\?)/,
 ];
+// BACKLOG-226 (session 55): /api/competitions and /api/news moved here from
+// SHORT_TTL -- both are genuinely near-static (name/logo/settings, published
+// articles), not live-scoring data, so they belong with players/teams under
+// the offline-navigable SWR policy rather than gated behind a 30s live-data
+// freshness cap that has no bearing on them. Matches/live-scores deliberately
+// NOT touched -- that TTL gate is a considered Tier 0 correctness decision
+// (see the comment above isFreshEnough / BACKLOG-060), out of scope here.
 const STALE_WHILE_REVALIDATE_API_PATTERNS = [
     /^\/api\/players(\/|$|\?)/,
     /^\/api\/teams(\/|$|\?)/,
+    /^\/api\/competitions(\/|$|\?)/,
+    /^\/api\/news(\/|$|\?)/,
+    // Session 56, Richard's call: standings recompute on every match FINISH
+    // (BACKLOG-097), so like players/teams this is "changes occasionally, not
+    // every second" -- not Tier 0 live-score data, which stays on the 30s TTL.
+    /^\/api\/(football\/|basketball\/)?standings(\/|$|\?)/,
 ];
 const SHORT_API_TTL_MS = 30 * 1000;
 
@@ -118,11 +135,39 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // HTML documents: always network-first, never cache
-    // Stale HTML after a deploy causes missing JS chunk errors (BUG-026)
+    // HTML documents: network-first, cache the response for this specific
+    // page so a previously-visited page is still reachable offline (BACKLOG-226) --
+    // only falls back to the generic /offline document when this exact URL was
+    // never visited/cached. Caching here is safe post-BUG-244: CACHE_VERSION is
+    // build-id-scoped (see top of file), so a stale document from a prior
+    // deploy can never survive into the current deploy's cache namespace --
+    // the entire cache is wiped on activate, not selectively invalidated.
+    //
+    // The cache write is wrapped in event.waitUntil() -- confirmed live
+    // against a real staging deploy (session 55) that without it, the write
+    // silently never happens: event.respondWith()'s own promise resolves as
+    // soon as fetch() resolves, and the browser is free to suspend/terminate
+    // the SW once that response is delivered, racing the un-awaited
+    // caches.open().then(cache.put(...)) chain. Same fire-and-forget class of
+    // bug this codebase already has documented history with (BUG-119).
     if (request.destination === 'document') {
+        const fetchPromise = fetch(request).then((response) => {
+            if (response.status === 200) {
+                const responseClone = response.clone();
+                event.waitUntil(
+                    caches.open(DYNAMIC_CACHE).then((cache) => {
+                        cache.put(request, responseClone);
+                        return limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
+                    })
+                );
+            }
+            return response;
+        });
         event.respondWith(
-            fetch(request).catch(() => caches.match('/offline'))
+            fetchPromise.catch(async () => {
+                const cached = await caches.match(request);
+                return cached || caches.match('/offline');
+            })
         );
         return;
     }
@@ -167,20 +212,23 @@ self.addEventListener('fetch', (event) => {
             return;
         }
 
-        // Short-TTL network-first (matches, competitions): prefer a live
-        // network read; on failure, only serve a cached response if it's
-        // still within SHORT_API_TTL_MS -- otherwise this is genuinely wrong
-        // data for a livescore page, not just "a bit old."
+        // Short-TTL network-first (live match/score data only -- competitions
+        // moved to SWR above, session 55): prefer a live network read; on
+        // failure, only serve a cached response if it's still within
+        // SHORT_API_TTL_MS -- otherwise this is genuinely wrong data for a
+        // livescore page, not just "a bit old."
         if (isShortTtlApi(url.pathname)) {
             event.respondWith(
                 fetch(request)
                     .then((response) => {
                         const responseClone = response.clone();
                         if (response.status === 200) {
-                            caches.open(API_CACHE).then((cache) => {
-                                cache.put(request, responseClone);
-                                limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
-                            });
+                            event.waitUntil(
+                                caches.open(API_CACHE).then((cache) => {
+                                    cache.put(request, responseClone);
+                                    return limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                                })
+                            );
                         }
                         return response;
                     })
@@ -199,10 +247,12 @@ self.addEventListener('fetch', (event) => {
                 .then((response) => {
                     const responseClone = response.clone();
                     if (response.status === 200) {
-                        caches.open(API_CACHE).then((cache) => {
-                            cache.put(request, responseClone);
-                            limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
-                        });
+                        event.waitUntil(
+                            caches.open(API_CACHE).then((cache) => {
+                                cache.put(request, responseClone);
+                                return limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                            })
+                        );
                     }
                     return response;
                 })
@@ -230,10 +280,12 @@ self.addEventListener('fetch', (event) => {
 
                     return fetch(request).then((response) => {
                         const responseClone = response.clone();
-                        caches.open(IMAGE_CACHE).then((cache) => {
-                            cache.put(request, responseClone);
-                            limitCacheSize(IMAGE_CACHE, MAX_IMAGE_CACHE_SIZE);
-                        });
+                        event.waitUntil(
+                            caches.open(IMAGE_CACHE).then((cache) => {
+                                cache.put(request, responseClone);
+                                return limitCacheSize(IMAGE_CACHE, MAX_IMAGE_CACHE_SIZE);
+                            })
+                        );
                         return response;
                     });
                 })
@@ -257,10 +309,12 @@ self.addEventListener('fetch', (event) => {
         fetch(request)
             .then((response) => {
                 const responseClone = response.clone();
-                caches.open(DYNAMIC_CACHE).then((cache) => {
-                    cache.put(request, responseClone);
-                    limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
-                });
+                event.waitUntil(
+                    caches.open(DYNAMIC_CACHE).then((cache) => {
+                        cache.put(request, responseClone);
+                        return limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
+                    })
+                );
                 return response;
             })
             .catch(() => {
@@ -382,80 +436,6 @@ self.addEventListener('notificationclick', (event) => {
             })
     );
 });
-
-// Background sync event
-self.addEventListener('sync', (event) => {
-    console.log('[SW User] Background sync:', event.tag);
-
-    if (event.tag === 'sync-favorites') {
-        event.waitUntil(syncFavorites());
-    } else if (event.tag === 'sync-profile') {
-        event.waitUntil(syncProfile());
-    }
-});
-
-// Sync favorites
-async function syncFavorites() {
-    try {
-        // Get pending favorites from IndexedDB
-        const db = await openDB();
-        const pendingFavorites = await db.getAll('pendingFavorites');
-
-        for (const favorite of pendingFavorites) {
-            await fetch('/api/favorites', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(favorite),
-            });
-            await db.delete('pendingFavorites', favorite.id);
-        }
-
-        console.log('[SW User] Favorites synced');
-    } catch (error) {
-        console.error('[SW User] Error syncing favorites:', error);
-    }
-}
-
-// Sync profile
-async function syncProfile() {
-    try {
-        const db = await openDB();
-        const pendingProfile = await db.get('pendingProfile', 'profile');
-
-        if (pendingProfile) {
-            await fetch('/api/users/me', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(pendingProfile),
-            });
-            await db.delete('pendingProfile', 'profile');
-        }
-
-        console.log('[SW User] Profile synced');
-    } catch (error) {
-        console.error('[SW User] Error syncing profile:', error);
-    }
-}
-
-// Open IndexedDB
-function openDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open('BrixsportDB', 1);
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains('pendingFavorites')) {
-                db.createObjectStore('pendingFavorites', { keyPath: 'id' });
-            }
-            if (!db.objectStoreNames.contains('pendingProfile')) {
-                db.createObjectStore('pendingProfile');
-            }
-        };
-    });
-}
 
 // Message event
 self.addEventListener('message', (event) => {

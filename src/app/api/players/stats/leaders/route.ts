@@ -4,6 +4,7 @@ import { players, playerStats, basketballPlayerStats, playerRatings, matches } f
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 // GET /api/players/stats/leaders - Get top performing players
 export async function GET(request: NextRequest) {
@@ -14,17 +15,22 @@ export async function GET(request: NextRequest) {
         const competitionId = searchParams.get('competitionId');
         const sport = searchParams.get('sport');
         const limit = parseInt(searchParams.get('limit') || '10');
-        const { or } = await import('drizzle-orm');
 
         if (type === 'powerRanking') {
-            const ratingConditions = [];
+            // Only finished matches count towards the power ranking.
+            const ratingConditions = [eq(matches.status, 'FINISHED')];
 
             if (sport) {
                 ratingConditions.push(eq(matches.sport, sport));
             }
 
+            // competitionId is authoritative when present -- do NOT OR it with a
+            // name fallback (BACKLOG-335: two real competitions can share an
+            // exact name, e.g. two seasons both literally named "BUSA LEAGUE
+            // FOOTBALL", and OR'ing in a name match even when a real id is known
+            // silently pulls in the other competition's data too).
             if (competitionId) {
-                ratingConditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+                ratingConditions.push(eq(matches.competitionId, competitionId));
             } else if (competition) {
                 ratingConditions.push(eq(matches.competition, competition));
             }
@@ -42,8 +48,8 @@ export async function GET(request: NextRequest) {
                 })
                 .from(playerRatings)
                 .leftJoin(players, eq(playerRatings.playerId, players.id))
-                .leftJoin(matches, eq(playerRatings.matchId, matches.id))
-                .where(ratingConditions.length > 0 ? and(...ratingConditions) : undefined)
+                .innerJoin(matches, eq(playerRatings.matchId, matches.id))
+                .where(and(...ratingConditions))
                 .groupBy(playerRatings.playerId)
                 .orderBy(desc(averageRatingExpr), desc(gamesPlayedExpr), desc(motmAwardsExpr))
                 .limit(limit);
@@ -72,7 +78,11 @@ export async function GET(request: NextRequest) {
                             number: result.player!.number,
                             position: result.player!.position,
                             image: result.player!.image,
-                            rating: result.player!.rating,
+                            // BACKLOG-253: this branch already computes a real
+                            // average via COALESCE(finalRating, autoRating)
+                            // above (averageRatingExpr) -- reuse it instead of
+                            // the frozen players.rating default.
+                            rating: averageRating,
                         },
                         team: primaryTeam ? {
                             id: primaryTeam.id,
@@ -131,8 +141,9 @@ export async function GET(request: NextRequest) {
             }
 
             const basketballConditions = [];
+            // competitionId is authoritative when present -- see BACKLOG-335.
             if (competitionId) {
-                basketballConditions.push(or(eq(basketballPlayerStats.competitionId, competitionId), eq(basketballPlayerStats.competition, competition || '')));
+                basketballConditions.push(eq(basketballPlayerStats.competitionId, competitionId));
             } else if (competition) {
                 basketballConditions.push(eq(basketballPlayerStats.competition, competition));
             }
@@ -154,6 +165,10 @@ export async function GET(request: NextRequest) {
                     .filter((player): player is NonNullable<typeof player> => Boolean(player))
             );
             const playerMap = new Map(enrichedPlayers.map((player) => [player.id, player]));
+            // BACKLOG-253: real career rating, batched over this page's players.
+            const ratingSummaries = await getPlayerRatingSummaries(
+                results.filter(r => r.player).map(r => r.player!.id)
+            );
 
             const leaders = results
                 .filter(r => r.player)
@@ -169,7 +184,7 @@ export async function GET(request: NextRequest) {
                         number: r.player!.number,
                         position: r.player!.position,
                         image: r.player!.image,
-                        rating: r.player!.rating,
+                        rating: ratingSummaries.get(r.player!.id)?.averageRating ?? null,
                     },
                     team: primaryTeam ? {
                         id: primaryTeam.id,
@@ -205,8 +220,9 @@ export async function GET(request: NextRequest) {
 
         // Existing Football/Generic Logic
         const conditions = [];
+        // competitionId is authoritative when present -- see BACKLOG-335.
         if (competitionId) {
-            conditions.push(or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || '')));
+            conditions.push(eq(playerStats.competitionId, competitionId));
         } else if (competition) {
             conditions.push(eq(playerStats.competition, competition));
         }
@@ -270,6 +286,10 @@ export async function GET(request: NextRequest) {
                 .filter((player): player is NonNullable<typeof player> => Boolean(player))
         );
         const playerMap = new Map(enrichedPlayers.map((player) => [player.id, player]));
+        // BACKLOG-253: real career rating, batched over this page's players.
+        const ratingSummaries = await getPlayerRatingSummaries(
+            results.filter(r => r.player).map(r => r.player!.id)
+        );
 
         const leaders = results
             .filter(r => r.player)
@@ -285,7 +305,7 @@ export async function GET(request: NextRequest) {
                     number: r.player!.number,
                     position: r.player!.position,
                     image: r.player!.image,
-                    rating: r.player!.rating,
+                    rating: ratingSummaries.get(r.player!.id)?.averageRating ?? null,
                 },
                 team: primaryTeam ? {
                     id: primaryTeam.id,
