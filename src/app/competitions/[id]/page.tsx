@@ -24,6 +24,7 @@ interface Competition {
   description?: string;
   logo?: string | null;
   numberOfTeams?: number | null;
+  structure?: string | null;
 }
 
 // BACKLOG-229: mirrors api/competitions' own buildCompetitionGroups() shape --
@@ -307,6 +308,10 @@ function CompetitionHubContent() {
   // the whole table scrolls together and you lose track of which row is
   // which team. Sticky cells need a solid (non-transparent) background so
   // scrolled content doesn't show through underneath them.
+  const isBasketball = selectedComp?.sport === 'Basketball';
+  const isSwissTop8 = selectedComp?.structure === 'swiss-top8';
+  const SWISS_QUALIFIERS = 8;
+
   const renderStandingsTable = (rows: Standing[]) => (
     <div className="overflow-x-auto">
       <table className="w-full text-left border-collapse min-w-[420px]">
@@ -317,7 +322,14 @@ function CompetitionHubContent() {
             <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">W</th>
             <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
             <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">GD</th>
+            {isBasketball ? (
+              <>
+                <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PF</th>
+                <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PA</th>
+              </>
+            ) : (
+              <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">GD</th>
+            )}
             <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
           </tr>
         </thead>
@@ -326,11 +338,15 @@ function CompetitionHubContent() {
             <tr
               key={row.id}
               onClick={() => router.push(`/teams/${row.teamId}`)}
-              className="border-b border-border/50 hover:bg-muted/50 transition-colors group cursor-pointer"
+              className={`hover:bg-muted/50 transition-colors group cursor-pointer ${
+                isSwissTop8 && idx === SWISS_QUALIFIERS - 1 && rows.length > SWISS_QUALIFIERS
+                  ? 'border-b-2 border-dashed border-primary/60'
+                  : 'border-b border-border/50'
+              }`}
             >
               <td className="sticky left-0 z-10 bg-card group-hover:bg-muted px-3 py-2.5">
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-display italic w-4 shrink-0 text-right ${idx < 3 ? 'text-primary' : 'text-foreground/20'}`}>
+                  <span className={`text-sm font-display italic w-4 shrink-0 text-right ${isSwissTop8 && idx < SWISS_QUALIFIERS ? 'text-primary' : 'text-foreground/30'}`}>
                     {idx + 1}
                   </span>
                   <div className="w-8 h-8 relative flex-shrink-0 bg-muted rounded-lg p-1 flex items-center justify-center">
@@ -345,7 +361,14 @@ function CompetitionHubContent() {
               <td className="px-2 py-2.5 text-center text-xs font-bold text-primary">{row.won}</td>
               <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
               <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+              {isBasketball ? (
+                <>
+                  <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/60">{row.goalsFor}</td>
+                  <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalsAgainst}</td>
+                </>
+              ) : (
+                <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+              )}
               <td className="px-3 py-2.5 text-center">
                 <span className="bg-primary/10 text-primary px-2 py-1 rounded-lg font-display italic text-sm border border-primary/20">
                   {row.points}
@@ -355,6 +378,12 @@ function CompetitionHubContent() {
           ))}
         </tbody>
       </table>
+      {isSwissTop8 && rows.length > SWISS_QUALIFIERS && (
+        <p className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-foreground/40">
+          <span className="inline-block w-4 border-t-2 border-dashed border-primary/60 align-middle mr-2" />
+          Top 8 advance to the quarter-finals
+        </p>
+      )}
     </div>
   );
 
