@@ -9,6 +9,8 @@ import type { PitchPlayer } from './lineup/ResponsivePitch';
 // but standard import is better for type safety. Let's use standard import.
 import { ResponsivePitch } from './lineup/ResponsivePitch';
 import { inferPlacementLegacy, resolveSlot, toPitchCoords } from '@/lib/lineup/placement';
+import { deriveSubstitutions, substitutionMaps } from '@/lib/lineup/substitutions';
+import { formatEventMinute } from '@/lib/eventMinute';
 
 interface FullPitchLineupsProps {
     homeTeam: {
@@ -99,6 +101,13 @@ export function FullPitchLineups({
         playerStats.set(event.playerId, stats);
     });
 
+    // Who came off / on, from the Substitution events (the stored lineup never carries this).
+    const subMaps = substitutionMaps(deriveSubstitutions(events));
+    const markSubbedOff = (p: PitchPlayer): PitchPlayer => {
+        if (!subMaps.off.has(p.player.id)) return p;
+        return { ...p, isSubstituted: true, subMinute: subMaps.off.get(p.player.id) ?? p.subMinute };
+    };
+
     // *** Formation Slot Mapping -- BACKLOG-323: explicit stored placement when
     // available, else the frozen BACKLOG-322 role-bucket-inference heuristic. ***
     const processLineupForPitch = (players: Record<string, Player>, lineup: any[], isHome: boolean, formation: string): PitchPlayer[] => {
@@ -163,8 +172,8 @@ export function FullPitchLineups({
         return DEFAULT_FORMATION;
     };
 
-    const homePitchPlayers = processLineupForPitch(homePlayers, homeLineup, true, homeTeam.formation || getFallbackFormation());
-    const awayPitchPlayers = processLineupForPitch(awayPlayers, awayLineup, false, awayTeam.formation || getFallbackFormation());
+    const homePitchPlayers = processLineupForPitch(homePlayers, homeLineup, true, homeTeam.formation || getFallbackFormation()).map(markSubbedOff);
+    const awayPitchPlayers = processLineupForPitch(awayPlayers, awayLineup, false, awayTeam.formation || getFallbackFormation()).map(markSubbedOff);
 
     const allPitchPlayers = [...homePitchPlayers, ...awayPitchPlayers];
 
@@ -178,7 +187,11 @@ export function FullPitchLineups({
                     player,
                     rating: entry.rating || 0,
                     position: entry.position || player.position || 'SUB',
-                    teamColor: ''
+                    teamColor: '',
+                    subbedOn: subMaps.on.has(player.id),
+                    onMinute: subMaps.on.get(player.id) ?? null,
+                    subbedOff: subMaps.off.has(player.id),
+                    offMinute: subMaps.off.get(player.id) ?? null,
                 };
             }).filter((p): p is NonNullable<typeof p> => p !== null);
         }
@@ -191,7 +204,11 @@ export function FullPitchLineups({
                     player,
                     rating: entry.rating || 0,
                     position: entry.position || player.position || 'SUB',
-                    teamColor: ''
+                    teamColor: '',
+                    subbedOn: subMaps.on.has(player.id),
+                    onMinute: subMaps.on.get(player.id) ?? null,
+                    subbedOff: subMaps.off.has(player.id),
+                    offMinute: subMaps.off.get(player.id) ?? null,
                 };
             })
             .filter((p): p is NonNullable<typeof p> => p !== null);
@@ -268,6 +285,10 @@ export function FullPitchLineups({
                                         rating={homeSubs[i].rating}
                                         position={homeSubs[i].position}
                                         teamColor={homeTeam.color}
+                                        subbedOn={homeSubs[i].subbedOn}
+                                        onMinute={homeSubs[i].onMinute}
+                                        subbedOff={homeSubs[i].subbedOff}
+                                        offMinute={homeSubs[i].offMinute}
                                         onClick={() => onPlayerClick(homeSubs[i].player)}
                                     />
                                 ) : <div />}
@@ -277,6 +298,10 @@ export function FullPitchLineups({
                                         rating={awaySubs[i].rating}
                                         position={awaySubs[i].position}
                                         teamColor={awayTeam.color}
+                                        subbedOn={awaySubs[i].subbedOn}
+                                        onMinute={awaySubs[i].onMinute}
+                                        subbedOff={awaySubs[i].subbedOff}
+                                        offMinute={awaySubs[i].offMinute}
                                         onClick={() => onPlayerClick(awaySubs[i].player)}
                                         reverse
                                     />
@@ -297,9 +322,15 @@ interface BenchPlayerProps {
     teamColor: string;
     onClick: () => void;
     reverse?: boolean;
+    /** Came on during the match (from the Substitution events). */
+    subbedOn?: boolean;
+    onMinute?: number | null;
+    /** Came on and was then taken off again. */
+    subbedOff?: boolean;
+    offMinute?: number | null;
 }
 
-function BenchPlayer({ player, rating, position, teamColor, onClick, reverse }: BenchPlayerProps) {
+function BenchPlayer({ player, rating, position, teamColor, onClick, reverse, subbedOn, onMinute, subbedOff, offMinute }: BenchPlayerProps) {
     const getRatingColor = (rating: number) => {
         if (rating === 0) return 'bg-muted text-foreground/40';
         if (rating >= 7.0) return 'bg-green-500/20 text-green-400';
@@ -321,9 +352,29 @@ function BenchPlayer({ player, rating, position, teamColor, onClick, reverse }: 
                 <span className="relative z-10 text-[9px] sm:text-[10px] font-bold text-white">{player.number}</span>
             </div>
 
+            {/* Came on: green arrow and the minute, the same cue the pitch uses for a player going off */}
+            {subbedOn && (
+                <span
+                    className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-green-500/20 px-1.5 py-0.5 text-[10px] font-bold text-green-400"
+                    title={onMinute != null ? `Came on ${formatEventMinute(onMinute)}` : 'Came on'}
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="h-2.5 w-2.5" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                    {onMinute != null ? formatEventMinute(onMinute) : ''}
+                </span>
+            )}
+            {subbedOn && subbedOff && (
+                <span
+                    className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-400"
+                    title={offMinute != null ? `Went off ${formatEventMinute(offMinute)}` : 'Went off'}
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="h-2.5 w-2.5" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+                    {offMinute != null ? formatEventMinute(offMinute) : ''}
+                </span>
+            )}
+
             {/* Player info */}
             <div className="min-w-0 flex-1">
-                <div className="text-xs sm:text-sm font-semibold text-foreground truncate">
+                <div className="text-xs sm:text-sm font-semibold text-foreground break-words [overflow-wrap:anywhere]">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </div>
                 <div className="text-[9px] sm:text-[10px] text-foreground/60">{position}</div>
