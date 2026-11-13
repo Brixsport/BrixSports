@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Shield, Target, TrendingUp, ArrowRightLeft, Share2, Shirt } from 'lucide-react';
+import { Users, Shield, Target, TrendingUp, ArrowRightLeft, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { FullPitchLineups } from './FullPitchLineups';
 import { PlayerStatsModal } from './PlayerStatsModal';
 import { TeamLogo } from '@/lib/utils/team-logo';
-import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
+import { formatEventMinute } from '@/lib/eventMinute';
+import { deriveSubstitutions } from '@/lib/lineup/substitutions';
 
 interface MatchLineupsProps {
     lineups: any;
@@ -128,8 +129,24 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
         setShowPlayerModal(true);
     };
 
-    // Get substitutions if available
-    const substitutions = lineups.substitutions || lineups.home?.substitutions || lineups.away?.substitutions || [];
+    // Substitutions come from the Substitution events (out = playerId, in = relatedPlayerId); the stored
+    // lineup never carries them. Names fall back to the lineup players when an event row has no player object.
+    const substitutions = deriveSubstitutions(events).map((r) => {
+        const isHome = r.teamId
+            ? r.teamId === homeTeam.id
+            : !!(r.outId && homePlayers[r.outId]);
+        const lookup = isHome ? homePlayers : awayPlayers;
+        const name = (id: string | null, own: string | null) => own || (id ? (lookup[id]?.jerseyName || lookup[id]?.name) : null) || 'Unknown';
+        const num = (id: string | null, own: number | string | null) => own ?? (id ? lookup[id]?.number : null) ?? null;
+        return {
+            ...r,
+            side: (isHome ? 'home' : 'away') as 'home' | 'away',
+            outName: name(r.outId, r.outName),
+            inName: name(r.inId, r.inName),
+            outNumber: num(r.outId, r.outNumber),
+            inNumber: num(r.inId, r.inNumber),
+        };
+    });
 
     // Share the lineup via the native share sheet, falling back to clipboard when unavailable
     const handleShareLineup = async () => {
@@ -220,99 +237,62 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                 isMotM={selectedPlayer?.isMotM}
             />
 
-            {/* Substitutions Section - List Below */}
+            {/* Substitutions: one row per change, home on the left and away on the right with the minute between,
+                in the order they happened (the same layout the big score apps use). */}
             {substitutions.length > 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-muted border border-border rounded-2xl p-6 mt-6 mx-4"
+                    className="bg-muted border border-border rounded-2xl p-4 sm:p-6 mt-6 mx-4"
                 >
-                    <div className="flex items-center gap-3 mb-6">
+                    <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
                             <ArrowRightLeft className="w-5 h-5 text-blue-400" />
                         </div>
                         <div>
                             <h3 className="text-lg font-bold">Substitutions</h3>
-                            <p className="text-sm text-foreground/60">{substitutions.length} changes made</p>
+                            <p className="text-sm text-foreground/60">{substitutions.length} {substitutions.length === 1 ? 'change' : 'changes'} made</p>
                         </div>
                     </div>
 
-                    <div className="space-y-3">
-                        {substitutions.map((sub: any, index: number) => (
-                            <SubstitutionCard
-                                key={index}
-                                substitution={sub}
-                                homeTeam={homeTeam}
-                                awayTeam={awayTeam}
-                            />
-                        ))}
+                    <div className="flex items-center justify-between border-b border-border pb-3 mb-1">
+                        <TeamLogo logo={homeTeam.logo} name={homeTeam.name} size="sm" />
+                        <TeamLogo logo={awayTeam.logo} name={awayTeam.name} size="sm" />
                     </div>
+
+                    <ul className="divide-y divide-border">
+                        {substitutions.map((sub) => (
+                            <li key={sub.id} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-3">
+                                <SubstitutionSide sub={sub} show={sub.side === 'home'} />
+                                <span className="min-w-[2.5rem] text-center text-xs font-bold text-foreground/70 tabular-nums">
+                                    {formatEventMinute(sub.minute) || '–'}
+                                </span>
+                                <SubstitutionSide sub={sub} show={sub.side === 'away'} alignRight />
+                            </li>
+                        ))}
+                    </ul>
                 </motion.div>
             )}
         </div>
     );
 }
 
-// Substitution Card Component
-const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
-    const team = substitution.team === 'home' ? homeTeam : awayTeam;
-    const teamColor = team.color;
-
+// One side of a substitution row: the player coming on (green) above the player going off (red).
+const SubstitutionSide = ({ sub, show, alignRight }: { sub: { inName: string; outName: string; inNumber: number | string | null; outNumber: number | string | null }, show: boolean, alignRight?: boolean }) => {
+    if (!show) return <div />;
+    const line = (arrow: 'in' | 'out', name: string, number: number | string | null) => (
+        <div className={`flex items-center gap-1.5 min-w-0 ${alignRight ? 'flex-row-reverse text-right' : ''}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className={`h-3 w-3 shrink-0 ${arrow === 'in' ? 'text-green-400' : 'text-red-400'}`} aria-label={arrow === 'in' ? 'On' : 'Off'}>
+                <path d={arrow === 'in' ? 'M12 19V5M5 12l7-7 7 7' : 'M12 5v14M19 12l-7 7-7-7'} />
+            </svg>
+            <span className={`text-sm truncate ${arrow === 'in' ? 'font-semibold text-foreground' : 'text-foreground/60'}`}>{name}</span>
+            {number !== null && number !== undefined && <span className="text-[10px] text-foreground/40 shrink-0">{number}</span>}
+        </div>
+    );
     return (
-        <div className="bg-muted border border-border rounded-xl p-4 hover:bg-muted/80 transition-all">
-            <div className="flex items-center gap-4">
-                {/* Team Logo */}
-                <TeamLogo logo={team.logo} name={team.name} size="sm" />
-
-                {/* Substitution Details */}
-                <div className="flex-1 flex items-center gap-4">
-                    {/* Player Out */}
-                    <div className="flex items-center gap-2 flex-1">
-                        <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
-                            <Shirt className="absolute inset-0 w-full h-full opacity-60" fill={teamColor} stroke="rgba(248,113,113,0.9)" strokeWidth={1.5} />
-                            <span className="relative z-10 text-[10px] font-bold text-white">
-                                {substitution.playerOut?.number || '?'}
-                            </span>
-                        </div>
-                        <div className="flex-1">
-                            <div className="text-sm font-semibold text-red-400">
-                                {substitution.playerOut?.name || 'Unknown'}
-                            </div>
-                            <div className="text-xs text-foreground/60">OUT</div>
-                        </div>
-                    </div>
-
-                    {/* Arrow */}
-                    <ArrowRightLeft className="w-5 h-5 text-foreground/40 flex-shrink-0" />
-
-                    {/* Player In */}
-                    <div className="flex items-center gap-2 flex-1">
-                        <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
-                            <Shirt className="absolute inset-0 w-full h-full" fill={teamColor} stroke="rgba(74,222,128,0.9)" strokeWidth={1.5} />
-                            <span className="relative z-10 text-[10px] font-bold text-white">
-                                {substitution.playerIn?.number || '?'}
-                            </span>
-                        </div>
-                        <div className="flex-1">
-                            <div className="text-sm font-semibold text-green-400">
-                                {substitution.playerIn?.name || 'Unknown'}
-                            </div>
-                            <div className="text-xs text-foreground/60">IN</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Time */}
-                {hasKnownMinute(substitution.minute) && substitution.minute > 0 && (
-                    <div className="text-right">
-                        <div className="text-sm font-bold text-foreground/80">{formatEventMinute(substitution.minute)}</div>
-                        <div className="text-xs text-foreground/60">
-                            {substitution.half === 2 ? '2nd Half' : '1st Half'}
-                        </div>
-                    </div>
-                )}
-            </div>
+        <div className="space-y-1 min-w-0">
+            {line('in', sub.inName, sub.inNumber)}
+            {line('out', sub.outName, sub.outNumber)}
         </div>
     );
 };
-
