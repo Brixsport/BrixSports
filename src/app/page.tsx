@@ -21,7 +21,7 @@ import { TeamLogo } from '@/lib/utils/team-logo';
 import { startVisiblePolling } from '@/lib/visible-poll';
 import { mergeLiveScores, applyLiveSnapshot, shouldRunFullRefresh, type LiveSnapshot } from '@/lib/live-overlay';
 import { safeToLocale, parseSafeDate } from '@/lib/safe-date';
-import { toDayKey, getMatchDays, withToday, pickDefaultDay, nearestMatchDay, stepMatchDay, formatDayLabel, trimStripDays } from '@/lib/match-days';
+import { toDayKey, getMatchDays, withToday, pickDefaultDay, nearestMatchDay, stepMatchDay, formatDayLabel } from '@/lib/match-days';
 import { MatchDayStrip } from '@/components/home/MatchDayStrip';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
@@ -362,7 +362,7 @@ export default function Home() {
   }
   const liveDayKey = liveDays.has(todayKey) ? todayKey : ([...liveDays].sort()[0] ?? null);
   const activeDay = selectedDay ?? pickDefaultDay(matchDays, todayKey, liveDayKey);
-  const stripDays = trimStripDays(withToday(matchDays, todayKey), todayKey, activeDay);
+  const stripDays = withToday(matchDays, todayKey);
   const nextMatchDay = stepMatchDay(matchDays, activeDay, 1);
 
   const handleSportChange = (sport: string) => {
