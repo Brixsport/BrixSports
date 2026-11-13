@@ -6,7 +6,7 @@ import {
     Users, Activity, CheckCircle2, AlertCircle, Clock,
     Settings, Search, Filter, MoreVertical, Shield,
     Award, Zap, Calendar, MapPin, ChevronRight, UserPlus,
-    BarChart3, PieChart, TrendingUp, RefreshCw
+    BarChart3, PieChart, TrendingUp, RefreshCw, X
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/useToast';
@@ -16,6 +16,7 @@ import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { getClientErrorMessage } from '@/lib/client-error';
+import { safeToLocale } from '@/lib/safe-date';
 
 interface Logger {
     id: string;
@@ -57,6 +58,9 @@ function AdminLoggersPageContent() {
     const [searchTerm, setSearchTerm] = useState('');
     const [coverageScope, setCoverageScope] = useState<'week' | 'all'>('week');
     const [showAssignModal, setShowAssignModal] = useState(false);
+    const [removeTarget, setRemoveTarget] = useState<{ matchId: string; loggerId: string; loggerName: string } | null>(null);
+    const [isRemoving, setIsRemoving] = useState(false);
+    const [showAllCovered, setShowAllCovered] = useState(false);
     const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
     const [showRegisterModal, setShowRegisterModal] = useState(false);
     const [registerForm, setRegisterForm] = useState({
@@ -191,7 +195,6 @@ function AdminLoggersPageContent() {
             if (res.ok) {
                 success('Logger assigned successfully');
                 fetchData();
-                setShowAssignModal(false);
             } else {
                 const data = await res.json();
                 error(data.error || 'Failed to assign logger');
@@ -203,6 +206,7 @@ function AdminLoggersPageContent() {
     };
 
     const removeLogger = async (matchId: string, loggerId: string) => {
+        setIsRemoving(true);
         try {
             const res = await fetch(`/api/matches/${matchId}/remove-logger`, {
                 method: 'POST',
@@ -212,14 +216,17 @@ function AdminLoggersPageContent() {
 
             if (res.ok) {
                 success('Logger removed successfully');
+                setRemoveTarget(null);
                 fetchData();
             } else {
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
                 error(data.error || 'Failed to remove logger');
             }
         } catch (err) {
             error('Failed to remove logger');
             console.error('Error removing logger:', err);
+        } finally {
+            setIsRemoving(false);
         }
     };
 
@@ -328,6 +335,17 @@ function AdminLoggersPageContent() {
         live: activeMatches.filter(m => m.status === 'LIVE').length,
         liveAssigned: activeMatches.filter(m => m.status === 'LIVE' && m.assignedLoggers && m.assignedLoggers.length > 0).length
     };
+
+    const unassignedMatches = activeMatches.filter(m => !m.assignedLoggers || m.assignedLoggers.length === 0);
+    const coveredMatches = activeMatches.filter(m => m.assignedLoggers && m.assignedLoggers.length > 0);
+    const COVERED_PREVIEW = 5;
+    const visibleCovered = showAllCovered ? coveredMatches : coveredMatches.slice(0, COVERED_PREVIEW);
+    // The assign modal works on the live row (not the copy captured on click) so it reflects an assign/remove right away.
+    const modalMatch = selectedMatch ? (matches.find(m => m.id === selectedMatch.id) ?? selectedMatch) : null;
+    const modalAssigned = modalMatch?.assignedLoggers ?? [];
+    const modalAssignedIds = new Set(modalAssigned.map(l => l.id));
+    const modalCandidates = loggers.filter(l => l.isAvailable && !modalAssignedIds.has(l.id));
+    const matchTitle = (m: Match | null | undefined) => `${m?.homeTeam?.name ?? 'TBD'} vs ${m?.awayTeam?.name ?? 'TBD'}`;
 
     if (loading && !loggers.length) {
         return (
@@ -526,44 +544,47 @@ function AdminLoggersPageContent() {
                             >
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     {/* Unassigned Matches */}
-                                    <div className="space-y-6">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="font-display italic uppercase tracking-tighter text-2xl">Unassigned Matches</h3>
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-red-500 px-3 py-1 bg-red-500/10 rounded border border-red-500/20">
-                                                Attention Required
-                                            </span>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <h3 className="font-display italic uppercase tracking-tighter text-2xl">
+                                                Unassigned <span className="text-white/40 tabular-nums">{unassignedMatches.length}</span>
+                                            </h3>
+                                            {unassignedMatches.length > 0 && (
+                                                <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-red-500 px-3 py-1 bg-red-500/10 rounded border border-red-500/20">
+                                                    Attention Required
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                        <div className="flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-widest text-white/40">
                                             <span>{coverageScope === 'week' ? 'Live + next 7 days' : 'All upcoming matches'}</span>
                                             {(hiddenLaterCount > 0 || coverageScope === 'all') && (
                                                 <button
                                                     onClick={() => setCoverageScope(coverageScope === 'week' ? 'all' : 'week')}
-                                                    className="underline hover:text-white"
+                                                    className="min-h-11 underline hover:text-white"
                                                 >
                                                     {coverageScope === 'week' ? `Show ${hiddenLaterCount} later` : 'Back to next 7 days'}
                                                 </button>
                                             )}
                                         </div>
                                         <div className="space-y-4">
-                                            {activeMatches.filter(m => !m.assignedLoggers || m.assignedLoggers.length === 0).length === 0 ? (
+                                            {unassignedMatches.length === 0 ? (
                                                 <div className="bg-white/5 border border-white/10 rounded-3xl p-12 text-center">
                                                     <CheckCircle2 size={32} className="text-primary mx-auto mb-4 opacity-20" />
                                                     <p className="text-xs font-bold uppercase tracking-widest text-white/40 italic">All matches covered</p>
                                                 </div>
                                             ) : (
-                                                activeMatches.filter(m => !m.assignedLoggers || m.assignedLoggers.length === 0).map((match) => (
-                                                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:border-white/20 transition-all group">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="w-12 h-12 rounded-2xl bg-black flex items-center justify-center border border-white/10 italic font-black text-xl">
+                                                unassignedMatches.map((match) => (
+                                                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-4 sm:p-6 hover:border-white/20 transition-all group">
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                                                                <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-black flex items-center justify-center border border-white/10 italic font-black text-lg sm:text-xl">
                                                                     {match.sport[0]}
                                                                 </div>
-                                                                <div>
-                                                                    <p className="text-sm font-bold">{match.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {match.awayTeam?.name ?? 'TBD'}</p>
-                                                                    <p className="text-[10px] text-white/30 font-bold italic">{match.competition}</p>
-                                                                    <div className="flex items-center gap-2 text-[10px] text-white/30 font-bold uppercase tracking-widest">
-                                                                        <Clock size={10} />
-                                                                        <span>{new Date(match.startTime).toLocaleString()}</span>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className="text-sm font-bold break-words [overflow-wrap:anywhere]">{match.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {match.awayTeam?.name ?? 'TBD'}</p>
+                                                                    <p className="text-[10px] text-white/30 font-bold italic break-words">{match.competition}</p>
+                                                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-white/30 font-bold uppercase tracking-widest">
+                                                                        <span className="flex items-center gap-1.5"><Clock size={10} />{safeToLocale(match.startTime, 'datetime', undefined, '—')}</span>
                                                                         {isOverdue(match) && <span className="text-amber-500">Overdue: status never updated</span>}
                                                                     </div>
                                                                 </div>
@@ -573,7 +594,7 @@ function AdminLoggersPageContent() {
                                                                     setSelectedMatch(match);
                                                                     setShowAssignModal(true);
                                                                 }}
-                                                                className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary hover:text-black hover:border-primary transition-all"
+                                                                className="shrink-0 min-h-11 px-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary hover:text-black hover:border-primary transition-all"
                                                             >
                                                                 Assign
                                                             </button>
@@ -584,63 +605,74 @@ function AdminLoggersPageContent() {
                                         </div>
                                     </div>
 
-                                    {/* Recently Assigned */}
-                                    <div className="space-y-6">
-                                        <h3 className="font-display italic uppercase tracking-tighter text-2xl">Covered Matches</h3>
+                                    {/* Covered */}
+                                    <div className="space-y-4">
+                                        <h3 className="font-display italic uppercase tracking-tighter text-2xl">
+                                            Covered <span className="text-white/40 tabular-nums">{coveredMatches.length}</span>
+                                        </h3>
                                         <div className="space-y-4">
-                                            {activeMatches.filter(m => m.assignedLoggers && m.assignedLoggers.length > 0).slice(0, 5).map((match) => {
-                                                return (
-                                                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 opacity-80 hover:opacity-100 transition-all">
-                                                        <div className="flex flex-col gap-4">
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className="w-10 h-10 rounded-full bg-white/10 border-2 border-black flex items-center justify-center text-xl">
-                                                                        {match.sport === 'Football' ? '⚽' : match.sport === 'Basketball' ? '🏀' : '🎮'}
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="text-xs font-bold">{match.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {match.awayTeam?.name ?? 'TBD'}</p>
-                                                                        <p className="text-[10px] text-white/30 font-bold italic">{match.competition}</p>
-                                                                        <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{new Date(match.startTime).toLocaleString()}</p>
-                                                                    </div>
+                                            {coveredMatches.length === 0 && (
+                                                <div className="bg-white/5 border border-white/10 rounded-3xl p-8 text-center">
+                                                    <p className="text-xs font-bold uppercase tracking-widest text-white/40 italic">No matches have a logger yet</p>
+                                                </div>
+                                            )}
+                                            {visibleCovered.map((match) => (
+                                                <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-4 sm:p-6 opacity-80 hover:opacity-100 transition-all">
+                                                    <div className="flex flex-col gap-4">
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                                                                <div className="w-10 h-10 shrink-0 rounded-full bg-white/10 border-2 border-black flex items-center justify-center text-xl">
+                                                                    {match.sport === 'Football' ? '⚽' : match.sport === 'Basketball' ? '🏀' : '🎮'}
                                                                 </div>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setSelectedMatch(match);
-                                                                        setShowAssignModal(true);
-                                                                    }}
-                                                                    className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
-                                                                >
-                                                                    Manage
-                                                                </button>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className="text-xs font-bold break-words [overflow-wrap:anywhere]">{match.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {match.awayTeam?.name ?? 'TBD'}</p>
+                                                                    <p className="text-[10px] text-white/30 font-bold italic break-words">{match.competition}</p>
+                                                                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{safeToLocale(match.startTime, 'datetime', undefined, '—')}</p>
+                                                                </div>
                                                             </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedMatch(match);
+                                                                    setShowAssignModal(true);
+                                                                }}
+                                                                className="shrink-0 min-h-11 px-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                                                            >
+                                                                Manage
+                                                            </button>
+                                                        </div>
 
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {match.assignedLoggers?.map(logger => (
-                                                                    <div key={logger.id} className="flex items-center gap-2 bg-black/40 rounded-full pl-1 pr-3 py-1 border border-white/5">
-                                                                        <div className="w-6 h-6 rounded-full bg-primary text-black flex items-center justify-center text-[10px] font-black italic">
-                                                                            {logger.name[0]}
-                                                                        </div>
-                                                                        <div className="flex flex-col">
-                                                                            <span className="text-[10px] font-bold text-white leading-none">{logger.name}</span>
-                                                                            <span className="text-[8px] text-primary uppercase font-black leading-none">{logger.role}</span>
-                                                                        </div>
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                if (confirm(`Remove ${logger.name} from this match?`)) {
-                                                                                    removeLogger(match.id, logger.id);
-                                                                                }
-                                                                            }}
-                                                                            className="ml-1 p-1 hover:bg-white/10 rounded-full text-white/40 hover:text-red-500 transition-colors"
-                                                                        >
-                                                                            <RefreshCw size={8} />
-                                                                        </button>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {match.assignedLoggers?.map(logger => (
+                                                                <div key={logger.id} className="flex items-center gap-2 bg-black/40 rounded-full pl-1 pr-1 py-1 border border-white/5 max-w-full">
+                                                                    <div className="w-6 h-6 shrink-0 rounded-full bg-primary text-black flex items-center justify-center text-[10px] font-black italic">
+                                                                        {logger.name[0]}
                                                                     </div>
-                                                                ))}
-                                                            </div>
+                                                                    <div className="flex flex-col min-w-0">
+                                                                        <span className="text-[10px] font-bold text-white leading-none truncate">{logger.name}</span>
+                                                                        <span className="text-[9px] text-primary uppercase font-black leading-none">{logger.role}</span>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => setRemoveTarget({ matchId: match.id, loggerId: logger.id, loggerName: logger.name })}
+                                                                        aria-label={`Remove ${logger.name} from this match`}
+                                                                        title="Remove from match"
+                                                                        className="-my-2 -mr-1 w-11 h-11 shrink-0 flex items-center justify-center rounded-full text-white/40 hover:text-red-500 hover:bg-white/10 transition-colors"
+                                                                    >
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
                                                         </div>
                                                     </div>
-                                                );
-                                            })}
+                                                </div>
+                                            ))}
+                                            {coveredMatches.length > COVERED_PREVIEW && (
+                                                <button
+                                                    onClick={() => setShowAllCovered(v => !v)}
+                                                    className="w-full min-h-11 text-[10px] font-black uppercase tracking-widest text-white/40 underline hover:text-white"
+                                                >
+                                                    {showAllCovered ? 'Show fewer' : `Show all ${coveredMatches.length}`}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -709,10 +741,10 @@ function AdminLoggersPageContent() {
                 </div>
             </div>
 
-            {/* Assign Modal */}
+            {/* Assign Modal: shows who is already on the match (removable) and only offers loggers that can still be added. */}
             <AnimatePresence>
-                {showAssignModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                {showAssignModal && modalMatch && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -724,53 +756,96 @@ function AdminLoggersPageContent() {
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                            className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 shadow-2xl overflow-hidden"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Assign logger"
+                            className="relative w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[#0a0a0a] border border-white/10 rounded-[32px] p-5 sm:p-8 shadow-2xl"
                         >
                             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
-                            <h3 className="font-display italic text-2xl uppercase mb-6">Assign Logger</h3>
+                            <h3 className="font-display italic text-2xl uppercase mb-6">{modalAssigned.length > 0 ? 'Manage Loggers' : 'Assign Logger'}</h3>
 
-                            <div className="bg-white/5 rounded-2xl p-4 mb-8 border border-white/5">
+                            <div className="bg-white/5 rounded-2xl p-4 mb-6 border border-white/5">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Match Selected</p>
-                                <p className="text-sm font-bold">{selectedMatch?.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {selectedMatch?.awayTeam?.name ?? 'TBD'}</p>
-                                <p className="text-[10px] text-white/40 font-bold italic">{selectedMatch?.competition}</p>
-                                <p className="text-[10px] text-primary font-black uppercase mt-1">
-                                    {selectedMatch ? new Date(selectedMatch.startTime).toLocaleString() : ''}
-                                </p>
+                                <p className="text-sm font-bold break-words [overflow-wrap:anywhere]">{modalMatch.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {modalMatch.awayTeam?.name ?? 'TBD'}</p>
+                                <p className="text-[10px] text-white/40 font-bold italic">{modalMatch.competition}</p>
+                                <p className="text-[10px] text-primary font-black uppercase mt-1">{safeToLocale(modalMatch.startTime, 'datetime', undefined, '—')}</p>
                             </div>
 
+                            {modalAssigned.length > 0 && (
+                                <div className="mb-6">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Assigned ({modalAssigned.length})</p>
+                                    <div className="space-y-2">
+                                        {modalAssigned.map(l => (
+                                            <div key={l.id} className="flex items-center justify-between gap-3 p-3 bg-white/5 rounded-2xl border border-white/10">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="w-9 h-9 shrink-0 rounded-full bg-primary text-black flex items-center justify-center text-xs font-black italic">{l.name[0]}</div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold italic truncate">{l.name}</p>
+                                                        <p className="text-[10px] text-primary font-black uppercase">{l.role}</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setRemoveTarget({ matchId: modalMatch.id, loggerId: l.id, loggerName: l.name })}
+                                                    className="shrink-0 min-h-11 px-3 rounded-xl border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/50 hover:text-red-500 hover:border-red-500/40 transition-colors"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <p className="text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Add a logger</p>
                             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                {/* Available loggers */}
-                                {loggers.filter(l => l.isAvailable).map(logger => (
+                                {modalCandidates.length === 0 && (
+                                    <p className="text-xs text-white/40 py-4 text-center">
+                                        {loggers.some(l => l.isAvailable)
+                                            ? 'Every available logger is already on this match.'
+                                            : 'No logger is marked available. Set one to Available on the Management tab.'}
+                                    </p>
+                                )}
+                                {modalCandidates.map(logger => (
                                     <button
                                         key={logger.id}
-                                        onClick={() => assignLogger(selectedMatch!.id, logger.id)}
-                                        className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-primary/50 hover:bg-white/10 transition-all group"
+                                        onClick={() => assignLogger(modalMatch.id, logger.id)}
+                                        className="w-full min-h-11 flex items-center justify-between gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-primary/50 hover:bg-white/10 transition-all group"
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-primary text-black flex items-center justify-center text-xs font-black italic">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-10 h-10 shrink-0 rounded-full bg-primary text-black flex items-center justify-center text-xs font-black italic">
                                                 {logger.name[0]}
                                             </div>
-                                            <div className="text-left">
-                                                <p className="text-sm font-bold italic group-hover:text-primary transition-colors">{logger.name}</p>
+                                            <div className="text-left min-w-0">
+                                                <p className="text-sm font-bold italic truncate group-hover:text-primary transition-colors">{logger.name}</p>
                                                 <p className="text-[10px] text-white/30 font-bold uppercase">{(logger.assignedMatches ?? []).filter(m => m.status !== 'FINISHED').length} Active Matches</p>
                                             </div>
                                         </div>
-                                        <ChevronRight size={16} className="text-white/20 group-hover:text-primary transition-colors" />
+                                        <ChevronRight size={16} className="shrink-0 text-white/20 group-hover:text-primary transition-colors" />
                                     </button>
                                 ))}
                             </div>
 
                             <button
                                 onClick={() => setShowAssignModal(false)}
-                                className="w-full mt-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-white/20 hover:text-white transition-colors"
+                                className="w-full mt-6 min-h-11 text-[10px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-white transition-colors"
                             >
-                                Cancel Assignment
+                                Close
                             </button>
                         </motion.div>
                     </div>
                 )}
             </AnimatePresence>
+
+            <ConfirmDialog
+                isOpen={removeTarget !== null}
+                onClose={() => !isRemoving && setRemoveTarget(null)}
+                onConfirm={() => removeTarget && removeLogger(removeTarget.matchId, removeTarget.loggerId)}
+                title="Remove logger?"
+                message={removeTarget ? `${removeTarget.loggerName} will no longer be able to log ${matchTitle(matches.find(m => m.id === removeTarget.matchId))}.` : ''}
+                confirmText="Remove"
+                isLoading={isRemoving}
+            />
 
             {/* Register Logger Modal */}
             <AnimatePresence>
