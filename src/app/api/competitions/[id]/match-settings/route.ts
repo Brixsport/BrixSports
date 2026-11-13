@@ -10,9 +10,9 @@ import { nanoid } from 'nanoid';
 // half_duration as the quarter length.
 function sportDefaults(sport: string) {
     if (sport.toLowerCase() === 'basketball') {
-        return { playersPerSide: 5, halfDuration: 10 as number | null, allowDraws: false, pointsForWin: 2, pointsForDraw: 0 };
+        return { playersPerSide: 5, halfDuration: 10 as number | null, allowDraws: false, pointsForWin: 2, pointsForDraw: 0, extraTimeEnabled: true, allowSubbedOutReentry: true };
     }
-    return { playersPerSide: 11, halfDuration: null as number | null, allowDraws: true, pointsForWin: 3, pointsForDraw: 1 };
+    return { playersPerSide: 11, halfDuration: null as number | null, allowDraws: true, pointsForWin: 3, pointsForDraw: 1, extraTimeEnabled: false, allowSubbedOutReentry: false };
 }
 
 // GET — fetch match settings for a competition
@@ -101,8 +101,8 @@ export async function POST(
                     customRules: customRules ? JSON.stringify(customRules) : null,
                     isTimed: isTimed ?? true,
                     maxSubstitutions: maxSubstitutions ?? null,
-                    allowSubbedOutReentry: allowSubbedOutReentry ?? false,
-                    extraTimeEnabled: extraTimeEnabled ?? false,
+                    allowSubbedOutReentry: allowSubbedOutReentry ?? defaults.allowSubbedOutReentry,
+                    extraTimeEnabled: extraTimeEnabled ?? defaults.extraTimeEnabled,
                     penaltiesEnabled: penaltiesEnabled ?? false,
                     allowDraws: allowDraws ?? defaults.allowDraws,
                     pointsForWin: pointsForWin ?? defaults.pointsForWin,
@@ -132,8 +132,8 @@ export async function POST(
             customRules: customRules ? JSON.stringify(customRules) : null,
             isTimed: isTimed ?? true,
             maxSubstitutions: maxSubstitutions ?? null,
-            allowSubbedOutReentry: allowSubbedOutReentry ?? false,
-            extraTimeEnabled: extraTimeEnabled ?? false,
+            allowSubbedOutReentry: allowSubbedOutReentry ?? defaults.allowSubbedOutReentry,
+            extraTimeEnabled: extraTimeEnabled ?? defaults.extraTimeEnabled,
             penaltiesEnabled: penaltiesEnabled ?? false,
             allowDraws: allowDraws ?? defaults.allowDraws,
             pointsForWin: pointsForWin ?? defaults.pointsForWin,

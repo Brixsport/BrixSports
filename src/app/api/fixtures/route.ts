@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
 import { eq, and, gte, lte, or, desc, asc, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { normalizeStartTime } from '@/lib/safe-date';
 import { PUBLIC_FIXTURE_MATCH_FIELDS } from '@/lib/public-match-fields';
 import { toPublicH2HTeam } from '@/lib/public-h2h';
 
@@ -199,6 +200,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const normalizedStartTime = normalizeStartTime(startTime);
+        if (!normalizedStartTime) {
+            return NextResponse.json({ error: 'Invalid startTime' }, { status: 422 });
+        }
+
         // Validate teams exist
         const [homeTeam] = await db
             .select()
@@ -237,7 +243,7 @@ export async function POST(request: NextRequest) {
             homeScore: 0,
             awayScore: 0,
             status,
-            startTime: new Date(startTime).toISOString(),
+            startTime: normalizedStartTime,
             venue,
             competition,
             stats: null,
