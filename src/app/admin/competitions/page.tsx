@@ -573,7 +573,7 @@ function AdminCompetitionsPageContent() {
     const fetchCompetitions = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=0`);
+            const response = await fetch(`/api/competitions?includeStats=true&includeArchived=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=0`);
 
             if (!response.ok) {
                 throw new Error('Failed to fetch competitions');
@@ -601,7 +601,7 @@ function AdminCompetitionsPageContent() {
     const loadMoreCompetitions = async () => {
         setIsLoadingMore(true);
         try {
-            const res = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=${competitions.length}`);
+            const res = await fetch(`/api/competitions?includeStats=true&includeArchived=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=${competitions.length}`);
             if (res.ok) {
                 const data = await res.json();
                 const nextPage = data.competitions.map((c: any) => ({
