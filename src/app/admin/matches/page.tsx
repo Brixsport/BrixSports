@@ -583,10 +583,11 @@ function AdminMatchesPageContent() {
                                     animate={{ opacity: 1, y: 0 }}
                                     className="bg-white/5 rounded-3xl p-4 sm:p-6 border border-white/10 hover:border-primary/50 transition-all"
                                 >
-                                    <div className="flex items-start gap-3 sm:gap-6">
+                                    {/* Top row: chips on the left, actions on the right, so names below get the full card width. */}
+                                    <div className="flex items-start justify-between gap-3 mb-4">
                                         <div className="flex-1 min-w-0">
                                             {/* Header: status, sport, competition. Wraps instead of clipping; the long label is truncated with a title. */}
-                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-4 min-w-0">
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
                                                 <span className={`shrink-0 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
                                                     match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-500' :
                                                         'bg-white/20 text-white/60'
@@ -607,43 +608,9 @@ function AdminMatchesPageContent() {
                                                 </span>
                                             </div>
 
-                                            {/* Teams stacked (logo, full name, score) so each name gets the whole card width
-                                                instead of a third of it between the score box and the actions. */}
-                                            <div className="space-y-2">
-                                                {(['home', 'away'] as const).map(side => (
-                                                    <div key={side} className="flex items-center gap-3 min-w-0">
-                                                        <AdminTeamLogo
-                                                            src={(side === 'home' ? match.homeTeam : match.awayTeam)?.logo}
-                                                            label={getTeamName(match, side)}
-                                                        />
-                                                        <p className="flex-1 min-w-0 text-base sm:text-lg font-bold leading-tight break-words [overflow-wrap:anywhere]">
-                                                            {getTeamName(match, side)}
-                                                        </p>
-                                                        {showScore && (
-                                                            <span className="shrink-0 w-10 text-right text-2xl font-display tabular-nums">
-                                                                {side === 'home' ? match.homeScore : match.awayScore}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-[10px] font-black uppercase tracking-widest text-white/40">
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    <Calendar size={14} className="text-primary" />
-                                                    <span>{safeToLocale(match.startTime, 'datetime', undefined, '—')}</span>
-                                                </div>
-                                                {match.venue && (
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <MapPin size={14} className="text-primary shrink-0" />
-                                                        <span className="truncate" title={match.venue}>{match.venue}</span>
-                                                    </div>
-                                                )}
-                                            </div>
                                         </div>
-
                                         {/* Actions: Edit stays one tap away, everything else lives in the kebab. */}
-                                        <div className="flex items-center gap-2 shrink-0">
+                                        <div className="flex items-center gap-2 shrink-0 -mt-1">
                                             <button
                                                 onClick={() => openEditModal(match)}
                                                 aria-label="Edit match"
@@ -660,9 +627,11 @@ function AdminMatchesPageContent() {
                                                     <MoreVertical size={18} />
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="min-w-52 bg-[#111] border-white/10 text-white">
-                                                    <DropdownMenuItem asChild className={itemClass}>
-                                                        <Link href="/admin/match-lineups"><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
-                                                    </DropdownMenuItem>
+                                                    {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
+                                                        <DropdownMenuItem asChild className={itemClass}>
+                                                            <Link href={`/admin/match-lineups?matchId=${encodeURIComponent(match.id)}`}><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
+                                                        </DropdownMenuItem>
+                                                    )}
                                                     {match.status === 'FINISHED' && (
                                                         <DropdownMenuItem asChild className={itemClass}>
                                                             <Link href={`/admin/match-ratings/${match.id}`}><Star size={16} className="text-yellow-400" />Adjust ratings</Link>
@@ -688,6 +657,39 @@ function AdminMatchesPageContent() {
                                             </DropdownMenu>
                                         </div>
                                     </div>
+                                        {/* Teams stacked (logo, full name, score) so each name gets the whole card width
+                                            instead of a third of it between the score box and the actions. */}
+                                        <div className="space-y-2">
+                                            {(['home', 'away'] as const).map(side => (
+                                                <div key={side} className="flex items-center gap-3 min-w-0">
+                                                    <AdminTeamLogo
+                                                        src={(side === 'home' ? match.homeTeam : match.awayTeam)?.logo}
+                                                        label={getTeamName(match, side)}
+                                                    />
+                                                    <p className="flex-1 min-w-0 text-base sm:text-lg font-bold leading-tight break-words [overflow-wrap:anywhere]">
+                                                        {getTeamName(match, side)}
+                                                    </p>
+                                                    {showScore && (
+                                                        <span className="shrink-0 w-10 text-right text-2xl font-display tabular-nums">
+                                                            {side === 'home' ? match.homeScore : match.awayScore}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-[10px] font-black uppercase tracking-widest text-white/40">
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Calendar size={14} className="text-primary" />
+                                                <span>{safeToLocale(match.startTime, 'datetime', undefined, '—')}</span>
+                                            </div>
+                                            {match.venue && (
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <MapPin size={14} className="text-primary shrink-0" />
+                                                    <span className="truncate" title={match.venue}>{match.venue}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                 </motion.div>
                                 );
                             })}
