@@ -465,7 +465,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">{player.number ? `#${player.number}` : ''}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">
@@ -508,7 +508,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">{player.number ? `#${player.number}` : ''}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">
@@ -558,7 +558,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">{player.number ? `#${player.number}` : ''}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">
@@ -601,7 +601,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                                                 onClick={() => onSelectPlayer?.(player)}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs font-bold text-foreground/40 w-8">#{player.number}</span>
+                                                                    <span className="text-xs font-bold text-foreground/40 w-8">{player.number ? `#${player.number}` : ''}</span>
                                                                     <span className="font-semibold">{player.name}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 text-xs">

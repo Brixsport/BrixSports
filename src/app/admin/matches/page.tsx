@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video, MoreVertical } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -60,6 +61,20 @@ interface Competition {
     status?: 'upcoming' | 'ongoing' | 'completed';
 }
 
+// 32px team crest with an initial badge when the logo is missing or fails to load (plain img: no remote-domain config).
+function AdminTeamLogo({ src, label }: { src?: string | null; label: string }) {
+    const [failed, setFailed] = useState(false);
+    if (!src || failed) {
+        return (
+            <span className="shrink-0 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-black text-white/60" aria-hidden="true">
+                {label.trim().charAt(0).toUpperCase() || '?'}
+            </span>
+        );
+    }
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" width={32} height={32} loading="lazy" onError={() => setFailed(true)} className="shrink-0 w-8 h-8 object-contain" />;
+}
+
 function AdminMatchesPageContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -70,6 +85,8 @@ function AdminMatchesPageContent() {
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [matches, setMatches] = useState<Match[]>([]);
     const [totalMatchCount, setTotalMatchCount] = useState(0);
+    // Total for the CURRENT status tab (drives Load More); totalMatchCount stays the all-matches stat.
+    const [listTotal, setListTotal] = useState(0);
     const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const MATCHES_PAGE_SIZE = 50;
@@ -126,6 +143,45 @@ function AdminMatchesPageContent() {
         fetchMatches();
     }, []);
 
+    // The status tabs filter on the server (a client-side filter over the loaded page showed empty tabs
+    // while matches existed further down). Upcoming reads soonest-first, the rest newest-first.
+    const listUrl = (status: string, offset: number) => {
+        const order = status === 'UPCOMING' ? 'start_asc' : status === 'all' ? '' : 'start_desc';
+        return `/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=${offset}`
+            + (status !== 'all' ? `&status=${status}` : '')
+            + (order ? `&order=${order}` : '');
+    };
+
+    // Every list load/append takes a token; a response whose token is no longer current (the admin switched
+    // tab, or the list was reloaded after a create/delete) is dropped instead of being mixed into the new list.
+    const listReqRef = useRef(0);
+    const reloadList = async (status: string, showSkeleton = true) => {
+        const my = ++listReqRef.current;
+        if (showSkeleton) setIsLoading(true);
+        try {
+            const res = await fetch(listUrl(status, 0));
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const rows = await res.json();
+            if (my !== listReqRef.current) return;
+            setMatches(rows);
+            const total = parseInt(res.headers.get('X-Total-Count') || '0', 10);
+            setListTotal(total);
+            if (status === 'all') setTotalMatchCount(total);
+        } catch (err) {
+            if (my === listReqRef.current) error('Failed to load matches. Please try again.');
+            console.error('Error loading filtered matches:', err);
+        } finally {
+            if (my === listReqRef.current && showSkeleton) setIsLoading(false);
+        }
+    };
+
+    const isFirstFilterRun = useRef(true);
+    useEffect(() => {
+        if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
+        reloadList(filterStatus);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterStatus]);
+
     const fetchCompetitionTeams = async (compId: string) => {
         setIsFetchingTeams(true);
         try {
@@ -164,14 +220,16 @@ function AdminMatchesPageContent() {
         setIsLoading(true);
         try {
             const [matchesRes, teamsRes, compsRes] = await Promise.all([
-                fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=0`),
+                fetch(listUrl(filterStatus, 0)),
                 fetch('/api/teams'),
                 fetch('/api/competitions')
             ]);
 
             if (matchesRes.ok) {
                 setMatches(await matchesRes.json());
-                setTotalMatchCount(parseInt(matchesRes.headers.get('X-Total-Count') || '0', 10));
+                const total = parseInt(matchesRes.headers.get('X-Total-Count') || '0', 10);
+                setListTotal(total);
+                if (filterStatus === 'all') setTotalMatchCount(total);
             }
             if (teamsRes.ok) setTeams(await teamsRes.json());
             if (compsRes.ok) {
@@ -194,9 +252,11 @@ function AdminMatchesPageContent() {
     const fetchStatusCounts = async () => {
         const statuses = ['LIVE', 'UPCOMING', 'HALF_TIME', 'FINISHED'];
         try {
-            const results = await Promise.all(
-                statuses.map(s => fetch(`/api/matches?status=${s}&limit=1`))
-            );
+            const [allRes, ...results] = await Promise.all([
+                fetch('/api/matches?limit=1'),
+                ...statuses.map(s => fetch(`/api/matches?status=${s}&limit=1`)),
+            ]);
+            if (allRes.ok) setTotalMatchCount(parseInt(allRes.headers.get('X-Total-Count') || '0', 10));
             const counts: Record<string, number> = {};
             statuses.forEach((s, i) => {
                 counts[s] = parseInt(results[i].headers.get('X-Total-Count') || '0', 10);
@@ -214,12 +274,16 @@ function AdminMatchesPageContent() {
     // X-Total-Count header driving the stat card and the Load More button.
     const loadMoreMatches = async () => {
         setIsLoadingMore(true);
+        const my = ++listReqRef.current;
         try {
-            const res = await fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=${matches.length}`);
+            const res = await fetch(listUrl(filterStatus, matches.length));
             if (res.ok) {
                 const nextPage: Match[] = await res.json();
-                setMatches(prev => [...prev, ...nextPage]);
-                setTotalMatchCount(parseInt(res.headers.get('X-Total-Count') || '0', 10));
+                if (my !== listReqRef.current) return;
+                setMatches(prev => [...prev, ...nextPage.filter(n => !prev.some(p => p.id === n.id))]);
+                const total = parseInt(res.headers.get('X-Total-Count') || '0', 10);
+                setListTotal(total);
+                if (filterStatus === 'all') setTotalMatchCount(total);
             }
         } catch (err) {
             error('Failed to load more matches. Please try again.');
@@ -249,7 +313,9 @@ function AdminMatchesPageContent() {
 
             if (response.ok) {
                 const newMatch = await response.json();
-                setMatches([...matches, newMatch]);
+                // Re-read page 0 of the current tab: the server decides where the new match sorts (or whether it belongs).
+                reloadList(filterStatus, false);
+                fetchStatusCounts();
                 setShowCreateModal(false);
                 setFormData({
                     sport: 'Football',
@@ -308,7 +374,8 @@ function AdminMatchesPageContent() {
             });
 
             if (response.ok) {
-                setMatches(matches.filter(m => m.id !== deleteDialog.itemId));
+                reloadList(filterStatus, false);
+                fetchStatusCounts();
                 success('Match deleted successfully!');
                 setDeleteDialog({ isOpen: false, itemId: null, itemName: '', isDeleting: false });
             } else {
@@ -431,12 +498,27 @@ function AdminMatchesPageContent() {
 
     // Prefer shortName from the embedded team object returned by /api/matches.
     // Fall back to the separately-fetched teams list, then raw ID as last resort.
+    // Full team name for the card (the short code stays for the delete dialog and as a last resort).
+    const getTeamName = (match: Match, side: 'home' | 'away') => {
+        const embedded = side === 'home' ? match.homeTeam : match.awayTeam;
+        if (embedded?.name) return embedded.name;
+        const teamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
+        const fallback = teams.find(t => t.id === teamId);
+        return fallback?.name ?? getTeamDisplay(match, side);
+    };
+
     const getTeamDisplay = (match: Match, side: 'home' | 'away') => {
         const embedded = side === 'home' ? match.homeTeam : match.awayTeam;
         if (embedded?.shortName) return embedded.shortName;
         const teamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
         const fallback = teams.find(t => t.id === teamId);
         return fallback?.shortName ?? fallback?.name ?? teamId;
+    };
+
+    // Count shown on each status tab (replaces the four stat cards on phones).
+    const tabCount = (status: string): number | null => {
+        if (status === 'all') return totalMatchCount > 0 ? totalMatchCount : null;
+        return statusCounts[status] ?? null;
     };
 
     const filteredMatches = matches.filter(match => {
@@ -450,8 +532,8 @@ function AdminMatchesPageContent() {
                 <ToastContainer toasts={toasts} onClose={removeToast} />
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                     <div>
-                        <h1 className="text-4xl font-display italic uppercase tracking-tight leading-none mb-2">Match Management</h1>
-                        <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Schedule and coordinate all active fixtures</p>
+                        <h1 className="text-2xl sm:text-4xl font-display italic uppercase tracking-tight leading-none mb-2">Match Management</h1>
+                        <p className="hidden sm:block text-white/40 text-xs font-bold uppercase tracking-widest">Schedule and coordinate all active fixtures</p>
                     </div>
                     <button
                         onClick={() => setShowCreateModal(true)}
@@ -462,7 +544,7 @@ function AdminMatchesPageContent() {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+                <div className="hidden md:grid grid-cols-4 gap-6 mb-12">
                     <StatCard label="Total Matches" value={totalMatchCount.toString()} icon={<Calendar className="text-primary" size={24} />} />
                     <StatCard label="Live" value={(statusCounts.LIVE ?? 0).toString()} icon={<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />} />
                     <StatCard label="Upcoming" value={(statusCounts.UPCOMING ?? 0).toString()} icon={<Calendar className="text-blue-500" size={24} />} />
@@ -487,7 +569,11 @@ function AdminMatchesPageContent() {
                                     : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'
                                     }`}
                             >
+                                {status === 'LIVE' && (statusCounts.LIVE ?? 0) > 0 && (
+                                    <span className="inline-block w-1.5 h-1.5 mr-1.5 align-middle bg-red-500 rounded-full animate-pulse" />
+                                )}
                                 {status.toUpperCase()}
+                                {tabCount(status) !== null && <span className="ml-1.5 opacity-60 tabular-nums">{tabCount(status)}</span>}
                             </button>
                         ))}
                     </div>
@@ -498,144 +584,127 @@ function AdminMatchesPageContent() {
                         <SkeletonLoader type="card" count={5} />
                     ) : (
                         <>
-                            {filteredMatches.map((match) => (
+                            {filteredMatches.map((match) => {
+                                const overdue = match.status === 'UPCOMING' && Date.parse(match.startTime) < Date.now() - 24 * 60 * 60 * 1000;
+                                const showScore = match.status !== 'UPCOMING';
+                                const itemClass = 'min-h-11 gap-3 cursor-pointer text-sm font-semibold text-white focus:bg-white/10 focus:text-white';
+                                return (
                                 <motion.div
                                     key={match.id}
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="bg-white/5 rounded-[32px] p-8 border border-white/10 hover:border-primary/50 transition-all group"
+                                    className="bg-white/5 rounded-3xl p-4 sm:p-6 border border-white/10 hover:border-primary/50 transition-all"
                                 >
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-                                        <div className="flex-1">
-                                            {/* Live device report: the competition/round label was the
-                                                one span in this header row with no min-w-0/truncate --
-                                                a long "{competition} · {round}" string (e.g. "NPUGA
-                                                (BASKETBALL) · Quarter-Final") rendered at its full
-                                                natural width, pushing the row past the viewport at any
-                                                width tight enough, or at default width once the OS-level
-                                                text-size accessibility setting scales it up (confirmed
-                                                live: 135% font-size reproduces a 27px page overflow here
-                                                that doesn't show at 100%). Same shrink-to-fit pattern as
-                                                the team names below -- min-w-0 on this row so the label
-                                                can shrink, shrink-0 on the three fixed badges before it. */}
-                                            <div className="flex items-center gap-4 mb-6 min-w-0">
+                                    {/* Top row: chips on the left, actions on the right, so names below get the full card width. */}
+                                    <div className="flex items-start justify-between gap-3 mb-4">
+                                        <div className="flex-1 min-w-0">
+                                            {/* Header: status, sport, competition. Wraps instead of clipping; the long label is truncated with a title. */}
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
                                                 <span className={`shrink-0 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
                                                     match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-500' :
                                                         'bg-white/20 text-white/60'
                                                     }`}>
                                                     {match.status}
                                                 </span>
+                                                {overdue && (
+                                                    <span className="shrink-0 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-500" title="Kick-off passed more than a day ago but the status was never updated">
+                                                        Overdue
+                                                    </span>
+                                                )}
                                                 <span className="shrink-0 text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
-                                                <div className="shrink-0 w-1 h-1 rounded-full bg-white/10" />
-                                                <span className="min-w-0 truncate text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
+                                                <span
+                                                    className="min-w-0 max-w-full truncate text-white/40 text-[10px] font-black uppercase tracking-widest"
+                                                    title={match.round ? `${match.competition} · ${match.round}` : match.competition}
+                                                >
+                                                    {match.round ? `${match.competition} · ${match.round}` : match.competition}
+                                                </span>
                                             </div>
 
-                                            {/* BACKLOG-343: these two flex-1 columns had no min-w-0, so
-                                                Tailwind's `truncate` (which needs a constrained/shrinkable
-                                                width to do anything) never actually engaged -- a long team
-                                                name rendered at its full intrinsic width and pushed the
-                                                whole card, and the page, past the viewport. min-w-0 lets the
-                                                flex item shrink below its content size so truncate can clip
-                                                it with an ellipsis instead, matching the same fix already
-                                                applied correctly on /admin/match-ratings.
-                                                BACKLOG-343 follow-up, live feedback: min-w-0 stopped
-                                                the overflow but at text-2xl + gap-12 + a 120px-min score box,
-                                                the column left for each name on mobile was so narrow that
-                                                truncate clipped real names down to one or two characters
-                                                ("C.") -- technically not overflowing, but unreadable. Same
-                                                "shrink to fit" direction as BACKLOG-336/343's other fixes:
-                                                smaller text/gaps/score-box padding at the default breakpoint
-                                                give the truncated text actual room instead of an ellipsis
-                                                doing all the work; full desktop sizing restored from sm:. */}
-                                            <div className="flex items-center gap-2 sm:gap-12 mb-6">
-                                                <div className="flex-1 min-w-0 text-right">
-                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
-                                                </div>
-                                                <div className="px-2 sm:px-6 py-1 sm:py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[64px] sm:min-w-[120px] flex items-center justify-center shrink-0">
-                                                    {match.status === 'UPCOMING' ? (
-                                                        <span className="text-white/20 text-xs sm:text-sm font-black italic">VS</span>
-                                                    ) : (
-                                                        <div className="flex items-center gap-1 sm:gap-4">
-                                                            <span className="text-lg sm:text-3xl font-display italic">{match.homeScore}</span>
-                                                            <span className="text-white/20 text-sm sm:text-xl font-display">-</span>
-                                                            <span className="text-lg sm:text-3xl font-display italic">{match.awayScore}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-white/20">
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar size={14} className="text-primary" />
-                                                    <span>{safeToLocale(match.startTime, 'datetime', undefined, '—')}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <MapPin size={14} className="text-primary" />
-                                                    <span>{match.venue}</span>
-                                                </div>
-                                            </div>
                                         </div>
-
-                                        {/* BACKLOG-343: this action-icon row is always flex-row (the
-                                            outer md:flex-col wrapper is a no-op -- it has only this one
-                                            child, so direction never visibly changes). Up to 6 fixed p-3
-                                            icon buttons in one line has enough natural width that on some
-                                            cards -- ones with a longer venue/date row pushing the info
-                                            column's own min-content width up -- the tablet-width card
-                                            (~753-777px available) couldn't fit both columns, overflowing
-                                            the page by up to ~25px. flex-wrap lets the row reflow onto a
-                                            second line only when it doesn't fit; at full desktop width
-                                            everything already fits on one line, so this is a no-op there. */}
-                                        <div className="flex flex-row md:flex-col gap-2">
-                                            <div className="flex flex-wrap justify-end gap-2">
-                                                <Link
-                                                    href={`/admin/match-lineups`}
-                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-blue-500/20 text-blue-400 transition-colors"
-                                                    title="Manage Lineups"
+                                        {/* Actions: Edit stays one tap away, everything else lives in the kebab. */}
+                                        <div className="flex items-center gap-2 shrink-0 -mt-1">
+                                            <button
+                                                onClick={() => openEditModal(match)}
+                                                aria-label="Edit match"
+                                                title="Edit match"
+                                                className="min-h-11 min-w-11 flex items-center justify-center bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
+                                            >
+                                                <Edit size={18} />
+                                            </button>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger
+                                                    aria-label="Match actions"
+                                                    className="min-h-11 min-w-11 flex items-center justify-center bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors data-[state=open]:bg-white/10"
                                                 >
-                                                    <ClipboardList size={20} />
-                                                </Link>
-                                                {match.status === 'FINISHED' && (
-                                                    <Link
-                                                        href={`/admin/match-ratings/${match.id}`}
-                                                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-yellow-500/20 text-yellow-400 transition-colors"
-                                                        title="Adjust Ratings"
+                                                    <MoreVertical size={18} />
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="min-w-52 bg-[#111] border-white/10 text-white">
+                                                    {(match.status === 'UPCOMING' || match.status === 'LIVE' || match.status === 'HALF_TIME') && (
+                                                        <DropdownMenuItem asChild className={itemClass}>
+                                                            <Link href={`/admin/match-lineups?matchId=${encodeURIComponent(match.id)}`}><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    {match.status === 'FINISHED' && (
+                                                        <DropdownMenuItem asChild className={itemClass}>
+                                                            <Link href={`/admin/match-ratings/${match.id}`}><Star size={16} className="text-yellow-400" />Adjust ratings</Link>
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
+                                                        <DropdownMenuItem asChild className={itemClass}>
+                                                            <Link href={`/admin/livestreams?matchId=${match.id}`}><Video size={16} className="text-red-400" />Manage livestream</Link>
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuItem asChild className={itemClass}>
+                                                        <Link href={`/logger?matchId=${match.id}`}><Eye size={16} />Open logger view</Link>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator className="bg-white/10" />
+                                                    <DropdownMenuItem
+                                                        variant="destructive"
+                                                        className="min-h-11 gap-3 cursor-pointer text-sm font-semibold"
+                                                        onSelect={() => confirmDelete(match.id, `${getTeamName(match, 'home')} vs ${getTeamName(match, 'away')}`)}
                                                     >
-                                                        <Star size={20} />
-                                                    </Link>
-                                                )}
-                                                {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
-                                                    <Link
-                                                        href={`/admin/livestreams?matchId=${match.id}`}
-                                                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-400 transition-colors"
-                                                        title="Manage Livestream"
-                                                    >
-                                                        <Video size={20} />
-                                                    </Link>
-                                                )}
-                                                <Link href={`/logger?matchId=${match.id}`} className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
-                                                    <Eye size={20} />
-                                                </Link>
-                                                <button
-                                                    onClick={() => openEditModal(match)}
-                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
-                                                >
-                                                    <Edit size={20} />
-                                                </button>
-                                                <button
-                                                    onClick={() => confirmDelete(match.id, `${getTeamDisplay(match, 'home')} vs ${getTeamDisplay(match, 'away')}`)}
-                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-500 transition-colors"
-                                                >
-                                                    <Trash2 size={20} />
-                                                </button>
-                                            </div>
+                                                        <Trash2 size={16} />Delete match
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </div>
+                                        {/* Teams stacked (logo, full name, score) so each name gets the whole card width
+                                            instead of a third of it between the score box and the actions. */}
+                                        <div className="space-y-2">
+                                            {(['home', 'away'] as const).map(side => (
+                                                <div key={side} className="flex items-center gap-3 min-w-0">
+                                                    <AdminTeamLogo
+                                                        src={(side === 'home' ? match.homeTeam : match.awayTeam)?.logo}
+                                                        label={getTeamName(match, side)}
+                                                    />
+                                                    <p className="flex-1 min-w-0 text-base sm:text-lg font-bold leading-tight break-words [overflow-wrap:anywhere]">
+                                                        {getTeamName(match, side)}
+                                                    </p>
+                                                    {showScore && (
+                                                        <span className="shrink-0 w-10 text-right text-2xl font-display tabular-nums">
+                                                            {side === 'home' ? match.homeScore : match.awayScore}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-[10px] font-black uppercase tracking-widest text-white/40">
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Calendar size={14} className="text-primary" />
+                                                <span>{safeToLocale(match.startTime, 'datetime', undefined, '—')}</span>
+                                            </div>
+                                            {match.venue && (
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <MapPin size={14} className="text-primary shrink-0" />
+                                                    <span className="truncate" title={match.venue}>{match.venue}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                 </motion.div>
-                            ))}
+                                );
+                            })}
 
                             {filteredMatches.length === 0 && (
                                 <div className="text-center py-24 bg-white/5 rounded-[32px] border border-white/10">
@@ -645,14 +714,14 @@ function AdminMatchesPageContent() {
                                 </div>
                             )}
 
-                            {matches.length < totalMatchCount && (
+                            {matches.length < listTotal && (
                                 <div className="flex flex-col items-center gap-3 py-8">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                        Showing {matches.length} of {totalMatchCount}
+                                        Showing {matches.length} of {listTotal}
                                     </p>
                                     <button
                                         onClick={loadMoreMatches}
-                                        disabled={isLoadingMore}
+                                        disabled={isLoadingMore || isLoading}
                                         className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors disabled:opacity-50"
                                     >
                                         {isLoadingMore ? 'Loading...' : 'Load More'}

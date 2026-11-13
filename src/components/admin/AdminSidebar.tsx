@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Activity, Shield, Users, Server, Settings, Globe,
     Trophy, Calendar, Video, Newspaper, TrendingUp,
-    Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User, Megaphone, Layers
+    Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User, Megaphone, Layers, ClipboardList
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { BrandMark } from '@/components/BrandMark';
@@ -21,6 +21,7 @@ const navItems = [
     { icon: <Layers size={18} />, label: "Teams", href: "/admin/teams" },
     { icon: <User size={18} />, label: "Player Profiles", href: "/admin/players" },
     { icon: <Calendar size={18} />, label: "Matches", href: "/admin/matches" },
+    { icon: <ClipboardList size={18} />, label: "Match Lineups", href: "/admin/match-lineups", adminOnly: true },
     { icon: <Calendar size={18} />, label: "Import Matches", href: "/admin/past-matches/import", adminOnly: true },
     { icon: <Timer size={18} />, label: "Track Events", href: "/admin/track-events" },
     { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams", adminOnly: true },

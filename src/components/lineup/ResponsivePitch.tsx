@@ -1,12 +1,12 @@
 'use client';
 
 import React from 'react';
-import { Shirt, ArrowRightLeft } from 'lucide-react';
+import { Shirt, ArrowDown } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 import { SoccerBootIcon } from '../icons/SoccerBootIcon';
 import { Player } from '@/types';
 import { cn } from '@/lib/utils';
-import { formatEventMinute } from '@/lib/eventMinute';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 import { motion } from 'framer-motion';
 
 // ========== TYPES ==========
@@ -152,7 +152,17 @@ function PlayerDot({
         <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group flex flex-col items-center"
+            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group flex flex-col items-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            role="button"
+            tabIndex={0}
+            aria-label={`${player.jerseyName || player.name}, number ${player.number}`}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClick?.();
+                }
+            }}
             style={{
                 left: `${position.x}%`,
                 top: `${visualY}%`,
@@ -216,7 +226,7 @@ function PlayerDot({
                 {isCaptain && (
                     <span className="text-yellow-400 text-[8px] font-black shrink-0">(C)</span>
                 )}
-                <span className="min-w-0 text-white text-[10px] sm:text-xs font-medium line-clamp-2 break-words text-center">
+                <span className="min-w-0 text-white text-[0.625rem] sm:text-xs font-medium break-words [overflow-wrap:anywhere] text-center">
                     {player.jerseyName || player.name}
                 </span>
                 {card === 'yellow' && (
@@ -248,8 +258,8 @@ function PlayerDot({
                 )}
                 {isSubstituted && (
                     <span className="flex items-center gap-px text-red-400 text-[9px] font-bold shrink-0" title="Substituted off">
-                        <ArrowRightLeft className="w-2.5 h-2.5" />
-                        {subMinute ? formatEventMinute(subMinute) : ''}
+                        <ArrowDown className="w-2.5 h-2.5" strokeWidth={3} />
+                        {hasKnownMinute(subMinute) ? formatEventMinute(subMinute) : ''}
                     </span>
                 )}
             </div>

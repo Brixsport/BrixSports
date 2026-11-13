@@ -99,7 +99,7 @@ export async function middleware(request: NextRequest) {
                 return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
             }
             const url = new URL('/login', request.url);
-            url.searchParams.set('callbackUrl', pathname);
+            url.searchParams.set('callbackUrl', pathname + request.nextUrl.search);
             return NextResponse.redirect(url);
         }
 
@@ -141,7 +141,7 @@ export async function middleware(request: NextRequest) {
                 return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
             }
             const url = new URL('/login', request.url);
-            url.searchParams.set('callbackUrl', pathname);
+            url.searchParams.set('callbackUrl', pathname + request.nextUrl.search);
             return NextResponse.redirect(url);
         }
     }
