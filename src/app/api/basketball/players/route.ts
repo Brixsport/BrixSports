@@ -89,7 +89,7 @@ export async function GET(request: Request) {
 
         const transformedPlayers = basketballPlayers.map(({ player, team, jerseyNumber }) => ({
             ...player,
-            number: jerseyNumber ?? (player.number > 0 ? player.number : null),
+            number: jerseyNumber && jerseyNumber > 0 ? jerseyNumber : (player.number > 0 ? player.number : null),
             team,
         }));
 
