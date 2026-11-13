@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video } from 'lucide-react';
@@ -70,6 +70,8 @@ function AdminMatchesPageContent() {
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [matches, setMatches] = useState<Match[]>([]);
     const [totalMatchCount, setTotalMatchCount] = useState(0);
+    // Total for the CURRENT status tab (drives Load More); totalMatchCount stays the all-matches stat.
+    const [listTotal, setListTotal] = useState(0);
     const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const MATCHES_PAGE_SIZE = 50;
@@ -126,6 +128,39 @@ function AdminMatchesPageContent() {
         fetchMatches();
     }, []);
 
+    // The status tabs filter on the server (a client-side filter over the loaded page showed empty tabs
+    // while matches existed further down). Upcoming reads soonest-first, the rest newest-first.
+    const listUrl = (status: string, offset: number) => {
+        const order = status === 'UPCOMING' ? 'start_asc' : status === 'all' ? '' : 'start_desc';
+        return `/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=${offset}`
+            + (status !== 'all' ? `&status=${status}` : '')
+            + (order ? `&order=${order}` : '');
+    };
+
+    const isFirstFilterRun = useRef(true);
+    useEffect(() => {
+        if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
+        let cancelled = false;
+        (async () => {
+            setIsLoading(true);
+            try {
+                const res = await fetch(listUrl(filterStatus, 0));
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const rows = await res.json();
+                if (cancelled) return;
+                setMatches(rows);
+                setListTotal(parseInt(res.headers.get('X-Total-Count') || '0', 10));
+            } catch (err) {
+                if (!cancelled) error('Failed to load matches. Please try again.');
+                console.error('Error loading filtered matches:', err);
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterStatus]);
+
     const fetchCompetitionTeams = async (compId: string) => {
         setIsFetchingTeams(true);
         try {
@@ -164,14 +199,16 @@ function AdminMatchesPageContent() {
         setIsLoading(true);
         try {
             const [matchesRes, teamsRes, compsRes] = await Promise.all([
-                fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=0`),
+                fetch(listUrl(filterStatus, 0)),
                 fetch('/api/teams'),
                 fetch('/api/competitions')
             ]);
 
             if (matchesRes.ok) {
                 setMatches(await matchesRes.json());
-                setTotalMatchCount(parseInt(matchesRes.headers.get('X-Total-Count') || '0', 10));
+                const total = parseInt(matchesRes.headers.get('X-Total-Count') || '0', 10);
+                setListTotal(total);
+                if (filterStatus === 'all') setTotalMatchCount(total);
             }
             if (teamsRes.ok) setTeams(await teamsRes.json());
             if (compsRes.ok) {
@@ -215,11 +252,13 @@ function AdminMatchesPageContent() {
     const loadMoreMatches = async () => {
         setIsLoadingMore(true);
         try {
-            const res = await fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=${matches.length}`);
+            const res = await fetch(listUrl(filterStatus, matches.length));
             if (res.ok) {
                 const nextPage: Match[] = await res.json();
                 setMatches(prev => [...prev, ...nextPage]);
-                setTotalMatchCount(parseInt(res.headers.get('X-Total-Count') || '0', 10));
+                const total = parseInt(res.headers.get('X-Total-Count') || '0', 10);
+                setListTotal(total);
+                if (filterStatus === 'all') setTotalMatchCount(total);
             }
         } catch (err) {
             error('Failed to load more matches. Please try again.');
@@ -249,7 +288,10 @@ function AdminMatchesPageContent() {
 
             if (response.ok) {
                 const newMatch = await response.json();
-                setMatches([...matches, newMatch]);
+                setMatches([newMatch, ...matches]);
+                setTotalMatchCount(c => c + 1);
+                setListTotal(c => c + 1);
+                fetchStatusCounts();
                 setShowCreateModal(false);
                 setFormData({
                     sport: 'Football',
@@ -309,6 +351,9 @@ function AdminMatchesPageContent() {
 
             if (response.ok) {
                 setMatches(matches.filter(m => m.id !== deleteDialog.itemId));
+                setTotalMatchCount(c => Math.max(0, c - 1));
+                setListTotal(c => Math.max(0, c - 1));
+                fetchStatusCounts();
                 success('Match deleted successfully!');
                 setDeleteDialog({ isOpen: false, itemId: null, itemName: '', isDeleting: false });
             } else {
@@ -645,10 +690,10 @@ function AdminMatchesPageContent() {
                                 </div>
                             )}
 
-                            {matches.length < totalMatchCount && (
+                            {matches.length < listTotal && (
                                 <div className="flex flex-col items-center gap-3 py-8">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                        Showing {matches.length} of {totalMatchCount}
+                                        Showing {matches.length} of {listTotal}
                                     </p>
                                     <button
                                         onClick={loadMoreMatches}
