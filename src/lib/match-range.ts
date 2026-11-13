@@ -1,4 +1,4 @@
-import { and, asc, desc, gte, lt, type SQL } from 'drizzle-orm';
+import { and, asc, desc, gte, lt, or, sql, type SQL } from 'drizzle-orm';
 import { matches } from '@/db/schema';
 
 // Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD window on matches.startTime (text column, ISO-prefixed
@@ -35,7 +35,12 @@ export function parseMatchRange(searchParams: URLSearchParams): MatchRange {
         conditions.push(lt(matches.startTime, nextDay(to)));
     }
     if (from !== null && to !== null && from > to) return { ok: false, error: 'from must not be after to' };
-    return { ok: true, conditions, ranged: conditions.length > 0 };
+    if (conditions.length === 0) return { ok: true, conditions, ranged: false };
+    // Legacy rows whose start_time is not ISO-prefixed (e.g. an epoch-ms string, 1 on prod) cannot be
+    // compared as text, so they are always included rather than silently orphaned. The client's day
+    // filter still decides whether they show.
+    const nonIso = sql`${matches.startTime} NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'`;
+    return { ok: true, conditions: [or(and(...conditions), nonIso)!], ranged: true };
 }
 
 /** Ranged requests are chronological (startTime, id); unranged keep the legacy newest-created order. */
