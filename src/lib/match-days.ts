@@ -70,13 +70,3 @@ export function formatDayLabel(key: string, todayKey: string): { primary: string
         secondary: format(d, sameYear ? 'd MMM' : 'd MMM yyyy'),
     };
 }
-
-/**
- * Days the strip shows: the last `pastDays` days and everything upcoming, plus the
- * selected day so it never drops out of the strip. Older seasons stay reachable
- * from the competition pages.
- */
-export function trimStripDays(days: string[], todayKey: string, selected: string, pastDays = 14): string[] {
-    const cutoff = format(addDays(dayKeyToDate(todayKey), -pastDays), KEY_FORMAT);
-    return days.filter(d => d >= cutoff || d === selected);
-}
