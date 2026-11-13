@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Activity, Play, Users, Clock } from 'lucide-react';
 import { useResilientFetch } from '@/hooks/useResilientFetch';
 import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
+import { parseSafeDate } from '@/lib/safe-date';
 
 interface Match {
     id: string;
@@ -158,12 +159,12 @@ export default function LiveCenter() {
                                                     rather than throwing, so it rendered unguarded on a real public
                                                     match card. Defensive coercion: degrade to "TBD" instead. */}
                                                 <span>{(() => {
-                                                    const d = new Date(match.startTime);
+                                                    const d = parseSafeDate(match.startTime);
                                                     // No locale arg -- uses the viewer's own device locale (and
                                                     // always the device's local timezone regardless, per Date's
                                                     // own semantics) rather than assuming 'en-US' formatting for
                                                     // every viewer.
-                                                    return isNaN(d.getTime())
+                                                    return !d
                                                         ? 'TBD'
                                                         : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
                                                 })()}</span>

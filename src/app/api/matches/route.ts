@@ -5,6 +5,7 @@ import { eq, and, or, inArray, desc, sql } from 'drizzle-orm'; // inArray kept f
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { validateMatchTeams } from '@/lib/match-bulk-input';
+import { normalizeStartTime } from '@/lib/safe-date';
 import { playerRatings } from '@/db/schema-ratings';
 
 // BACKLOG-258: explicit allow-list, not `db.select()` (full row). Every
@@ -278,6 +279,14 @@ export async function POST(request: NextRequest) {
                 : 'Unknown');
 
         matchData.competitionId = matchData.competitionId || null;
+
+        if (matchData.startTime !== undefined) {
+            const normalized = normalizeStartTime(matchData.startTime as string);
+            if (!normalized) {
+                return NextResponse.json({ error: 'Invalid startTime' }, { status: 422 });
+            }
+            matchData.startTime = normalized;
+        }
 
         const newMatch = await db.insert(matches).values({
             ...matchData,

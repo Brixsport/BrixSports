@@ -12,6 +12,7 @@ import { matchReminders, matches, pushSubscriptions } from '@/db/schema';
 import { eq, and, lt, gte } from 'drizzle-orm';
 import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 import { validateReminderRequest } from '@/lib/notifications/reminder-input';
+import { parseSafeDate } from '@/lib/safe-date';
 
 /**
  * GET /api/reminders
@@ -132,7 +133,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Calculate reminder time
-        const matchStartTime = new Date(match.startTime);
+        const matchStartTime = parseSafeDate(match.startTime);
+        if (!matchStartTime) {
+            return NextResponse.json({ error: 'Match has no valid start time' }, { status: 422 });
+        }
         const reminderTime = new Date(matchStartTime.getTime() - minutesBefore * 60 * 1000);
 
         // Create reminder

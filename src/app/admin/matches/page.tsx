@@ -10,6 +10,7 @@ import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
+import { normalizeStartTime, safeToLocale, toLagosInputValue } from '@/lib/safe-date';
 
 interface MatchTeam {
     name: string;
@@ -330,8 +331,7 @@ function AdminMatchesPageContent() {
         // inside .toISOString() with no error shown to the admin -- the Edit
         // button just did nothing. Guard it: an invalid date falls back to an
         // empty string, which the datetime-local input already renders as blank.
-        const parsedStart = new Date(match.startTime);
-        const startTimeValue = isNaN(parsedStart.getTime()) ? '' : parsedStart.toISOString().slice(0, 16);
+        const startTimeValue = toLagosInputValue(match.startTime);
         setFormData({
             sport: match.sport,
             homeTeamId: match.homeTeamId,
@@ -407,8 +407,7 @@ function AdminMatchesPageContent() {
                             // held together by the datetime-local input's `required` HTML attribute,
                             // not by code, so it's silent-by-luck rather than silent-by-design.
                             startTime: (() => {
-                                const parsed = new Date(formData.startTime);
-                                return isNaN(parsed.getTime()) ? editingMatch.startTime : parsed.toISOString();
+                                return normalizeStartTime(formData.startTime) ?? editingMatch.startTime;
                             })(),
                             homeScore: formData.homeScore,
                             awayScore: formData.awayScore,
@@ -571,7 +570,7 @@ function AdminMatchesPageContent() {
                                             <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-white/20">
                                                 <div className="flex items-center gap-2">
                                                     <Calendar size={14} className="text-primary" />
-                                                    <span>{isNaN(new Date(match.startTime).getTime()) ? '—' : new Date(match.startTime).toLocaleString()}</span>
+                                                    <span>{safeToLocale(match.startTime, 'datetime', undefined, '—')}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <MapPin size={14} className="text-primary" />
