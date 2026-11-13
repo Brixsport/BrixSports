@@ -560,7 +560,6 @@ function AdminLoggersPageContent() {
                                                                 </div>
                                                                 <div>
                                                                     <p className="text-sm font-bold">{match.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {match.awayTeam?.name ?? 'TBD'}</p>
-                                                                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">H: {match.homeTeam?.shortName ?? '—'} · A: {match.awayTeam?.shortName ?? '—'}</p>
                                                                     <p className="text-[10px] text-white/30 font-bold italic">{match.competition}</p>
                                                                     <div className="flex items-center gap-2 text-[10px] text-white/30 font-bold uppercase tracking-widest">
                                                                         <Clock size={10} />
