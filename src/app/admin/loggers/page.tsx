@@ -141,6 +141,10 @@ function AdminLoggersPageContent() {
                 liveRes.json(), upcomingRes.json(), halfTimeRes.json()
             ]);
             const matchesData = [...liveData, ...upcomingData, ...halfTimeData];
+            // Soonest-first with a 200 cap: if the cap is hit, stale past fixtures may have pushed real ones out.
+            if (Array.isArray(upcomingData) && upcomingData.length >= 200) {
+                error('Coverage list is capped at 200 upcoming matches; some may be missing.');
+            }
             const analyticsData = analyticsRes.ok ? await analyticsRes.json() : null;
 
             setLoggers(Array.isArray(loggersData) ? loggersData : []);
@@ -555,7 +559,9 @@ function AdminLoggersPageContent() {
                                                                     {match.sport[0]}
                                                                 </div>
                                                                 <div>
-                                                                    <p className="text-sm font-bold italic">{match.competition}</p>
+                                                                    <p className="text-sm font-bold">{match.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {match.awayTeam?.name ?? 'TBD'}</p>
+                                                                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">H: {match.homeTeam?.shortName ?? '—'} · A: {match.awayTeam?.shortName ?? '—'}</p>
+                                                                    <p className="text-[10px] text-white/30 font-bold italic">{match.competition}</p>
                                                                     <div className="flex items-center gap-2 text-[10px] text-white/30 font-bold uppercase tracking-widest">
                                                                         <Clock size={10} />
                                                                         <span>{new Date(match.startTime).toLocaleString()}</span>
@@ -593,7 +599,8 @@ function AdminLoggersPageContent() {
                                                                         {match.sport === 'Football' ? '⚽' : match.sport === 'Basketball' ? '🏀' : '🎮'}
                                                                     </div>
                                                                     <div>
-                                                                        <p className="text-xs font-bold italic">{match.competition}</p>
+                                                                        <p className="text-xs font-bold">{match.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {match.awayTeam?.name ?? 'TBD'}</p>
+                                                                        <p className="text-[10px] text-white/30 font-bold italic">{match.competition}</p>
                                                                         <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{new Date(match.startTime).toLocaleString()}</p>
                                                                     </div>
                                                                 </div>
@@ -721,7 +728,8 @@ function AdminLoggersPageContent() {
 
                             <div className="bg-white/5 rounded-2xl p-4 mb-8 border border-white/5">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Match Selected</p>
-                                <p className="text-sm font-bold italic">{selectedMatch?.competition}</p>
+                                <p className="text-sm font-bold">{selectedMatch?.homeTeam?.name ?? 'TBD'} <span className="text-white/40 font-normal">vs</span> {selectedMatch?.awayTeam?.name ?? 'TBD'}</p>
+                                <p className="text-[10px] text-white/40 font-bold italic">{selectedMatch?.competition}</p>
                                 <p className="text-[10px] text-primary font-black uppercase mt-1">
                                     {selectedMatch ? new Date(selectedMatch.startTime).toLocaleString() : ''}
                                 </p>
