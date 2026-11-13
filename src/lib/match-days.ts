@@ -70,3 +70,30 @@ export function formatDayLabel(key: string, todayKey: string): { primary: string
         secondary: format(d, sameYear ? 'd MMM' : 'd MMM yyyy'),
     };
 }
+
+/** Day keys (yyyy-MM-dd, local time) from the lightweight match-days feed, optionally for one sport. */
+export function dayKeysFromFeed(
+    rows: ReadonlyArray<{ sport: string; startTime: DateInput }>,
+    matchesSport: (sport: string) => boolean,
+): string[] {
+    return getMatchDays(rows.filter(r => matchesSport(r.sport)));
+}
+
+/** Overwrite-by-id merge: fresh rows replace their old versions, rows outside the fresh fetch are kept. */
+export function mergeMatchesById<T extends { id: string }>(existing: ReadonlyArray<T>, fresh: ReadonlyArray<T>): T[] {
+    const byId = new Map<string, T>();
+    for (const m of existing) byId.set(m.id, m);
+    for (const m of fresh) byId.set(m.id, m);
+    return [...byId.values()];
+}
+
+/** Inclusive [from, to] day keys of `radius` days around `key`, for a ranged matches fetch. */
+export function windowAround(key: string, radius: number): { from: string; to: string } {
+    const d = dayKeyToDate(key);
+    return { from: format(addDays(d, -radius), KEY_FORMAT), to: format(addDays(d, radius), KEY_FORMAT) };
+}
+
+/** True when `key` lies inside the inclusive window. */
+export function inWindow(key: string, w: { from: string; to: string }): boolean {
+    return key >= w.from && key <= w.to;
+}

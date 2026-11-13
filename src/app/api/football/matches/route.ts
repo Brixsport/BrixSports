@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { eq, and, inArray, desc } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { parseListPaging } from '@/lib/list-paging';
+import { parseMatchRange, matchRangeOrder } from '@/lib/match-range';
 
 // Public DTO -- must never include CLAUDE.md's banned fields (loggerId,
 // approvalStatus, managerNotes, approvedBy, approvedAt) or anything else not
@@ -53,6 +54,11 @@ export async function GET(request: Request) {
         const competition = searchParams.get('competition');
         // Default stays 100 (the old fixed cap); callers that need more pages ask with limit/offset.
         const { limit, offset } = parseListPaging(searchParams, { defaultLimit: 100, maxLimit: 200 });
+        // Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD startTime window; ranged requests come back chronologically.
+        const range = parseMatchRange(searchParams);
+        if (!range.ok) {
+            return NextResponse.json({ success: false, error: range.error }, { status: 422, headers: NO_STORE_HEADERS });
+        }
 
         // Build query with conditional filters
         const conditions = [eq(matches.sport, 'Football')];
@@ -71,6 +77,7 @@ export async function GET(request: Request) {
             conditions.push(eq(matches.competition, competition));
         }
 
+        conditions.push(...range.conditions);
         const whereConditions = and(...conditions);
 
         // Get all football matches
@@ -78,7 +85,7 @@ export async function GET(request: Request) {
             .select(PUBLIC_MATCH_FIELDS)
             .from(matches)
             .where(whereConditions)
-            .orderBy(desc(matches.createdAt), desc(matches.id))
+            .orderBy(...matchRangeOrder(range.ranged))
             .limit(limit)
             .offset(offset)
             .all();
