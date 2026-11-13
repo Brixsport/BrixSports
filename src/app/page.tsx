@@ -110,7 +110,9 @@ export default function Home() {
       const picked = selectedDayRef.current;
       if (picked && !inWindow(picked, windows[0])) windows.push(windowAround(picked, 7));
       const fetchSport = (sport: string) => windows.map(w =>
-        fetch(`/api/${sport}/matches?from=${w.from}&to=${w.to}&limit=200`));
+        // `from` is padded one day: the server compares UTC date text, and a 00:00-01:00 Lagos kick-off
+        // has the previous UTC date. The day filter below does the exact cut.
+        fetch(`/api/${sport}/matches?from=${windowAround(w.from, 1).from}&to=${w.to}&limit=200`));
       const sportResponses = await Promise.all([
         Promise.all(fetchSport('basketball')),
         Promise.all(fetchSport('football')),
