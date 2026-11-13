@@ -741,7 +741,7 @@ function AdminLoggersPageContent() {
                             >
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 space-y-6">
-                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Efficiency Leaderboard</h4>
+                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Efficiency Leaderboard · all time</h4>
                                         <div className="space-y-6">
                                             {!analytics?.loggers?.length && (
                                                 <p className="text-xs text-white/40">No logger activity recorded yet.</p>
