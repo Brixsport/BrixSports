@@ -188,7 +188,7 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
             <div className="flex justify-end px-4 py-2">
                 <button
                     onClick={handleShareLineup}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 border border-border text-xs font-semibold transition-colors"
+                    className="flex items-center gap-1.5 min-h-11 px-4 rounded-full bg-muted hover:bg-muted/80 border border-border text-xs font-semibold transition-colors"
                 >
                     Share LineUp
                     <Share2 className="w-3.5 h-3.5" />
