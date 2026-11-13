@@ -252,9 +252,11 @@ function AdminMatchesPageContent() {
     const fetchStatusCounts = async () => {
         const statuses = ['LIVE', 'UPCOMING', 'HALF_TIME', 'FINISHED'];
         try {
-            const results = await Promise.all(
-                statuses.map(s => fetch(`/api/matches?status=${s}&limit=1`))
-            );
+            const [allRes, ...results] = await Promise.all([
+                fetch('/api/matches?limit=1'),
+                ...statuses.map(s => fetch(`/api/matches?status=${s}&limit=1`)),
+            ]);
+            if (allRes.ok) setTotalMatchCount(parseInt(allRes.headers.get('X-Total-Count') || '0', 10));
             const counts: Record<string, number> = {};
             statuses.forEach((s, i) => {
                 counts[s] = parseInt(results[i].headers.get('X-Total-Count') || '0', 10);
@@ -513,6 +515,12 @@ function AdminMatchesPageContent() {
         return fallback?.shortName ?? fallback?.name ?? teamId;
     };
 
+    // Count shown on each status tab (replaces the four stat cards on phones).
+    const tabCount = (status: string): number | null => {
+        if (status === 'all') return totalMatchCount > 0 ? totalMatchCount : null;
+        return statusCounts[status] ?? null;
+    };
+
     const filteredMatches = matches.filter(match => {
         if (filterStatus === 'all') return true;
         return match.status === filterStatus;
@@ -524,8 +532,8 @@ function AdminMatchesPageContent() {
                 <ToastContainer toasts={toasts} onClose={removeToast} />
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                     <div>
-                        <h1 className="text-4xl font-display italic uppercase tracking-tight leading-none mb-2">Match Management</h1>
-                        <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Schedule and coordinate all active fixtures</p>
+                        <h1 className="text-2xl sm:text-4xl font-display italic uppercase tracking-tight leading-none mb-2">Match Management</h1>
+                        <p className="hidden sm:block text-white/40 text-xs font-bold uppercase tracking-widest">Schedule and coordinate all active fixtures</p>
                     </div>
                     <button
                         onClick={() => setShowCreateModal(true)}
@@ -536,7 +544,7 @@ function AdminMatchesPageContent() {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+                <div className="hidden md:grid grid-cols-4 gap-6 mb-12">
                     <StatCard label="Total Matches" value={totalMatchCount.toString()} icon={<Calendar className="text-primary" size={24} />} />
                     <StatCard label="Live" value={(statusCounts.LIVE ?? 0).toString()} icon={<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />} />
                     <StatCard label="Upcoming" value={(statusCounts.UPCOMING ?? 0).toString()} icon={<Calendar className="text-blue-500" size={24} />} />
@@ -561,7 +569,11 @@ function AdminMatchesPageContent() {
                                     : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'
                                     }`}
                             >
+                                {status === 'LIVE' && (statusCounts.LIVE ?? 0) > 0 && (
+                                    <span className="inline-block w-1.5 h-1.5 mr-1.5 align-middle bg-red-500 rounded-full animate-pulse" />
+                                )}
                                 {status.toUpperCase()}
+                                {tabCount(status) !== null && <span className="ml-1.5 opacity-60 tabular-nums">{tabCount(status)}</span>}
                             </button>
                         ))}
                     </div>
