@@ -4,6 +4,7 @@ import { standings } from '@/db/schema';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { STANDINGS_ORDER_BY } from '@/lib/standingsService';
+import { toPublicStandingDTO, sortStandingDTOs } from '@/lib/standings-dto';
 
 export async function GET(request: Request) {
     try {
@@ -31,7 +32,9 @@ export async function GET(request: Request) {
             limit: 500,
         });
 
-        return NextResponse.json(allStandings);
+        return NextResponse.json(
+            sortStandingDTOs(allStandings.map(({ team, ...row }) => toPublicStandingDTO(row, team)))
+        );
     } catch (error) {
         console.error('Error fetching standings:', error);
         return NextResponse.json({ error: 'Failed to fetch standings' }, { status: 500 });

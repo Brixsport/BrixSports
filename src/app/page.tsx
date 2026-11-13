@@ -21,7 +21,7 @@ import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { startVisiblePolling } from '@/lib/visible-poll';
 import { mergeLiveScores, applyLiveSnapshot, shouldRunFullRefresh, type LiveSnapshot } from '@/lib/live-overlay';
-import { safeToLocale } from '@/lib/safe-date';
+import { safeToLocale, parseSafeDate } from '@/lib/safe-date';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
@@ -364,8 +364,8 @@ export default function Home() {
 
     // Date filter - only apply if a date is selected
     if (selectedDate) {
-      const matchDate = new Date(m.startTime);
-      if (!isSameDay(matchDate, selectedDate)) {
+      const matchDate = parseSafeDate(m.startTime);
+      if (!matchDate || !isSameDay(matchDate, selectedDate)) {
         return false;
       }
     }
@@ -382,9 +382,10 @@ export default function Home() {
   // its own group. Guard: unparseable dates sort to the end (oldest), never let
   // NaN reach the comparator at all.
   const sortedMatches = [...filteredMatches].sort((a, b) => {
-    const aTime = new Date(a.startTime).getTime();
-    const bTime = new Date(b.startTime).getTime();
-    return (isNaN(bTime) ? -Infinity : bTime) - (isNaN(aTime) ? -Infinity : aTime);
+    const aTime = parseSafeDate(a.startTime)?.getTime() ?? -Infinity;
+    const bTime = parseSafeDate(b.startTime)?.getTime() ?? -Infinity;
+    if (aTime === bTime) return 0;
+    return bTime - aTime;
   });
 
   // BUG-213: `toLocaleDateString()` on an unparseable date returns the literal
@@ -392,8 +393,8 @@ export default function Home() {
   // header. A clearly-labeled fallback communicates "we don't know" honestly
   // instead of looking like the app itself is broken.
   const formatGroupDate = (startTime: string) => {
-    const d = new Date(startTime);
-    if (isNaN(d.getTime())) return 'Date Unknown';
+    const d = parseSafeDate(startTime);
+    if (!d) return 'Date Unknown';
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
@@ -423,7 +424,7 @@ export default function Home() {
         // already set from match.round above
       } else if (!roundNum || isNaN(roundNum) || roundNum > 100 || roundNum < 1) {
         // Fallback to date-based calculation
-        const matchDate = new Date(match.startTime);
+        const matchDate = parseSafeDate(match.startTime) ?? new Date(NaN);
 
         // Handle 2026 Playoffs explicitly
         if (matchDate.getFullYear() === 2026 && matchDate.getMonth() === 0) { // Jan 2026

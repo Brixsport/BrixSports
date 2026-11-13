@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { db } from '@/db';
 import { matches, teams, players, news, competitions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, or, isNull } from 'drizzle-orm';
 
 // Sitemap protocol caps a single file at 50,000 URLs -- these limits are a safe,
 // generous ceiling for this project's actual scale (dozens-to-low-hundreds of
@@ -206,13 +206,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         const allCompetitions = await db
             .select({ id: competitions.id, updatedAt: competitions.updatedAt })
             .from(competitions)
+            .where(or(isNull(competitions.isArchived), eq(competitions.isArchived, false)))
             .limit(MAX_PER_ENTITY);
         dynamicPages.push(
             ...allCompetitions.map((c) => ({
-                // The bare /competitions/[id] route just redirects here (301) --
-                // pointing the sitemap straight at the canonical destination avoids
-                // an unnecessary redirect hop for crawlers.
-                url: `${baseUrl}/competitions/${c.id}/standings`,
+                url: `${baseUrl}/competitions/${c.id}`,
                 lastModified: safeDate(c.updatedAt),
                 changeFrequency: 'daily' as const,
                 priority: 0.8,
