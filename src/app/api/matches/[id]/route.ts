@@ -25,6 +25,7 @@ import { revertEventStats } from '@/lib/playerStatsService';
 import { safeParseEventValue } from '@/lib/eventValue';
 import { advanceBracketForMatch } from '@/lib/bracketService';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { isFinishedLockViolation } from '@/lib/match-finished-lock';
@@ -415,6 +416,9 @@ export async function PATCH(
             // expected conditions, not new failure modes introduced here.
             after(async () => {
                 try {
+                    // Ratings are switched off until they are ready: no automatic
+                    // recalculation on FINISHED while the flag is closed.
+                    if (!(await isRatingsEnabled())) return;
                     await calculateAndSaveRatings(matchId);
                 } catch (error) {
                     console.error('Error calculating ratings on FINISHED transition:', error);

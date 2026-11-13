@@ -3,6 +3,7 @@ import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 import { PWAProvider } from '@/components/pwa/PWAProvider';
 import { AdminDashboardLayout } from '@/components/admin/AdminDashboardLayout';
 
@@ -28,6 +29,7 @@ export default async function AdminLayout({
 }) {
     const cookieStore = await cookies();
     const token = cookieStore.get('authToken')?.value;
+    let ratingsBlocked = false;
 
     if (!token) {
         redirect('/login?callbackUrl=/admin');
@@ -58,6 +60,13 @@ export default async function AdminLayout({
         if (payload.role !== 'admin' && payload.role !== 'logger_manager' && !isScopedRatingsLogger) {
             redirect('/');
         }
+
+        // Ratings are hidden until the flag is turned on (closed by default).
+        // Checked after the role check so the notice is only shown to staff.
+        const isRatingsPath = pathname === '/admin/match-ratings' || pathname.startsWith('/admin/match-ratings/');
+        if (isRatingsPath && !(await isRatingsEnabled())) {
+            ratingsBlocked = true;
+        }
     } catch (error) {
         console.error('Admin layout auth error:', error);
         redirect('/login?callbackUrl=/admin');
@@ -71,7 +80,14 @@ export default async function AdminLayout({
             showInstallPrompt={true}
         >
             <AdminDashboardLayout>
-                {children}
+                {ratingsBlocked ? (
+                    <div className="min-h-[60vh] flex items-center justify-center p-8">
+                        <div className="max-w-md text-center space-y-3">
+                            <h1 className="text-xl font-bold text-white">Match ratings are temporarily disabled</h1>
+                            <p className="text-sm text-white/50">Ratings are being reworked and are not available yet.</p>
+                        </div>
+                    </div>
+                ) : children}
             </AdminDashboardLayout>
         </PWAProvider>
     );
