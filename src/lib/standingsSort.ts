@@ -2,7 +2,7 @@
 // consumers. Must stay in exact sync with standingsService.ts's STANDINGS_ORDER_BY
 // (Drizzle order-by array), which encodes the same chain for DB-level sorting.
 // Chain: Points -> GD -> Goals For -> Yellow Cards (fewer better) -> Red Cards
-// (fewer better) -> teamId (total order, prevents position flicker on a full tie).
+// (fewer better) -> team name A-Z (when known) -> teamId (total order, prevents position flicker on a full tie).
 export interface StandingsSortable {
     points: number;
     goalDifference: number;
@@ -10,6 +10,7 @@ export interface StandingsSortable {
     yellowCards?: number | null;
     redCards?: number | null;
     teamId: string;
+    teamName?: string | null;
 }
 
 export function compareStandings(a: StandingsSortable, b: StandingsSortable): number {
@@ -20,6 +21,10 @@ export function compareStandings(a: StandingsSortable, b: StandingsSortable): nu
     if (ay !== by) return ay - by;
     const ar = a.redCards ?? 0, br = b.redCards ?? 0;
     if (ar !== br) return ar - br;
+    if (a.teamName && b.teamName) {
+        const byName = a.teamName.localeCompare(b.teamName, 'en', { sensitivity: 'base' });
+        if (byName !== 0) return byName;
+    }
     if (a.teamId < b.teamId) return -1;
     if (a.teamId > b.teamId) return 1;
     return 0;
