@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { bracketNodes, matches } from '@/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { normalizeStartTime } from '@/lib/safe-date';
 
 // BACKLOG-280: knockout bracket service. Structure is fixed at top-8
 // (QF x4 -> SF x2 -> 3rd Place + Final, 8 bracketNodes total) -- matches
@@ -41,6 +42,12 @@ export async function createKnockoutStructure(input: CreateKnockoutInput) {
         throw new Error('A knockout bracket already exists for this competition');
     }
 
+    const normalizedStarts = qf.map((slot, i) => {
+        const normalized = normalizeStartTime(slot.startTime);
+        if (!normalized) throw new Error(`Invalid startTime for quarter-final ${i + 1}`);
+        return normalized;
+    });
+
     const now = new Date();
     const idsForNodes = {
         qf: [`bn_${nanoid()}`, `bn_${nanoid()}`, `bn_${nanoid()}`, `bn_${nanoid()}`] as [string, string, string, string],
@@ -67,7 +74,7 @@ export async function createKnockoutStructure(input: CreateKnockoutInput) {
                 homeScore: 0,
                 awayScore: 0,
                 status: 'UPCOMING',
-                startTime: qf[i].startTime,
+                startTime: normalizedStarts[i],
                 venue: qf[i].venue,
                 competition,
                 competitionId,

@@ -9,6 +9,7 @@ import { db } from '@/db';
 import { matches, teams, matchEvents, standings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { normalizeStartTime } from '@/lib/safe-date';
 
 interface RouteParams {
     params: {
@@ -95,7 +96,13 @@ export async function PATCH(
         if (homeScore !== undefined) updateData.homeScore = homeScore;
         if (awayScore !== undefined) updateData.awayScore = awayScore;
         if (status !== undefined) updateData.status = status;
-        if (startTime !== undefined) updateData.startTime = new Date(startTime);
+        if (startTime !== undefined) {
+            const normalized = normalizeStartTime(startTime);
+            if (!normalized) {
+                return NextResponse.json({ error: 'Invalid startTime' }, { status: 422 });
+            }
+            updateData.startTime = normalized;
+        }
         if (venue !== undefined) updateData.venue = venue;
         if (competition !== undefined) updateData.competition = competition;
         if (loggerId !== undefined) updateData.loggerId = loggerId;

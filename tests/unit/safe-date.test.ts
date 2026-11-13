@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSafeDate, safeFormat, safeToLocale } from '@/lib/safe-date';
+import { normalizeStartTime, parseSafeDate, safeFormat, safeToLocale, toLagosInputValue } from '@/lib/safe-date';
 
 const EPOCH_MS = 1788963960000;
 
@@ -55,5 +55,61 @@ describe('safeToLocale', () => {
         expect(safeToLocale('garbage', 'date', undefined, 'TBD')).toBe('TBD');
         expect(safeToLocale(null, 'time', undefined, '--:--')).toBe('--:--');
         expect(safeToLocale(undefined, 'datetime', undefined, 'TBD')).toBe('TBD');
+    });
+});
+
+describe('normalizeStartTime', () => {
+    it('reads a zone-less datetime-local value as Lagos time', () => {
+        expect(normalizeStartTime('2026-11-11T15:50')).toBe('2026-11-11T14:50:00.000Z');
+    });
+
+    it('accepts seconds and a space separator', () => {
+        expect(normalizeStartTime('2026-11-11 15:50:30')).toBe('2026-11-11T14:50:30.000Z');
+    });
+
+    it('treats a date-only value as Lagos midnight', () => {
+        expect(normalizeStartTime('2026-11-11')).toBe('2026-11-10T23:00:00.000Z');
+    });
+
+    it('converts a zoned ISO string to UTC Z form', () => {
+        expect(normalizeStartTime('2026-11-11T15:50:00+01:00')).toBe('2026-11-11T14:50:00.000Z');
+        expect(normalizeStartTime('2026-11-11T14:50:00Z')).toBe('2026-11-11T14:50:00.000Z');
+    });
+
+    it('converts the stringified-epoch form that libsql stores for a bound Date', () => {
+        expect(normalizeStartTime('1793804400000.0')).toBe('2026-11-04T15:00:00.000Z');
+    });
+
+    it('converts epoch numbers and Date objects', () => {
+        expect(normalizeStartTime(1793804400000)).toBe('2026-11-04T15:00:00.000Z');
+        expect(normalizeStartTime(new Date('2026-11-04T15:00:00Z'))).toBe('2026-11-04T15:00:00.000Z');
+    });
+
+    it('returns null for empty or unparseable input', () => {
+        expect(normalizeStartTime('')).toBeNull();
+        expect(normalizeStartTime(null)).toBeNull();
+        expect(normalizeStartTime(undefined)).toBeNull();
+        expect(normalizeStartTime('not a date')).toBeNull();
+        expect(normalizeStartTime('2026-13-45T99:99')).toBeNull();
+    });
+
+    it('is idempotent', () => {
+        const once = normalizeStartTime('2026-11-11T15:50');
+        expect(normalizeStartTime(once)).toBe(once);
+    });
+});
+
+describe('toLagosInputValue', () => {
+    it('renders a UTC instant as Lagos wall time for datetime-local', () => {
+        expect(toLagosInputValue('2026-11-11T14:50:00.000Z')).toBe('2026-11-11T15:50');
+    });
+
+    it('round-trips with normalizeStartTime', () => {
+        expect(normalizeStartTime(toLagosInputValue('2026-11-11T14:50:00.000Z'))).toBe('2026-11-11T14:50:00.000Z');
+    });
+
+    it('returns an empty string for unusable input', () => {
+        expect(toLagosInputValue('garbage')).toBe('');
+        expect(toLagosInputValue(null)).toBe('');
     });
 });

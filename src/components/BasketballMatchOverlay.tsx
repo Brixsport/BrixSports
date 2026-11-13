@@ -14,6 +14,7 @@ import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { StatBar } from '@/components/StatBar';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
+import { safeToLocale } from '@/lib/safe-date';
 
 interface BasketballMatchOverlayProps {
     match: Match;
@@ -62,7 +63,9 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
     const fetchStandings = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/basketball/standings');
+            const response = await fetch(match.competitionId
+                ? `/api/basketball/standings?competitionId=${encodeURIComponent(match.competitionId)}`
+                : `/api/basketball/standings?competition=${encodeURIComponent(match.competition)}`);
             const data = await response.json();
             if (data.success) {
                 setStandings(data.standings);
@@ -192,7 +195,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                         <span>{match.venue}</span>
                                         <span>•</span>
                                         <Calendar size={12} />
-                                        <span>{new Date(match.startTime).toLocaleDateString()}</span>
+                                        <span>{safeToLocale(match.startTime, 'date')}</span>
                                     </div>
                                 </div>
                             )}
@@ -243,7 +246,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                         <LiveMatchStatus matchId={match.id} sport="basketball" variant="default" />
                                     ) : (
                                         <span className="text-xs font-bold uppercase tracking-wider">
-                                            {match.status === 'FINISHED' ? 'FT' : match.status === 'UPCOMING' ? new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : match.status}
+                                            {match.status === 'FINISHED' ? 'FT' : match.status === 'UPCOMING' ? safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, 'TBD', 'en-US') : match.status}
                                         </span>
                                     )}
                                 </div>

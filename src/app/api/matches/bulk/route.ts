@@ -9,6 +9,7 @@ import { matches } from '@/db/schema';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { validateMatchTeams } from '@/lib/match-bulk-input';
+import { normalizeStartTime } from '@/lib/safe-date';
 import { MATCH_BULK_RESPONSE_FIELDS } from '@/lib/match-admin-fields';
 
 export async function POST(request: NextRequest) {
@@ -38,6 +39,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        const invalidStartIdx = matchesToCreate.findIndex(
+            (match: { startTime?: string }) => match.startTime !== undefined && match.startTime !== '' && !normalizeStartTime(match.startTime)
+        );
+        if (invalidStartIdx !== -1) {
+            return NextResponse.json({ error: `Invalid startTime on match at index ${invalidStartIdx}` }, { status: 422 });
+        }
+
         const newMatches = matchesToCreate.map(match => ({
             id: nanoid(),
             sport: match.sport || 'Football',
@@ -46,7 +54,7 @@ export async function POST(request: NextRequest) {
             homeScore: match.homeScore || 0,
             awayScore: match.awayScore || 0,
             status: match.status || 'UPCOMING',
-            startTime: match.startTime || new Date().toISOString(),
+            startTime: normalizeStartTime(match.startTime) || new Date().toISOString(),
             venue: match.venue || 'TBA',
             competition: match.competition || 'Friendlies',
             matchType: match.matchType || 'competition',

@@ -10,6 +10,7 @@ import { db } from '@/db';
 import { standings, teams, competitions } from '@/db/schema';
 import { eq, and, or, isNull } from 'drizzle-orm';
 import { STANDINGS_ORDER_BY } from '@/lib/standingsService';
+import { toPublicStandingDTO, sortStandingDTOs } from '@/lib/standings-dto';
 
 interface RouteParams {
     params: {
@@ -57,11 +58,9 @@ export async function GET(
             .limit(500);
 
         // Format the response
-        const standingsTable = competitionStandings.map((row, index) => ({
-            position: index + 1,
-            ...row.standing,
-            team: row.team,
-        }));
+        const standingsTable = sortStandingDTOs(
+            competitionStandings.map((row) => toPublicStandingDTO(row.standing, row.team))
+        ).map((dto, index) => ({ position: index + 1, ...dto }));
 
         return NextResponse.json({
             competition: {

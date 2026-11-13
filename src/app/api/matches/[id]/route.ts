@@ -18,6 +18,7 @@ import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules'
 import { shouldSendPeriodNotification } from '@/lib/notifications/send-gate';
 import { recalculateStandingsForMatch, recalculateStandingsForTeams } from '@/lib/standingsService';
 import { isPeriodRegression } from '@/lib/period-order';
+import { normalizeStartTime } from '@/lib/safe-date';
 import { planMatchPatchEffects, canWriteMatchStats } from '@/lib/match-patch-effects';
 import { getEventStatEffects, mergeStatEffects } from '@/lib/player-stats-key';
 import { revertEventStats } from '@/lib/playerStatsService';
@@ -280,7 +281,13 @@ export async function PATCH(
             if (body.sport) updateData.sport = body.sport;
             if (body.homeTeamId) updateData.homeTeamId = body.homeTeamId;
             if (body.awayTeamId) updateData.awayTeamId = body.awayTeamId;
-            if (body.startTime) updateData.startTime = new Date(body.startTime);
+            if (body.startTime) {
+                const normalized = normalizeStartTime(body.startTime);
+                if (!normalized) {
+                    return NextResponse.json({ error: 'Invalid startTime' }, { status: 422 });
+                }
+                updateData.startTime = normalized;
+            }
             if (body.venue) updateData.venue = body.venue;
             if (body.competition) updateData.competition = body.competition;
             if (body.competitionId) updateData.competitionId = body.competitionId;
