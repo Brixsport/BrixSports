@@ -21,7 +21,7 @@ import { TeamLogo } from '@/lib/utils/team-logo';
 import { startVisiblePolling } from '@/lib/visible-poll';
 import { mergeLiveScores, applyLiveSnapshot, shouldRunFullRefresh, type LiveSnapshot } from '@/lib/live-overlay';
 import { safeToLocale, parseSafeDate } from '@/lib/safe-date';
-import { toDayKey, getMatchDays, withToday, pickDefaultDay, nearestMatchDay, stepMatchDay, formatDayLabel } from '@/lib/match-days';
+import { toDayKey, getMatchDays, withToday, pickDefaultDay, nearestMatchDay, stepMatchDay, formatDayLabel, dayKeysFromFeed, mergeMatchesById, windowAround, inWindow } from '@/lib/match-days';
 import { MatchDayStrip } from '@/components/home/MatchDayStrip';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
@@ -70,6 +70,10 @@ export default function Home() {
 
   // Day filter: null = automatic (live day, else today, else next match day); set once the viewer picks a day.
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Mirror for the fetcher (a stable callback) so it can load a chunk around the viewer's pick.
+  const selectedDayRef = useRef<string | null>(null);
+  // Every match's start time/status/sport from /api/match-days: the strip's full day list.
+  const [feedRows, setFeedRows] = useState<{ sport: string; status: string; startTime: string }[]>([]);
 
   // Overlay States
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -98,11 +102,21 @@ export default function Home() {
     try {
       if (showLoadingState) setLoading(true);
 
-      const responses = await Promise.all([
-        fetch('/api/basketball/matches'),
-        fetch('/api/football/matches'),
-        fetch('/api/other/matches')
+      // Windowed load (replaces the old newest-100-by-createdAt cap): today-7..today+21 always, plus a
+      // +-7 day chunk around the viewer's selected day when it lies outside that. Older days are fetched
+      // on demand when picked; the strip's day list comes from /api/match-days, not from these rows.
+      const today = toDayKey(new Date()) as string;
+      const windows = [{ from: windowAround(today, 7).from, to: windowAround(today, 21).to }];
+      const picked = selectedDayRef.current;
+      if (picked && !inWindow(picked, windows[0])) windows.push(windowAround(picked, 7));
+      const fetchSport = (sport: string) => windows.map(w =>
+        fetch(`/api/${sport}/matches?from=${w.from}&to=${w.to}&limit=200`));
+      const sportResponses = await Promise.all([
+        Promise.all(fetchSport('basketball')),
+        Promise.all(fetchSport('football')),
+        Promise.all(fetchSport('other')),
       ]);
+      const responses = sportResponses.flat();
 
       // BACKLOG-455: all three sources must succeed. A non-OK response used to
       // fall through (its `success` was just falsy and the sport was silently
@@ -110,9 +124,21 @@ export default function Home() {
       for (const response of responses) {
         if (!response.ok) throw new Error(`HTTP ${response.status} from ${response.url}`);
       }
-      const [basketballData, footballData, otherData] = await Promise.all(
-        responses.map(response => response.json())
-      );
+      // Strip day list; a failure here must not fail the matches load (the strip falls back to loaded rows).
+      fetch('/api/match-days')
+        .then(r => (r.ok ? r.json() : null))
+        .then(b => { if (b?.success === true && Array.isArray(b.days)) setFeedRows(b.days); })
+        .catch(() => {});
+      const bodies = await Promise.all(responses.map(response => response.json()));
+      // One merged payload per sport (the chunks may overlap; the id-keyed merge below de-duplicates).
+      const perSport = windows.length;
+      const joinSport = (i: number) => ({
+        success: bodies.slice(i * perSport, (i + 1) * perSport).every((b: any) => b?.success === true),
+        matches: bodies.slice(i * perSport, (i + 1) * perSport).flatMap((b: any) => (Array.isArray(b?.matches) ? b.matches : [])),
+      });
+      const basketballData = joinSport(0);
+      const footballData = joinSport(1);
+      const otherData = joinSport(2);
       for (const body of [basketballData, footballData, otherData]) {
         if (body?.success !== true || !Array.isArray(body.matches)) {
           throw new Error('Unexpected matches response shape');
@@ -222,7 +248,14 @@ export default function Home() {
 
       // The heavy lists lag /api/live-matches, so put the latest live snapshot back on top of them;
       // otherwise a slow list response flips a live score back until the next overlay tick.
-      const merged = applyLiveSnapshot(allMatches as any[], lastLiveRef.current, Date.now()) as Match[];
+      // Rows outside the windows just fetched (older days loaded on scroll-back) are kept; rows inside a
+      // fetched window are replaced wholesale so a deleted or rescheduled match does not linger.
+      const kept = matchesRef.current.filter(m => {
+        const key = toDayKey(m.startTime);
+        return !key || !windows.some(w => inWindow(key, w));
+      });
+      const combined = mergeMatchesById(kept as any[], allMatches as any[]);
+      const merged = applyLiveSnapshot(combined, lastLiveRef.current, Date.now()) as Match[];
 
       setMatches(merged);
       matchesRef.current = merged;
@@ -354,7 +387,10 @@ export default function Home() {
 
   const todayKey = toDayKey(new Date()) as string;
   const sportMatches = matches.filter(m => matchesSport(m, activeSport));
-  const matchDays = getMatchDays(sportMatches);
+  const matchDays = [...new Set([
+    ...getMatchDays(sportMatches),
+    ...dayKeysFromFeed(feedRows, s => matchesSport({ sport: s } as Match, activeSport)),
+  ])].sort();
   const liveDays = new Set<string>();
   for (const m of sportMatches) {
     const key = m.status === 'LIVE' ? toDayKey(m.startTime) : null;
@@ -365,10 +401,23 @@ export default function Home() {
   const stripDays = withToday(matchDays, todayKey);
   const nextMatchDay = stepMatchDay(matchDays, activeDay, 1);
 
+  // Picking a day outside the loaded window (scroll-back) loads a chunk around it.
+  useEffect(() => {
+    selectedDayRef.current = selectedDay;
+    if (selectedDay && hasLoaded.current) {
+      const today = toDayKey(new Date()) as string;
+      const base = { from: windowAround(today, 7).from, to: windowAround(today, 21).to };
+      if (!inWindow(selectedDay, base)) fetchAllMatches(false);
+    }
+  }, [selectedDay, fetchAllMatches]);
+
   const handleSportChange = (sport: string) => {
     setActiveSport(sport);
     // Keep the viewer's day if the new sport plays on it, else snap to the nearest day it does.
-    const days = getMatchDays(matches.filter(m => matchesSport(m, sport)));
+    const days = [...new Set([
+      ...getMatchDays(matches.filter(m => matchesSport(m, sport))),
+      ...dayKeysFromFeed(feedRows, s => matchesSport({ sport: s } as Match, sport)),
+    ])].sort();
     if (selectedDay && selectedDay !== todayKey && !days.includes(selectedDay)) {
       setSelectedDay(nearestMatchDay(days, selectedDay));
     }
