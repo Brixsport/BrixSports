@@ -4,6 +4,9 @@ import { db } from '@/db';
 import { matches, matchLoggerAssignments, teams } from '@/db/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 
+// ~a full season of upcoming fixtures; the old 50 silently hid later ones from lineup posting.
+const ASSIGNED_MATCHES_LIMIT = 200;
+
 // GET /api/admin/assigned-matches - Get matches assigned to logger or all matches for admin
 export async function GET(request: NextRequest) {
     try {
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
                     )
                 )
                 .orderBy(matches.startTime)
-                .limit(50);
+                .limit(ASSIGNED_MATCHES_LIMIT);
         } else {
             // Loggers can only see their assigned matches (assignment table, not the
             // legacy matches.loggerId column)
@@ -58,26 +61,22 @@ export async function GET(request: NextRequest) {
                     )
                 )
                 .orderBy(matches.startTime)
-                .limit(50);
+                .limit(ASSIGNED_MATCHES_LIMIT);
         }
 
         const matchesList = await matchesQuery;
 
-        // Fetch team details for each match
-        const matchesWithTeams = await Promise.all(
-            matchesList.map(async (match) => {
-                const [homeTeam, awayTeam] = await Promise.all([
-                    db.select().from(teams).where(eq(teams.id, match.homeTeamId)).limit(1),
-                    db.select().from(teams).where(eq(teams.id, match.awayTeamId)).limit(1)
-                ]);
-
-                return {
-                    ...match,
-                    homeTeam: homeTeam[0],
-                    awayTeam: awayTeam[0]
-                };
-            })
-        );
+        // One team query for the whole list (was 2 queries per match, which a 200-row window would multiply).
+        const teamIds = [...new Set(matchesList.flatMap(m => [m.homeTeamId, m.awayTeamId]))];
+        const teamRows = teamIds.length > 0
+            ? await db.select().from(teams).where(inArray(teams.id, teamIds)).limit(teamIds.length)
+            : [];
+        const teamById = new Map(teamRows.map(t => [t.id, t]));
+        const matchesWithTeams = matchesList.map(match => ({
+            ...match,
+            homeTeam: teamById.get(match.homeTeamId),
+            awayTeam: teamById.get(match.awayTeamId),
+        }));
 
         return NextResponse.json({
             success: true,
