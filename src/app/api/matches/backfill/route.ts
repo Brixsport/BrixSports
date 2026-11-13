@@ -5,6 +5,7 @@ import { eq, and, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
+import { normalizeStartTime } from '@/lib/safe-date';
 
 export async function POST(request: NextRequest) {
     try {
@@ -42,8 +43,8 @@ export async function POST(request: NextRequest) {
         }
 
         // 3. match.startTime must parse as valid date via new Date()
-        const dateParsed = new Date(match.startTime);
-        if (isNaN(dateParsed.getTime())) {
+        const normalizedStartTime = normalizeStartTime(match.startTime);
+        if (!normalizedStartTime) {
             return NextResponse.json({ error: 'Invalid match date' }, { status: 400 });
         }
 
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
                     and(
                         eq(matches.homeTeamId, match.homeTeamId),
                         eq(matches.awayTeamId, match.awayTeamId),
-                        eq(matches.startTime, match.startTime)
+                        or(eq(matches.startTime, normalizedStartTime), eq(matches.startTime, match.startTime))
                     )
                 )
                 .get();
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
                 competitionLevel: match.competitionLevel || null,
                 status: 'FINISHED',
                 approvalStatus: 'APPROVED',
-                startTime: match.startTime,
+                startTime: normalizedStartTime,
                 createdAt: new Date(),
                 updatedAt: new Date()
             });

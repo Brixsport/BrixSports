@@ -5,6 +5,16 @@ import { eq, and } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { nanoid } from 'nanoid';
 
+// Defaults when a field is omitted: a basketball competition must not inherit
+// football defaults (11-a-side / 45 minutes); the basketball logger reads
+// half_duration as the quarter length.
+function sportDefaults(sport: string) {
+    if (sport.toLowerCase() === 'basketball') {
+        return { playersPerSide: 5, halfDuration: 10 as number | null, allowDraws: false, pointsForWin: 2, pointsForDraw: 0 };
+    }
+    return { playersPerSide: 11, halfDuration: null as number | null, allowDraws: true, pointsForWin: 3, pointsForDraw: 1 };
+}
+
 // GET — fetch match settings for a competition
 export async function GET(
     req: NextRequest,
@@ -65,6 +75,7 @@ export async function POST(
         } = body;
 
         const sportValue = sport ?? comp.sport ?? 'Football';
+        const defaults = sportDefaults(sportValue);
 
         // Check for existing row for this competition + sport
         const existing = await db
@@ -85,17 +96,17 @@ export async function POST(
                 .update(competitionSportSettings)
                 .set({
                     format: format ?? null,
-                    playersPerSide: playersPerSide ?? 11,
-                    halfDuration: halfDuration ?? null,
+                    playersPerSide: playersPerSide ?? defaults.playersPerSide,
+                    halfDuration: halfDuration ?? defaults.halfDuration,
                     customRules: customRules ? JSON.stringify(customRules) : null,
                     isTimed: isTimed ?? true,
                     maxSubstitutions: maxSubstitutions ?? null,
                     allowSubbedOutReentry: allowSubbedOutReentry ?? false,
                     extraTimeEnabled: extraTimeEnabled ?? false,
                     penaltiesEnabled: penaltiesEnabled ?? false,
-                    allowDraws: allowDraws ?? true,
-                    pointsForWin: pointsForWin ?? 3,
-                    pointsForDraw: pointsForDraw ?? 1,
+                    allowDraws: allowDraws ?? defaults.allowDraws,
+                    pointsForWin: pointsForWin ?? defaults.pointsForWin,
+                    pointsForDraw: pointsForDraw ?? defaults.pointsForDraw,
                 })
                 .where(eq(competitionSportSettings.id, existing.id));
 
@@ -116,17 +127,17 @@ export async function POST(
             competitionId: params.id,
             sport: sportValue,
             format: format ?? null,
-            playersPerSide: playersPerSide ?? 11,
-            halfDuration: halfDuration ?? null,
+            playersPerSide: playersPerSide ?? defaults.playersPerSide,
+            halfDuration: halfDuration ?? defaults.halfDuration,
             customRules: customRules ? JSON.stringify(customRules) : null,
             isTimed: isTimed ?? true,
             maxSubstitutions: maxSubstitutions ?? null,
             allowSubbedOutReentry: allowSubbedOutReentry ?? false,
             extraTimeEnabled: extraTimeEnabled ?? false,
             penaltiesEnabled: penaltiesEnabled ?? false,
-            allowDraws: allowDraws ?? true,
-            pointsForWin: pointsForWin ?? 3,
-            pointsForDraw: pointsForDraw ?? 1,
+            allowDraws: allowDraws ?? defaults.allowDraws,
+            pointsForWin: pointsForWin ?? defaults.pointsForWin,
+            pointsForDraw: pointsForDraw ?? defaults.pointsForDraw,
         });
 
         const inserted = await db

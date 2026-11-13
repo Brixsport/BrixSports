@@ -74,6 +74,22 @@ const defaultMatchSettings = {
 
 type MatchSettingsForm = typeof defaultMatchSettings;
 
+// Basketball plays 5-a-side in timed quarters (stored in halfDuration, which the
+// basketball logger reads as quarter length), has no draws and none of the
+// football extra-time / penalty / rolling-sub rules.
+const basketballMatchSettings: MatchSettingsForm = {
+    ...defaultMatchSettings,
+    halfDuration: 10,
+    playersPerSide: 5,
+    maxSubstitutions: null,
+    unlimitedSubs: true,
+    allowDraws: false,
+    pointsForWin: 2,
+    pointsForDraw: 0,
+};
+
+const isBasketball = (sport: string) => sport.toLowerCase() === 'basketball';
+
 interface CompetitionModalProps {
     mode: 'create' | 'edit';
     entityId?: string;
@@ -92,7 +108,9 @@ function derivePlayersOption(n: number): '11' | '5' | 'custom' {
 
 function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
     const [form, setForm] = useState(initialData);
-    const [matchSettings, setMatchSettings] = useState<MatchSettingsForm>(initialMatchSettings ?? defaultMatchSettings);
+    const [matchSettings, setMatchSettings] = useState<MatchSettingsForm>(
+        initialMatchSettings ?? (isBasketball(initialData.sport) ? basketballMatchSettings : defaultMatchSettings)
+    );
     const [showMatchSettings, setShowMatchSettings] = useState(false);
     const [playersOption, setPlayersOption] = useState<'11' | '5' | 'custom'>(
         derivePlayersOption(initialMatchSettings?.playersPerSide ?? 11)
@@ -120,9 +138,23 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
         else setMs({ playersPerSide: playersCustom });
     };
 
+    const basketball = isBasketball(form.sport);
+
+    // On create, switching sport swaps in that sport's defaults. On edit the
+    // loaded settings are kept: only an explicit field edit changes them.
+    const handleSportChange = (sport: string) => {
+        setForm({ ...form, sport });
+        if (mode !== 'create') return;
+        const next = isBasketball(sport) ? basketballMatchSettings : defaultMatchSettings;
+        setMatchSettings(next);
+        setPlayersOption(derivePlayersOption(next.playersPerSide));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await onSubmit(form, matchSettings);
+        await onSubmit(form, basketball
+            ? { ...matchSettings, allowDraws: false, pointsForDraw: 0, extraTimeEnabled: false, penaltiesEnabled: false }
+            : matchSettings);
     };
 
     return (
@@ -173,7 +205,7 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Sport</label>
                             <select
                                 value={form.sport}
-                                onChange={(e) => setForm({ ...form, sport: e.target.value })}
+                                onChange={(e) => handleSportChange(e.target.value)}
                                 className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
                             >
                                 <option value="Football">Football</option>
@@ -333,6 +365,37 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
 
                         {showMatchSettings && (
                             <div className="px-5 pb-6 space-y-5 border-t border-white/10 pt-5">
+                                {basketball ? (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Players Per Side</label>
+                                                <input type="number" min="1"
+                                                    value={matchSettings.playersPerSide}
+                                                    onChange={e => setMs({ playersPerSide: parseInt(e.target.value) || 5 })}
+                                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Quarter Length (mins)</label>
+                                                <input type="number" min="1"
+                                                    value={matchSettings.halfDuration}
+                                                    onChange={e => setMs({ halfDuration: parseInt(e.target.value) || 10 })}
+                                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Points for Win</label>
+                                            <input type="number" min="0"
+                                                value={matchSettings.pointsForWin}
+                                                onChange={e => setMs({ pointsForWin: parseInt(e.target.value) || 2 })}
+                                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                            />
+                                            <p className="mt-2 text-xs text-white/40">Basketball games always produce a winner (no draws); a loss scores 0.</p>
+                                        </div>
+                                    </>
+                                ) : (<>
                                 {/* Duration */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -454,6 +517,7 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
                                         />
                                     </div>
                                 </div>
+                                </>)}
                             </div>
                         )}
                     </div>
@@ -509,7 +573,7 @@ function AdminCompetitionsPageContent() {
     const fetchCompetitions = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=0`);
+            const response = await fetch(`/api/competitions?includeStats=true&includeArchived=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=0`);
 
             if (!response.ok) {
                 throw new Error('Failed to fetch competitions');
@@ -537,7 +601,7 @@ function AdminCompetitionsPageContent() {
     const loadMoreCompetitions = async () => {
         setIsLoadingMore(true);
         try {
-            const res = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=${competitions.length}`);
+            const res = await fetch(`/api/competitions?includeStats=true&includeArchived=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=${competitions.length}`);
             if (res.ok) {
                 const data = await res.json();
                 const nextPage = data.competitions.map((c: any) => ({
@@ -650,8 +714,8 @@ function AdminCompetitionsPageContent() {
                 const s = Array.isArray(data.settings) ? data.settings[0] : data.settings;
                 if (s) {
                     setEditingMatchSettings({
-                        halfDuration: s.halfDuration ?? 45,
-                        playersPerSide: s.playersPerSide ?? 11,
+                        halfDuration: s.halfDuration ?? (isBasketball(comp.sport) ? 10 : 45),
+                        playersPerSide: s.playersPerSide ?? (isBasketball(comp.sport) ? 5 : 11),
                         maxSubstitutions: s.maxSubstitutions ?? 5,
                         unlimitedSubs: s.maxSubstitutions === null,
                         allowSubbedOutReentry: !!s.allowSubbedOutReentry,

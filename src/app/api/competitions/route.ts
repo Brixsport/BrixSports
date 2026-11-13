@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { competitions, matches, standings, organizations } from '@/db/schema';
-import { sql, eq, or } from 'drizzle-orm';
+import { sql, eq, or, and, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -149,9 +149,20 @@ export async function GET(request: NextRequest) {
         // capped page (now 2000, was 500) rather than truly paginating at the
         // DB level -- full correctness there needs grouping to happen
         // DB-side, a bigger change than this pass's scope. Flagged, not silently left.
+        // Archived competitions are hidden from the public directory; the admin
+        // list opts back in with includeArchived=true (honoured for admins only).
+        let showArchived = false;
+        if (searchParams.get('includeArchived') === 'true') {
+            const authUser = await getAuthUser(request);
+            showArchived = authUser?.role === 'admin';
+        }
+        const conditions = [];
+        if (!showArchived) conditions.push(or(isNull(competitions.isArchived), eq(competitions.isArchived, false)));
+        if (sport) conditions.push(or(eq(competitions.sport, sport), eq(competitions.isMultiSport, true)));
+
         let query = db.select().from(competitions);
-        if (sport) {
-            query = query.where(or(eq(competitions.sport, sport), eq(competitions.isMultiSport, true))) as typeof query;
+        if (conditions.length > 0) {
+            query = query.where(and(...conditions)) as typeof query;
         }
 
         const safetyCap = Math.min(Math.max(1, parseInt(searchParams.get('_maxFetch') || '2000', 10) || 2000), 5000);

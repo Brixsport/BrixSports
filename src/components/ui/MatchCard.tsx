@@ -6,6 +6,7 @@ import { Clock, MapPin, Trophy, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { parseSafeDate } from '@/lib/safe-date';
 
 // BACKLOG-401 #1: a malformed startTime (confirmed live: a stringified-epoch
 // value like "1788963960000.0" instead of ISO) makes `new Date(...)` an
@@ -16,7 +17,8 @@ import { TeamLogo } from '@/lib/utils/team-logo';
 // "Invalid Date" text).
 function safeFormatStartTime(startTime: string, pattern: string, fallback = '--:--'): string {
     try {
-        return format(new Date(startTime), pattern);
+        const d = parseSafeDate(startTime);
+        return d ? format(d, pattern) : fallback;
     } catch {
         return fallback;
     }

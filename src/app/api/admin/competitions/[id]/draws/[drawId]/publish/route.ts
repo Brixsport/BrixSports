@@ -4,6 +4,7 @@ import { competitionDraws, competitions, matches } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { nanoid } from 'nanoid';
+import { normalizeStartTime } from '@/lib/safe-date';
 
 interface StoredPairing {
     round: number;
@@ -79,6 +80,14 @@ export async function POST(
             }, { status: 422 });
         }
 
+        const invalidStart = pairings.filter(p => !normalizeStartTime(p.startTime));
+        if (invalidStart.length > 0) {
+            return NextResponse.json({
+                error: `${invalidStart.length} pairing(s) have an unparseable startTime`,
+                details: invalidStart.map(p => ({ round: p.round, index: p.index })),
+            }, { status: 422 });
+        }
+
         // Idempotent-retry: if this draw was already published, its prior
         // matches must all still be UPCOMING before we touch them.
         let priorMatchIdsToDelete: string[] = [];
@@ -111,7 +120,7 @@ export async function POST(
             homeScore: 0,
             awayScore: 0,
             status: 'UPCOMING' as const,
-            startTime: p.startTime as string,
+            startTime: normalizeStartTime(p.startTime) as string,
             venue: p.venue as string,
             competition: comp.name,
             competitionId: comp.id,

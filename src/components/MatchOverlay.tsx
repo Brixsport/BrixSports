@@ -687,7 +687,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     const fetchStandings = async () => {
       setLoadingStandings(true);
       try {
-        const response = await fetch(`/api/standings?competition=${encodeURIComponent(match.competition)}`);
+        const response = await fetch(match.competitionId
+          ? `/api/standings?competitionId=${encodeURIComponent(match.competitionId)}`
+          : `/api/standings?competition=${encodeURIComponent(match.competition)}`);
         const data = await response.json();
         if (Array.isArray(data) && data.length > 0) {
           setStandings(data);

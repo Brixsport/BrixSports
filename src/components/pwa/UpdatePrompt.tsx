@@ -179,9 +179,9 @@ export function UpdatePrompt() {
     // long-lived tab that never navigates should still get re-nudged. The
     // localStorage write is the actual fix: it's what a FUTURE remount
     // (a different navigation) checks via readSnoozedUntil() in
-    // checkRegistration, so "Later" now means "not for 15 minutes," not
+    // checkRegistration, so "Later" now means "not for 6 hours," not
     // "not until this exact component instance happens to still be alive."
-    const UPDATE_SNOOZE_MS = 15 * 60 * 1000;
+    const UPDATE_SNOOZE_MS = 6 * 60 * 60 * 1000;
     const handleDismiss = () => {
         setShowPrompt(false);
         writeSnoozedUntil(Date.now() + UPDATE_SNOOZE_MS);

@@ -29,6 +29,38 @@ export function parseSafeDate(value: DateInput): Date | null {
     return isNaN(d.getTime()) ? null : d;
 }
 
+// Admins type kick-off times in local (Lagos, WAT, UTC+1, no DST) time.
+const LAGOS_OFFSET = '+01:00';
+const LAGOS_OFFSET_MS = 60 * 60 * 1000;
+// ISO-like date or date-time with no zone designator ("2026-11-11T15:50", "2026-11-11 15:50:30").
+const ZONELESS_ISO = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::(\d{2})(?:\.\d+)?)?)?$/;
+
+/**
+ * Canonical form for matches.start_time: ISO-8601 UTC with a Z suffix.
+ * Zone-less input is read as Africa/Lagos; epoch numbers/strings and zoned ISO
+ * strings are converted as-is. Returns null for anything unparseable so the
+ * caller can answer 422.
+ */
+export function normalizeStartTime(value: DateInput): string | null {
+    if (value === null || value === undefined || value === '') return null;
+
+    let d: Date | null;
+    if (typeof value === 'string' && ZONELESS_ISO.test(value.trim())) {
+        const [, date, time = '00:00', seconds = '00'] = value.trim().match(ZONELESS_ISO)!;
+        d = parseSafeDate(`${date}T${time}:${seconds}${LAGOS_OFFSET}`);
+    } else {
+        d = parseSafeDate(value);
+    }
+    return d ? d.toISOString() : null;
+}
+
+/** Value for an <input type="datetime-local"> showing `value` in Lagos time ("" when unusable). */
+export function toLagosInputValue(value: DateInput): string {
+    const d = parseSafeDate(value);
+    if (!d) return '';
+    return new Date(d.getTime() + LAGOS_OFFSET_MS).toISOString().slice(0, 16);
+}
+
 /** date-fns format() that returns `fallback` instead of throwing on an invalid date. */
 export function safeFormat(value: DateInput, pattern: string, fallback = 'TBD'): string {
     const d = parseSafeDate(value);

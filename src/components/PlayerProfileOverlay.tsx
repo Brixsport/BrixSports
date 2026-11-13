@@ -133,7 +133,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="relative">
                 <div className="w-48 h-48 bg-muted rounded-[40px] flex items-center justify-center text-7xl font-display italic border border-border relative overflow-hidden group">
-                  {player.number}
+                  {player.number || '–'}
                   <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
                 <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-primary-foreground font-black text-xl border-4 border-background">

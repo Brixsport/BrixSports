@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Calendar, User, Users, Search, Bell, Menu, ChevronRight, ChevronLeft, Play, ListChecks, Newspaper } from 'lucide-react';
-import { format, addDays, isSameDay } from 'date-fns';
+import { Trophy, Calendar, User, Users, Search, Bell, Menu, ChevronRight, Play, ListChecks, Newspaper } from 'lucide-react';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
 import { BrandMark } from '@/components/BrandMark';
@@ -21,7 +20,9 @@ import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { startVisiblePolling } from '@/lib/visible-poll';
 import { mergeLiveScores, applyLiveSnapshot, shouldRunFullRefresh, type LiveSnapshot } from '@/lib/live-overlay';
-import { safeToLocale } from '@/lib/safe-date';
+import { safeToLocale, parseSafeDate } from '@/lib/safe-date';
+import { toDayKey, getMatchDays, withToday, pickDefaultDay, nearestMatchDay, stepMatchDay, formatDayLabel } from '@/lib/match-days';
+import { MatchDayStrip } from '@/components/home/MatchDayStrip';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { LoadFailedState, StaleDataBanner } from '@/components/resilience/ReadPathStates';
@@ -67,8 +68,8 @@ export default function Home() {
   const fullLoadsInFlight = useRef(0);
   const lastOverlayRefreshAt = useRef<number | null>(null);
 
-  // Date Filter
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  // Day filter: null = automatic (live day, else today, else next match day); set once the viewer picks a day.
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // Overlay States
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -342,128 +343,59 @@ export default function Home() {
     fetchCompetitions();
   }, []);
 
-  // Enhanced filtering logic
-  const filteredMatches = matches.filter(m => {
-    // Sport filter
-    if (activeSport !== 'ALL') {
-      const sportMatch = activeSport === 'FOOTBALL' ? m.sport === 'Football' :
-        activeSport === 'BASKETBALL' ? m.sport === 'Basketball' :
-          activeSport === 'OTHER' ? !['Football', 'Basketball'].includes(m.sport) : true;
-      if (!sportMatch) return false;
+  // Home feed shows ONE match day at a time (never the whole season). The day
+  // strip only lists days that have fixtures (plus today); with no explicit
+  // pick the feed opens on a live day, else today, else the next match day.
+  const matchesSport = (m: Match, sport: string) =>
+    sport === 'ALL' ? true :
+      sport === 'FOOTBALL' ? m.sport === 'Football' :
+        sport === 'BASKETBALL' ? m.sport === 'Basketball' :
+          !['Football', 'Basketball'].includes(m.sport);
+
+  const todayKey = toDayKey(new Date()) as string;
+  const sportMatches = matches.filter(m => matchesSport(m, activeSport));
+  const matchDays = getMatchDays(sportMatches);
+  const liveDays = new Set<string>();
+  for (const m of sportMatches) {
+    const key = m.status === 'LIVE' ? toDayKey(m.startTime) : null;
+    if (key) liveDays.add(key);
+  }
+  const liveDayKey = liveDays.has(todayKey) ? todayKey : ([...liveDays].sort()[0] ?? null);
+  const activeDay = selectedDay ?? pickDefaultDay(matchDays, todayKey, liveDayKey);
+  const stripDays = withToday(matchDays, todayKey);
+  const nextMatchDay = stepMatchDay(matchDays, activeDay, 1);
+
+  const handleSportChange = (sport: string) => {
+    setActiveSport(sport);
+    // Keep the viewer's day if the new sport plays on it, else snap to the nearest day it does.
+    const days = getMatchDays(matches.filter(m => matchesSport(m, sport)));
+    if (selectedDay && selectedDay !== todayKey && !days.includes(selectedDay)) {
+      setSelectedDay(nearestMatchDay(days, selectedDay));
     }
-
-    // Status filter
-    if (activeTab !== 'ALL') {
-      if (activeTab === 'FAVORITES') {
-        const isFavorite = favoriteTeams.includes(m.homeTeamId) || favoriteTeams.includes(m.awayTeamId);
-        if (!isFavorite) return false;
-      } else if (m.status !== activeTab) {
-        return false;
-      }
-    }
-
-    // Date filter - only apply if a date is selected
-    if (selectedDate) {
-      const matchDate = new Date(m.startTime);
-      if (!isSameDay(matchDate, selectedDate)) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  // Sort matches by start time in reverse chronological order (most recent first).
-  // BUG-213: a malformed start_time (raw epoch-as-text instead of an ISO string --
-  // known to come from a couple of dev/test-setup scripts, root cause not yet
-  // fully traced platform-wide) parses to NaN, and NaN feeding this comparator
-  // is implementation-defined in Array.prototype.sort() -- confirmed live to
-  // measurably displace other, validly-dated matches near it, not just mislabel
-  // its own group. Guard: unparseable dates sort to the end (oldest), never let
-  // NaN reach the comparator at all.
-  const sortedMatches = [...filteredMatches].sort((a, b) => {
-    const aTime = new Date(a.startTime).getTime();
-    const bTime = new Date(b.startTime).getTime();
-    return (isNaN(bTime) ? -Infinity : bTime) - (isNaN(aTime) ? -Infinity : aTime);
-  });
-
-  // BUG-213: `toLocaleDateString()` on an unparseable date returns the literal
-  // string "Invalid Date" -- which then rendered as a real, user-facing section
-  // header. A clearly-labeled fallback communicates "we don't know" honestly
-  // instead of looking like the app itself is broken.
-  const formatGroupDate = (startTime: string) => {
-    const d = new Date(startTime);
-    if (isNaN(d.getTime())) return 'Date Unknown';
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  // Group matches by round (for basketball) or date (for other sports)
-  const groupedMatches = sortedMatches.reduce((groups: any, match: any) => {
-    let groupKey: string = '';
-
-    if (match.sport === 'Basketball') {
-      // BACKLOG: prefer the real matches.round column (freeform text, e.g.
-      // "Semi-Finals", "Round 6") over the numeric stats-blob parse and the
-      // hardcoded-date-table fallback below -- that fallback assumed one
-      // specific 2026 playoff calendar and silently mislabeled every other
-      // basketball match (any other season, any friendly, any competition)
-      // with a fabricated "Round N" or wrong semifinal-game label.
-      if (match.round) {
-        groupKey = match.round;
+  const sortedMatches = matches
+    .filter(m => {
+      if (!matchesSport(m, activeSport)) return false;
+      if (activeTab === 'FAVORITES') {
+        if (!favoriteTeams.includes(m.homeTeamId) && !favoriteTeams.includes(m.awayTeamId)) return false;
+      } else if (activeTab !== 'ALL' && m.status !== activeTab) {
+        return false;
       }
+      // Unparseable start times (see BUG-213) have no day key, so they never match a day.
+      return toDayKey(m.startTime) === activeDay;
+    })
+    // Live first, then kick-off order.
+    .sort((a, b) => {
+      if ((a.status === 'LIVE') !== (b.status === 'LIVE')) return a.status === 'LIVE' ? -1 : 1;
+      return (parseSafeDate(a.startTime)?.getTime() ?? 0) - (parseSafeDate(b.startTime)?.getTime() ?? 0);
+    });
 
-      let roundNum: number | undefined;
-      if (!groupKey) try {
-        // Try to get round from stats
-        const stats = typeof match.stats === 'string' ? JSON.parse(match.stats) : match.stats;
-        roundNum = stats?.round;
-      } catch (e) { }
-
-      if (groupKey) {
-        // already set from match.round above
-      } else if (!roundNum || isNaN(roundNum) || roundNum > 100 || roundNum < 1) {
-        // Fallback to date-based calculation
-        const matchDate = new Date(match.startTime);
-
-        // Handle 2026 Playoffs explicitly
-        if (matchDate.getFullYear() === 2026 && matchDate.getMonth() === 0) { // Jan 2026
-          const d = matchDate.getDate();
-          if (d === 7) { groupKey = "Semi-Finals Game 1"; }
-          else if (d === 11) { groupKey = "Semi-Finals Game 2"; }
-          else if (d === 14) { groupKey = "Semi-Finals Game 3"; }
-          else { groupKey = "Playoffs"; }
-
-          // Ensure existing logic skips
-          roundNum = undefined;
-        } else if (!isNaN(matchDate.getTime())) {
-          const startDate = new Date('2025-01-15'); // Tournament start date
-          const daysDiff = Math.floor((matchDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-          const calcRound = Math.floor(daysDiff / 7) + 1;
-          if (calcRound > 0 && calcRound < 20) { // Limit to 20 rounds to avoid 52
-            roundNum = calcRound;
-          }
-        }
-      }
-
-      if (groupKey) {
-        // already set
-      } else if (roundNum) {
-        groupKey = `Round ${roundNum}`;
-      } else {
-        // Ultimate fallback: Use date
-        groupKey = formatGroupDate(match.startTime);
-      }
-    } else {
-      // For other sports, group by date
-      groupKey = formatGroupDate(match.startTime);
-    }
-
-    if (!groups[groupKey]) {
-      groups[groupKey] = [];
-    }
-    groups[groupKey].push(match);
-    return groups;
-  }, {});
+  const dayHeader = (() => {
+    const { primary, secondary } = formatDayLabel(activeDay, todayKey);
+    return ['Today', 'Tomorrow', 'Yesterday'].includes(primary) ? `${primary} · ${secondary}` : `${primary} ${secondary}`;
+  })();
+  const groupedMatches: Record<string, Match[]> = sortedMatches.length > 0 ? { [dayHeader]: sortedMatches } : {};
 
   return (
     <>
@@ -575,10 +507,10 @@ export default function Home() {
 
           {/* Sport Tabs */}
           <div className="flex items-center gap-1 pb-2 overflow-x-auto scrollbar-hide">
-            {['ALL', 'FOOTBALL', 'BASKETBALL', 'OTHER'].map((sport) => (
+            {['ALL', 'FOOTBALL', 'BASKETBALL', 'OTHER'].filter((sport) => sport === 'ALL' || activeSport === sport || matches.length === 0 || matches.some(m => matchesSport(m, sport))).map((sport) => (
               <button
                 key={sport}
-                onClick={() => setActiveSport(sport)}
+                onClick={() => handleSportChange(sport)}
                 className={`px-4 py-2 text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeSport === sport
                   ? 'text-primary border-b-2 border-primary'
                   : 'text-foreground/40 hover:text-foreground/60'
@@ -619,27 +551,14 @@ export default function Home() {
             <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
           </div>
 
-          {/* Date Navigation - compact inline row (BACKLOG-390 #1: was a full card+heading, ~150-200px taller) */}
-          <div className="flex items-center justify-center gap-1 mb-4">
-            <button
-              onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
-              aria-label="Previous day"
-            >
-              <ChevronLeft size={18} className="text-foreground/60" />
-            </button>
-            <div className="flex items-center gap-1.5 px-3 text-xs sm:text-sm font-semibold text-foreground min-w-[120px] justify-center">
-              <Calendar size={14} className="text-primary" />
-              {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
-            </div>
-            <button
-              onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, 1) : addDays(new Date(), 1))}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
-              aria-label="Next day"
-            >
-              <ChevronRight size={18} className="text-foreground/60" />
-            </button>
-          </div>
+          {/* Match-day strip: only days with fixtures (plus today), arrows jump between them */}
+          <MatchDayStrip
+            days={stripDays}
+            selected={activeDay}
+            todayKey={todayKey}
+            liveDays={liveDays}
+            onSelect={setSelectedDay}
+          />
 
           {/* Live Now Section */}
           <div className="mb-8">
@@ -841,8 +760,23 @@ export default function Home() {
           ) : (
             <div className="py-20 text-center">
               <Trophy size={48} className="mx-auto text-foreground/10 mb-4" />
-              <p className="text-foreground/40 font-bold">No matches found</p>
-              <p className="text-foreground/20 text-sm mt-2">Try adjusting your filters</p>
+              <p className="text-foreground/40 font-bold">
+                {activeDay === todayKey ? 'No games today' : 'No matches on this day'}
+              </p>
+              {activeTab === 'ALL' && nextMatchDay ? (
+                <button
+                  onClick={() => setSelectedDay(nextMatchDay)}
+                  className="mt-3 min-h-11 px-4 rounded-lg bg-muted text-xs font-bold uppercase tracking-wider text-foreground/70 hover:text-foreground transition-colors"
+                >
+                  {(() => {
+                    const { primary, secondary } = formatDayLabel(nextMatchDay, todayKey);
+                    const rel = ['Today', 'Tomorrow'].includes(primary) ? primary : `${primary} ${secondary}`;
+                    return `Next: ${rel} · ${sportMatches.filter(m => toDayKey(m.startTime) === nextMatchDay).length} matches`;
+                  })()}
+                </button>
+              ) : (
+                <p className="text-foreground/20 text-sm mt-2">Try a different filter</p>
+              )}
             </div>
           )}
         </div>

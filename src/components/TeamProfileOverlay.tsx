@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { X, Trophy, Users, TrendingUp, Calendar, MapPin, Award, Star } from 'lucide-react';
-import { safeToLocale } from '@/lib/safe-date';
+import { safeToLocale, parseSafeDate } from '@/lib/safe-date';
 
 interface Team {
     id: string;
@@ -54,6 +54,9 @@ interface TeamProfileOverlayProps {
     team: Team;
     onClose: () => void;
     onSelectPlayer?: (player: Player) => void;
+    // Competition whose standing to show. Without it the standing of the
+    // team's most recent competition is used, never an arbitrary season.
+    competitionId?: string | null;
 }
 
 // Helper function to validate image paths
@@ -62,7 +65,7 @@ const isValidImagePath = (path: string | undefined): boolean => {
     return path.startsWith('/') || path.startsWith('http');
 };
 
-export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Basketball' }: TeamProfileOverlayProps & { sport?: string }) {
+export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Basketball', competitionId }: TeamProfileOverlayProps & { sport?: string }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [players, setPlayers] = useState<Player[]>([]);
     const [matches, setMatches] = useState<Match[]>([]);
@@ -80,7 +83,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
             const [playersRes, matchesRes, standingsRes] = await Promise.all([
                 fetch(`/api/${apiSport}/players?teamId=${team.id}`),
                 fetch(`/api/${apiSport}/matches?teamId=${team.id}`),
-                fetch(`/api/${apiSport}/standings`)
+                fetch(competitionId ? `/api/${apiSport}/standings?competitionId=${encodeURIComponent(competitionId)}` : `/api/${apiSport}/standings`)
             ]);
 
             const [playersData, matchesData, standingsData] = await Promise.all([
@@ -105,9 +108,18 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                 // Handle both array format and object format
                 const allStandings = Array.isArray(standingsData.standings) ? standingsData.standings : (Array.isArray(standingsData) ? standingsData : []);
 
-                const teamStanding = allStandings.find(
+                const ownStandings = allStandings.filter(
                     (s: any) => s.team?.id === team.id || s.teamId === team.id
                 );
+                // No competition given and the team sits in more than one: take the
+                // one its latest match belongs to.
+                let teamStanding = ownStandings[0];
+                if (!competitionId && ownStandings.length > 1) {
+                    const latest = [...(matchesData.matches || [])]
+                        .filter((m: any) => m.competitionId && parseSafeDate(m.startTime))
+                        .sort((a: any, b: any) => parseSafeDate(b.startTime)!.getTime() - parseSafeDate(a.startTime)!.getTime())[0];
+                    teamStanding = ownStandings.find((s: any) => s.competitionId === latest?.competitionId) ?? ownStandings[0];
+                }
 
                 if (teamStanding) {
                     setStanding({
@@ -339,7 +351,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                                 {player.rating != null && player.rating >= 8 && <Star size={16} className="text-primary fill-primary" />}
                                                             </h3>
                                                             <p className="text-sm text-foreground/40">
-                                                                #{player.number} • {player.position}
+                                                                {player.number ? `#${player.number} • ` : ''}{player.position}
                                                             </p>
                                                         </div>
                                                         <div className="px-3 py-1 bg-primary/20 text-primary rounded-lg font-bold text-sm">

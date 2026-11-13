@@ -1,3 +1,5 @@
+import { parseSafeDate } from '@/lib/safe-date';
+
 /**
  * Kickoff-window helpers for the reminder cron. matches.start_time is a plain
  * text column holding whatever string the writer sent (full ISO with a zone, or
@@ -7,8 +9,8 @@
 
 /** True when `startTime` parses and falls within [now, now + windowMs]. */
 export function isStartWithinWindow(startTime: string, now: Date, windowMs: number): boolean {
-    const start = new Date(startTime);
-    if (isNaN(start.getTime())) return false;
+    const start = parseSafeDate(startTime);
+    if (!start) return false;
     return start.getTime() >= now.getTime() && start.getTime() <= now.getTime() + windowMs;
 }
 
