@@ -616,7 +616,7 @@ function AdminMatchesPageContent() {
                                                             src={(side === 'home' ? match.homeTeam : match.awayTeam)?.logo}
                                                             label={getTeamName(match, side)}
                                                         />
-                                                        <p className="flex-1 min-w-0 text-base sm:text-lg font-bold leading-tight line-clamp-2 break-words">
+                                                        <p className="flex-1 min-w-0 text-base sm:text-lg font-bold leading-tight break-words [overflow-wrap:anywhere]">
                                                             {getTeamName(match, side)}
                                                         </p>
                                                         {showScore && (
