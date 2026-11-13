@@ -55,6 +55,7 @@ function AdminLoggersPageContent() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'management' | 'coverage' | 'analytics'>('management');
     const [searchTerm, setSearchTerm] = useState('');
+    const [coverageScope, setCoverageScope] = useState<'week' | 'all'>('week');
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
     const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -118,7 +119,7 @@ function AdminLoggersPageContent() {
         try {
             const [liveRes, upcomingRes, halfTimeRes, loggersRes, analyticsRes] = await Promise.all([
                 fetch('/api/matches?status=LIVE&limit=200'),
-                fetch('/api/matches?status=UPCOMING&limit=200'),
+                fetch('/api/matches?status=UPCOMING&limit=200&order=start_asc'),
                 fetch('/api/matches?status=HALF_TIME&limit=200'),
                 fetch('/api/loggers'),
                 fetch('/api/analytics/loggers')
@@ -303,7 +304,19 @@ function AdminLoggersPageContent() {
         l.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const activeMatches = matches.filter(m => m.status !== 'FINISHED');
+    // A full season of future fixtures made "Match Coverage" read as a permanent emergency. Default scope is
+    // what needs a logger soon: live, half-time, overdue (still UPCOMING past kick-off) and the next 7 days.
+    const COVERAGE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+    const allActiveMatches = matches
+        .filter(m => m.status !== 'FINISHED')
+        .sort((a, b) => (Date.parse(a.startTime) || 0) - (Date.parse(b.startTime) || 0));
+    const windowEnd = Date.now() + COVERAGE_WINDOW_MS;
+    const activeMatches = coverageScope === 'all'
+        ? allActiveMatches
+        : allActiveMatches.filter(m => m.status !== 'UPCOMING' || !(Date.parse(m.startTime) > windowEnd));
+    const hiddenLaterCount = allActiveMatches.length - activeMatches.length;
+    const nowMs = Date.now();
+    const isOverdue = (m: any) => m.status === 'UPCOMING' && Date.parse(m.startTime) < nowMs - 24 * 60 * 60 * 1000;
     const coverageStats = {
         total: activeMatches.length,
         assigned: activeMatches.filter(m => m.assignedLoggers && m.assignedLoggers.length > 0).length,
@@ -353,7 +366,7 @@ function AdminLoggersPageContent() {
                     {/* Stats Overview */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                         <StatCard label="Total Loggers" value={loggers.length.toString()} subValue={`${loggers.filter(l => l.isAvailable).length} Available`} icon={<Users className="text-primary" size={24} />} />
-                        <StatCard label="Match Coverage" value={`${Math.round((coverageStats.assigned / coverageStats.total) * 100)}%`} subValue={`${coverageStats.assigned}/${coverageStats.total} Matches`} icon={<Shield className="text-blue-500" size={24} />} />
+                        <StatCard label="Match Coverage" value={coverageStats.total === 0 ? '—' : `${Math.round((coverageStats.assigned / coverageStats.total) * 100)}%`} subValue={`${coverageStats.assigned}/${coverageStats.total} ${coverageScope === 'week' ? 'Live + next 7 days' : 'Matches'}`} icon={<Shield className="text-blue-500" size={24} />} />
                         <StatCard label="Live Handling" value={`${coverageStats.liveAssigned}/${coverageStats.live}`} subValue="Active Matches" icon={<Activity className="text-red-500" size={24} />} />
                         <StatCard label="Avg Quality" value={analytics?.loggers ? `${Math.round(analytics.loggers.reduce((acc: number, l: any) => acc + l.metrics.qualityScore, 0) / (analytics.loggers.length || 1))}%` : '0%'} subValue="Metric score" icon={<Award className="text-yellow-500" size={24} />} />
                     </div>
@@ -516,6 +529,17 @@ function AdminLoggersPageContent() {
                                                 Attention Required
                                             </span>
                                         </div>
+                                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                            <span>{coverageScope === 'week' ? 'Live + next 7 days' : 'All upcoming matches'}</span>
+                                            {(hiddenLaterCount > 0 || coverageScope === 'all') && (
+                                                <button
+                                                    onClick={() => setCoverageScope(coverageScope === 'week' ? 'all' : 'week')}
+                                                    className="underline hover:text-white"
+                                                >
+                                                    {coverageScope === 'week' ? `Show ${hiddenLaterCount} later` : 'Back to next 7 days'}
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="space-y-4">
                                             {activeMatches.filter(m => !m.assignedLoggers || m.assignedLoggers.length === 0).length === 0 ? (
                                                 <div className="bg-white/5 border border-white/10 rounded-3xl p-12 text-center">
@@ -535,6 +559,7 @@ function AdminLoggersPageContent() {
                                                                     <div className="flex items-center gap-2 text-[10px] text-white/30 font-bold uppercase tracking-widest">
                                                                         <Clock size={10} />
                                                                         <span>{new Date(match.startTime).toLocaleString()}</span>
+                                                                        {isOverdue(match) && <span className="text-amber-500">Overdue: status never updated</span>}
                                                                     </div>
                                                                 </div>
                                                             </div>
