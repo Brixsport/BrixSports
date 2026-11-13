@@ -277,7 +277,7 @@ export async function loadMatchDetail(matchId: string, isStaffInput: boolean | P
     if (statsEmpty && isFootball && events.length > 0) {
         const homeIdx = 0; // home = index 0
         const awayIdx = 1; // away = index 1
-        const s: number[][] = Array.from({ length: 18 }, () => [0, 0]);
+        const s: number[][] = Array.from({ length: 19 }, () => [0, 0]);
 
         events.forEach((event: any) => {
             const idx = event.teamId === match.match.homeTeamId ? 0 : 1;
@@ -299,6 +299,7 @@ export async function loadMatchDetail(matchId: string, isStaffInput: boolean | P
                 case 'Block': s[15][idx]++; break;
                 case 'Interception': s[16][idx]++; break;
                 case 'Clearance': s[17][idx]++; break;
+                case 'Substitution': s[18][idx]++; break;
             }
         });
 
@@ -334,7 +335,7 @@ export async function loadMatchDetail(matchId: string, isStaffInput: boolean | P
             tackles: [0, 0],
             throwIns: [0, 0],
             goalKicks: [0, 0],
-            substitutions: [0, 0],
+            substitutions: [s[18][0], s[18][1]],
             statsCaptureMode: isGoalsOnlyCapture ? 'goals-only' : 'full',
         };
     }
