@@ -28,7 +28,7 @@ import { LivestreamView } from '@/components/livestream/LivestreamView';
 import { useNotifications } from '@/components/Notifications';
 import { getPushService } from '@/lib/notifications/push-service';
 import { getDeviceId } from '@/lib/notifications/device-id';
-import { formatScorerLine, knownMinutes } from '@/lib/eventMinute';
+import { buildScorerSummary, formatScorerEntry } from '@/lib/scorer-summary';
 import {
     shouldApplyMatchResponse,
     matchPollIntervalMs,
@@ -683,32 +683,10 @@ export default function MatchDetailClient() {
     // list ("Wareez 59'" / "Lazzy 33', 71'" / "Surefunmi 75'") -- missing live entirely.
     // Own goals credit the OPPOSING team's list with an "(OG)" suffix, same own-goal
     // detection LiveMatchTimeline's generateGoalCommentary already uses.
-    const buildScorerSummary = (teamId: string) => {
-        const byPlayer = new Map<string, number[]>();
-        for (const e of (events || [])) {
-            if ((e.type ?? '').toUpperCase().replace(/\s+/g, '_') !== 'GOAL') continue;
-            const isOwnGoal = e.detail?.toLowerCase().includes('own goal') ?? false;
-            const scoringTeamId = isOwnGoal
-                ? (e.teamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId)
-                : e.teamId;
-            if (scoringTeamId !== teamId) continue;
-            // BACKLOG-294: jersey/known-as name, not the full real name -- matches the
-            // same preference LiveMatchTimeline/KeyEventsList now use everywhere else.
-            const rawName = e.player?.jerseyName ?? e.player?.name ?? e.playerSnapshot?.jerseyName ?? e.playerSnapshot?.name ?? 'Unknown';
-            const key = isOwnGoal ? `${rawName} (OG)` : rawName;
-            if (!byPlayer.has(key)) byPlayer.set(key, []);
-            byPlayer.get(key)!.push(e.minute);
-        }
-        // A goal with no known minute (backfilled) is listed by name only; those scorers sort last.
-        return Array.from(byPlayer.entries())
-            .map(([name, minutes]) => {
-                const known = knownMinutes(minutes);
-                return { name, minutes, firstMinute: known.length > 0 ? known[0] : Infinity };
-            })
-            .sort((a, b) => (a.firstMinute === b.firstMinute ? 0 : a.firstMinute - b.firstMinute));
-    };
-    const homeScorers = buildScorerSummary(match.homeTeamId);
-    const awayScorers = buildScorerSummary(match.awayTeamId);
+    const scorersFor = (teamId: string) =>
+        buildScorerSummary(events || [], teamId, match.homeTeamId, match.awayTeamId);
+    const homeScorers = scorersFor(match.homeTeamId);
+    const awayScorers = scorersFor(match.awayTeamId);
 
     // BUG-197 root cause: shootoutHomeScore/shootoutAwayScore default to 0 (not
     // null) on every match, shootout or not (schema.ts), so the only thing that
@@ -969,13 +947,13 @@ export default function MatchDetailClient() {
                             >
                                 <div className="flex-1 space-y-0.5 text-right">
                                     {homeScorers.map(s => (
-                                        <div key={s.name}>{formatScorerLine(s.name, s.minutes)}</div>
+                                        <div key={s.name}>{formatScorerEntry(s)}</div>
                                     ))}
                                 </div>
                                 <FaFutbol className="w-3 h-3 text-foreground/30 flex-shrink-0 mt-1" />
                                 <div className="flex-1 space-y-0.5">
                                     {awayScorers.map(s => (
-                                        <div key={s.name}>{formatScorerLine(s.name, s.minutes)}</div>
+                                        <div key={s.name}>{formatScorerEntry(s)}</div>
                                     ))}
                                 </div>
                             </motion.div>
