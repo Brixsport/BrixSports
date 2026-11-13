@@ -848,7 +848,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const isOT = quarter > periodCount;
         const periodLengthMinutes = isOT ? overtimeDurationMinutes : quarterDuration;
         const minutesElapsedInPeriod = Math.min(periodLengthMinutes, Math.floor(getElapsedSecondsInPeriod() / 60));
-        const priorMinutes = isOT ? periodCount * quarterDuration : (quarter - 1) * quarterDuration;
+        // Overtime minutes continue after regulation and after every earlier overtime.
+        const priorMinutes = isOT
+            ? periodCount * quarterDuration + Math.max(0, (otNumber || 1) - 1) * overtimeDurationMinutes
+            : (quarter - 1) * quarterDuration;
         return priorMinutes + minutesElapsedInPeriod;
     };
 
@@ -1227,7 +1230,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setMatchEnded(true);
                 alert('Match finalized successfully! All events have been saved.');
             } else {
-                alert('Failed to finalize match. Please try again.');
+                const refusal = await response.json().catch(() => null);
+                alert(response.status === 422 && refusal?.error ? refusal.error : 'Failed to finalize match. Please try again.');
             }
         } catch (error) {
             console.error('Error finalizing match:', error);
