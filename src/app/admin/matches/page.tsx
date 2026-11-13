@@ -639,7 +639,7 @@ function AdminMatchesPageContent() {
                                                     <MoreVertical size={18} />
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="min-w-52 bg-[#111] border-white/10 text-white">
-                                                    {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
+                                                    {(match.status === 'UPCOMING' || match.status === 'LIVE' || match.status === 'HALF_TIME') && (
                                                         <DropdownMenuItem asChild className={itemClass}>
                                                             <Link href={`/admin/match-lineups?matchId=${encodeURIComponent(match.id)}`}><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
                                                         </DropdownMenuItem>

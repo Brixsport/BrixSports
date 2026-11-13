@@ -416,9 +416,11 @@ export default function AdminMatchLineupsPage() {
 
     // Soonest first (live matches lead); the API already orders by start time, this keeps it true after filtering.
     const visibleMatches = matches
-        .filter(m => statusFilter === 'ALL' || m.status === statusFilter)
+        .filter(m => statusFilter === 'ALL' || (statusFilter === 'LIVE' ? (m.status === 'LIVE' || m.status === 'HALF_TIME') : m.status === statusFilter))
         .sort((a, b) => {
-            if ((a.status === 'LIVE') !== (b.status === 'LIVE')) return a.status === 'LIVE' ? -1 : 1;
+            const aLive = a.status === 'LIVE' || a.status === 'HALF_TIME';
+            const bLive = b.status === 'LIVE' || b.status === 'HALF_TIME';
+            if (aLive !== bLive) return aLive ? -1 : 1;
             return (Date.parse(a.startTime) || 0) - (Date.parse(b.startTime) || 0);
         });
     const dayLabel = (t: string) => {
@@ -493,7 +495,7 @@ export default function AdminMatchLineupsPage() {
                                             </div>
                                         </div>
                                         <div className={`px-3 py-1 rounded-full text-xs font-bold ${match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-400' :
-                                            match.status === 'LIVE' ? 'bg-green-500/20 text-green-400' :
+                                            (match.status === 'LIVE' || match.status === 'HALF_TIME') ? 'bg-green-500/20 text-green-400' :
                                                 'bg-white/10 text-white/60'
                                             }`}>
                                             {match.status}
