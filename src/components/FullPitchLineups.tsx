@@ -254,7 +254,7 @@ export function FullPitchLineups({
                             ? 'aspect-[1/2] max-w-[420px]'
                             : variant === 'basketball'
                                 ? 'aspect-[2/3] max-w-[520px]'
-                                : 'aspect-[3/4] max-w-[720px]'}
+                                : 'aspect-[3/5] sm:aspect-[3/4] max-w-[720px]'}
                     `}
                 >
                     <ResponsivePitch
