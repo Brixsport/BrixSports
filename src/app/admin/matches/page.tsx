@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video, MoreVertical } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -58,6 +59,20 @@ interface Competition {
     level?: string;
     season?: string;
     status?: 'upcoming' | 'ongoing' | 'completed';
+}
+
+// 32px team crest with an initial badge when the logo is missing or fails to load (plain img: no remote-domain config).
+function AdminTeamLogo({ src, label }: { src?: string | null; label: string }) {
+    const [failed, setFailed] = useState(false);
+    if (!src || failed) {
+        return (
+            <span className="shrink-0 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-black text-white/60" aria-hidden="true">
+                {label.trim().charAt(0).toUpperCase() || '?'}
+            </span>
+        );
+    }
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" width={32} height={32} loading="lazy" onError={() => setFailed(true)} className="shrink-0 w-8 h-8 object-contain" />;
 }
 
 function AdminMatchesPageContent() {
@@ -481,6 +496,15 @@ function AdminMatchesPageContent() {
 
     // Prefer shortName from the embedded team object returned by /api/matches.
     // Fall back to the separately-fetched teams list, then raw ID as last resort.
+    // Full team name for the card (the short code stays for the delete dialog and as a last resort).
+    const getTeamName = (match: Match, side: 'home' | 'away') => {
+        const embedded = side === 'home' ? match.homeTeam : match.awayTeam;
+        if (embedded?.name) return embedded.name;
+        const teamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
+        const fallback = teams.find(t => t.id === teamId);
+        return fallback?.name ?? getTeamDisplay(match, side);
+    };
+
     const getTeamDisplay = (match: Match, side: 'home' | 'away') => {
         const embedded = side === 'home' ? match.homeTeam : match.awayTeam;
         if (embedded?.shortName) return embedded.shortName;
@@ -548,144 +572,125 @@ function AdminMatchesPageContent() {
                         <SkeletonLoader type="card" count={5} />
                     ) : (
                         <>
-                            {filteredMatches.map((match) => (
+                            {filteredMatches.map((match) => {
+                                const overdue = match.status === 'UPCOMING' && Date.parse(match.startTime) < Date.now() - 24 * 60 * 60 * 1000;
+                                const showScore = match.status !== 'UPCOMING';
+                                const itemClass = 'min-h-11 gap-3 cursor-pointer text-sm font-semibold text-white focus:bg-white/10 focus:text-white';
+                                return (
                                 <motion.div
                                     key={match.id}
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="bg-white/5 rounded-[32px] p-8 border border-white/10 hover:border-primary/50 transition-all group"
+                                    className="bg-white/5 rounded-3xl p-4 sm:p-6 border border-white/10 hover:border-primary/50 transition-all"
                                 >
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-                                        <div className="flex-1">
-                                            {/* Live device report: the competition/round label was the
-                                                one span in this header row with no min-w-0/truncate --
-                                                a long "{competition} · {round}" string (e.g. "NPUGA
-                                                (BASKETBALL) · Quarter-Final") rendered at its full
-                                                natural width, pushing the row past the viewport at any
-                                                width tight enough, or at default width once the OS-level
-                                                text-size accessibility setting scales it up (confirmed
-                                                live: 135% font-size reproduces a 27px page overflow here
-                                                that doesn't show at 100%). Same shrink-to-fit pattern as
-                                                the team names below -- min-w-0 on this row so the label
-                                                can shrink, shrink-0 on the three fixed badges before it. */}
-                                            <div className="flex items-center gap-4 mb-6 min-w-0">
+                                    <div className="flex items-start gap-3 sm:gap-6">
+                                        <div className="flex-1 min-w-0">
+                                            {/* Header: status, sport, competition. Wraps instead of clipping; the long label is truncated with a title. */}
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-4 min-w-0">
                                                 <span className={`shrink-0 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
                                                     match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-500' :
                                                         'bg-white/20 text-white/60'
                                                     }`}>
                                                     {match.status}
                                                 </span>
+                                                {overdue && (
+                                                    <span className="shrink-0 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-500" title="Kick-off passed more than a day ago but the status was never updated">
+                                                        Overdue
+                                                    </span>
+                                                )}
                                                 <span className="shrink-0 text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
-                                                <div className="shrink-0 w-1 h-1 rounded-full bg-white/10" />
-                                                <span className="min-w-0 truncate text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
+                                                <span
+                                                    className="min-w-0 max-w-full truncate text-white/40 text-[10px] font-black uppercase tracking-widest"
+                                                    title={match.round ? `${match.competition} · ${match.round}` : match.competition}
+                                                >
+                                                    {match.round ? `${match.competition} · ${match.round}` : match.competition}
+                                                </span>
                                             </div>
 
-                                            {/* BACKLOG-343: these two flex-1 columns had no min-w-0, so
-                                                Tailwind's `truncate` (which needs a constrained/shrinkable
-                                                width to do anything) never actually engaged -- a long team
-                                                name rendered at its full intrinsic width and pushed the
-                                                whole card, and the page, past the viewport. min-w-0 lets the
-                                                flex item shrink below its content size so truncate can clip
-                                                it with an ellipsis instead, matching the same fix already
-                                                applied correctly on /admin/match-ratings.
-                                                BACKLOG-343 follow-up, live feedback: min-w-0 stopped
-                                                the overflow but at text-2xl + gap-12 + a 120px-min score box,
-                                                the column left for each name on mobile was so narrow that
-                                                truncate clipped real names down to one or two characters
-                                                ("C.") -- technically not overflowing, but unreadable. Same
-                                                "shrink to fit" direction as BACKLOG-336/343's other fixes:
-                                                smaller text/gaps/score-box padding at the default breakpoint
-                                                give the truncated text actual room instead of an ellipsis
-                                                doing all the work; full desktop sizing restored from sm:. */}
-                                            <div className="flex items-center gap-2 sm:gap-12 mb-6">
-                                                <div className="flex-1 min-w-0 text-right">
-                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
-                                                </div>
-                                                <div className="px-2 sm:px-6 py-1 sm:py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[64px] sm:min-w-[120px] flex items-center justify-center shrink-0">
-                                                    {match.status === 'UPCOMING' ? (
-                                                        <span className="text-white/20 text-xs sm:text-sm font-black italic">VS</span>
-                                                    ) : (
-                                                        <div className="flex items-center gap-1 sm:gap-4">
-                                                            <span className="text-lg sm:text-3xl font-display italic">{match.homeScore}</span>
-                                                            <span className="text-white/20 text-sm sm:text-xl font-display">-</span>
-                                                            <span className="text-lg sm:text-3xl font-display italic">{match.awayScore}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
-                                                </div>
+                                            {/* Teams stacked (logo, full name, score) so each name gets the whole card width
+                                                instead of a third of it between the score box and the actions. */}
+                                            <div className="space-y-2">
+                                                {(['home', 'away'] as const).map(side => (
+                                                    <div key={side} className="flex items-center gap-3 min-w-0">
+                                                        <AdminTeamLogo
+                                                            src={(side === 'home' ? match.homeTeam : match.awayTeam)?.logo}
+                                                            label={getTeamName(match, side)}
+                                                        />
+                                                        <p className="flex-1 min-w-0 text-base sm:text-lg font-bold leading-tight line-clamp-2 break-words">
+                                                            {getTeamName(match, side)}
+                                                        </p>
+                                                        {showScore && (
+                                                            <span className="shrink-0 w-10 text-right text-2xl font-display tabular-nums">
+                                                                {side === 'home' ? match.homeScore : match.awayScore}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </div>
 
-                                            <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-white/20">
-                                                <div className="flex items-center gap-2">
+                                            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-[10px] font-black uppercase tracking-widest text-white/40">
+                                                <div className="flex items-center gap-2 shrink-0">
                                                     <Calendar size={14} className="text-primary" />
                                                     <span>{safeToLocale(match.startTime, 'datetime', undefined, '—')}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <MapPin size={14} className="text-primary" />
-                                                    <span>{match.venue}</span>
-                                                </div>
+                                                {match.venue && (
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <MapPin size={14} className="text-primary shrink-0" />
+                                                        <span className="truncate" title={match.venue}>{match.venue}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
-                                        {/* BACKLOG-343: this action-icon row is always flex-row (the
-                                            outer md:flex-col wrapper is a no-op -- it has only this one
-                                            child, so direction never visibly changes). Up to 6 fixed p-3
-                                            icon buttons in one line has enough natural width that on some
-                                            cards -- ones with a longer venue/date row pushing the info
-                                            column's own min-content width up -- the tablet-width card
-                                            (~753-777px available) couldn't fit both columns, overflowing
-                                            the page by up to ~25px. flex-wrap lets the row reflow onto a
-                                            second line only when it doesn't fit; at full desktop width
-                                            everything already fits on one line, so this is a no-op there. */}
-                                        <div className="flex flex-row md:flex-col gap-2">
-                                            <div className="flex flex-wrap justify-end gap-2">
-                                                <Link
-                                                    href={`/admin/match-lineups`}
-                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-blue-500/20 text-blue-400 transition-colors"
-                                                    title="Manage Lineups"
+                                        {/* Actions: Edit stays one tap away, everything else lives in the kebab. */}
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <button
+                                                onClick={() => openEditModal(match)}
+                                                aria-label="Edit match"
+                                                title="Edit match"
+                                                className="min-h-11 min-w-11 flex items-center justify-center bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
+                                            >
+                                                <Edit size={18} />
+                                            </button>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger
+                                                    aria-label="Match actions"
+                                                    className="min-h-11 min-w-11 flex items-center justify-center bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors data-[state=open]:bg-white/10"
                                                 >
-                                                    <ClipboardList size={20} />
-                                                </Link>
-                                                {match.status === 'FINISHED' && (
-                                                    <Link
-                                                        href={`/admin/match-ratings/${match.id}`}
-                                                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-yellow-500/20 text-yellow-400 transition-colors"
-                                                        title="Adjust Ratings"
+                                                    <MoreVertical size={18} />
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="min-w-52 bg-[#111] border-white/10 text-white">
+                                                    <DropdownMenuItem asChild className={itemClass}>
+                                                        <Link href="/admin/match-lineups"><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
+                                                    </DropdownMenuItem>
+                                                    {match.status === 'FINISHED' && (
+                                                        <DropdownMenuItem asChild className={itemClass}>
+                                                            <Link href={`/admin/match-ratings/${match.id}`}><Star size={16} className="text-yellow-400" />Adjust ratings</Link>
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
+                                                        <DropdownMenuItem asChild className={itemClass}>
+                                                            <Link href={`/admin/livestreams?matchId=${match.id}`}><Video size={16} className="text-red-400" />Manage livestream</Link>
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuItem asChild className={itemClass}>
+                                                        <Link href={`/logger?matchId=${match.id}`}><Eye size={16} />Open logger view</Link>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator className="bg-white/10" />
+                                                    <DropdownMenuItem
+                                                        variant="destructive"
+                                                        className="min-h-11 gap-3 cursor-pointer text-sm font-semibold"
+                                                        onSelect={() => confirmDelete(match.id, `${getTeamName(match, 'home')} vs ${getTeamName(match, 'away')}`)}
                                                     >
-                                                        <Star size={20} />
-                                                    </Link>
-                                                )}
-                                                {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
-                                                    <Link
-                                                        href={`/admin/livestreams?matchId=${match.id}`}
-                                                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-400 transition-colors"
-                                                        title="Manage Livestream"
-                                                    >
-                                                        <Video size={20} />
-                                                    </Link>
-                                                )}
-                                                <Link href={`/logger?matchId=${match.id}`} className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
-                                                    <Eye size={20} />
-                                                </Link>
-                                                <button
-                                                    onClick={() => openEditModal(match)}
-                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
-                                                >
-                                                    <Edit size={20} />
-                                                </button>
-                                                <button
-                                                    onClick={() => confirmDelete(match.id, `${getTeamDisplay(match, 'home')} vs ${getTeamDisplay(match, 'away')}`)}
-                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-500 transition-colors"
-                                                >
-                                                    <Trash2 size={20} />
-                                                </button>
-                                            </div>
+                                                        <Trash2 size={16} />Delete match
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </div>
                                 </motion.div>
-                            ))}
+                                );
+                            })}
 
                             {filteredMatches.length === 0 && (
                                 <div className="text-center py-24 bg-white/5 rounded-[32px] border border-white/10">
