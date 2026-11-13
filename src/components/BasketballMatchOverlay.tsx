@@ -63,7 +63,9 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
     const fetchStandings = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/basketball/standings');
+            const response = await fetch(match.competitionId
+                ? `/api/basketball/standings?competitionId=${encodeURIComponent(match.competitionId)}`
+                : `/api/basketball/standings?competition=${encodeURIComponent(match.competition)}`);
             const data = await response.json();
             if (data.success) {
                 setStandings(data.standings);
