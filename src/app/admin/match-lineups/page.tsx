@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -110,6 +110,21 @@ export default function AdminMatchLineupsPage() {
             loadMatches();
         }
     }, [user]);
+
+    // Deep link from the admin Matches list: /admin/match-lineups?matchId=... opens that match's lineup
+    // directly. Read once, after the list loads (window.location, not useSearchParams, to avoid a Suspense boundary).
+    const deepLinkHandled = useRef(false);
+    const [deepLinkMissing, setDeepLinkMissing] = useState(false);
+    useEffect(() => {
+        if (deepLinkHandled.current || matches.length === 0) return;
+        deepLinkHandled.current = true;
+        const id = new URLSearchParams(window.location.search).get('matchId');
+        if (!id) return;
+        const target = matches.find(m => m.id === id);
+        if (target) handleMatchSelect(target);
+        else setDeepLinkMissing(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [matches]);
 
     const loadMatches = async () => {
         try {
@@ -434,6 +449,11 @@ export default function AdminMatchLineupsPage() {
                     /* Match Selection */
                     <div className="space-y-4">
                         <h2 className="text-xl font-bold mb-4">Select a Match</h2>
+                        {deepLinkMissing && (
+                            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+                                That match is not open for lineups (it may be finished or not assigned to you). Pick one from the list.
+                            </div>
+                        )}
                         {/* Same format as the admin Matches list: status tabs, soonest first, grouped by day. */}
                         <div className="flex gap-2 mb-2">
                             {(['ALL', 'LIVE', 'UPCOMING'] as const).map(s => (
