@@ -372,7 +372,7 @@ function AdminLoggersPageContent() {
                         <StatCard label="Total Loggers" value={loggers.length.toString()} subValue={`${loggers.filter(l => l.isAvailable).length} Available`} icon={<Users className="text-primary" size={24} />} />
                         <StatCard label="Match Coverage" value={coverageStats.total === 0 ? '—' : `${Math.round((coverageStats.assigned / coverageStats.total) * 100)}%`} subValue={`${coverageStats.assigned}/${coverageStats.total} ${coverageScope === 'week' ? 'Live + next 7 days' : 'Matches'}`} icon={<Shield className="text-blue-500" size={24} />} />
                         <StatCard label="Live Handling" value={`${coverageStats.liveAssigned}/${coverageStats.live}`} subValue="Active Matches" icon={<Activity className="text-red-500" size={24} />} />
-                        <StatCard label="Avg Quality" value={analytics?.loggers ? `${Math.round(analytics.loggers.reduce((acc: number, l: any) => acc + l.metrics.qualityScore, 0) / (analytics.loggers.length || 1))}%` : '0%'} subValue="Metric score" icon={<Award className="text-yellow-500" size={24} />} />
+                        <StatCard label="Avg Quality" value={analytics?.loggers?.length ? `${Math.round(analytics.loggers.reduce((acc: number, l: any) => acc + l.metrics.qualityScore, 0) / analytics.loggers.length)}%` : '—'} subValue="Metric score" icon={<Award className="text-yellow-500" size={24} />} />
                     </div>
 
                     {/* Navigation Tabs. BACKLOG-336: was a fixed-width px-6/py-3 pill row
@@ -659,6 +659,9 @@ function AdminLoggersPageContent() {
                                     <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 space-y-6">
                                         <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Efficiency Leaderboard</h4>
                                         <div className="space-y-6">
+                                            {!analytics?.loggers?.length && (
+                                                <p className="text-xs text-white/40">No logger activity recorded yet.</p>
+                                            )}
                                             {analytics?.loggers?.slice(0, 5).map((l: any, i: number) => (
                                                 <div key={l.logger.id} className="flex items-center gap-4">
                                                     <span className="text-2xl font-display italic text-white/10 w-8">0{i + 1}</span>
@@ -680,22 +683,24 @@ function AdminLoggersPageContent() {
                                         </div>
                                     </div>
 
-                                    <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 flex flex-col justify-center items-center text-center space-y-4">
-                                        <div className="w-24 h-24 rounded-full border-4 border-primary/20 border-t-primary flex items-center justify-center animate-[spin_3s_linear_infinite]">
-                                            <BarChart3 className="text-primary" size={32} />
-                                        </div>
-                                        <h4 className="font-display italic text-2xl uppercase">System Health</h4>
-                                        <p className="text-xs text-white/40 max-w-[240px]">Overall logging consistency and data integrity metrics collected over the last 30 days.</p>
-                                        <div className="grid grid-cols-2 gap-4 w-full mt-4">
-                                            <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                                                <p className="text-[10px] font-black uppercase text-white/20 mb-1">Consistency</p>
-                                                <p className="text-xl font-display italic">92%</p>
+                                    <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 space-y-6">
+                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">
+                                            Activity{analytics?.timeframe ? ` · last ${analytics.timeframe}` : ''}
+                                        </h4>
+                                        {analytics?.loggers ? (
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                                                    <p className="text-[10px] font-black uppercase text-white/30 mb-1">Events logged</p>
+                                                    <p className="text-2xl font-display italic tabular-nums">{analytics.loggers.reduce((n: number, l: any) => n + (l.metrics.recentEvents || 0), 0)}</p>
+                                                </div>
+                                                <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                                                    <p className="text-[10px] font-black uppercase text-white/30 mb-1">Active loggers</p>
+                                                    <p className="text-2xl font-display italic tabular-nums">{analytics.loggers.filter((l: any) => (l.metrics.recentEvents || 0) > 0).length}<span className="text-white/30 text-base">/{analytics.loggers.length}</span></p>
+                                                </div>
                                             </div>
-                                            <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                                                <p className="text-[10px] font-black uppercase text-white/20 mb-1">Latency</p>
-                                                <p className="text-xl font-display italic">280ms</p>
-                                            </div>
-                                        </div>
+                                        ) : (
+                                            <p className="text-xs text-white/40">Analytics could not be loaded. Refresh to try again.</p>
+                                        )}
                                     </div>
                                 </div>
                             </motion.div>
@@ -937,7 +942,7 @@ function AdminLoggersPageContent() {
                                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                         >
                                             <option value="logger">Logger</option>
-                                            <option value="admin">Admin</option>
+                                            <option value="logger_manager">Logger manager</option>
                                         </select>
                                     </div>
                                 </div>
