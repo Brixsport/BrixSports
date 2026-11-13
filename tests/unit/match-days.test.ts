@@ -7,6 +7,7 @@ import {
     nearestMatchDay,
     stepMatchDay,
     formatDayLabel,
+    trimStripDays,
 } from '@/lib/match-days';
 
 // Local-time constructors so the tests hold in any timezone.
@@ -87,5 +88,15 @@ describe('formatDayLabel', () => {
     });
     it('adds the year only when it differs from the current one', () => {
         expect(formatDayLabel('2027-01-09', '2026-11-13').secondary).toBe('9 Jan 2027');
+    });
+});
+
+describe('trimStripDays', () => {
+    const days = ['2025-11-08', '2026-10-20', '2026-11-01', '2026-11-13', '2026-12-06'];
+    it('drops days older than the window and keeps upcoming ones', () => {
+        expect(trimStripDays(days, '2026-11-13', '2026-11-13')).toEqual(['2026-11-01', '2026-11-13', '2026-12-06']);
+    });
+    it('keeps the selected day even when it is outside the window', () => {
+        expect(trimStripDays(days, '2026-11-13', '2025-11-08')).toEqual(['2025-11-08', '2026-11-01', '2026-11-13', '2026-12-06']);
     });
 });
