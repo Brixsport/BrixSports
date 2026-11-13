@@ -137,27 +137,33 @@ function AdminMatchesPageContent() {
             + (order ? `&order=${order}` : '');
     };
 
+    // Every list load/append takes a token; a response whose token is no longer current (the admin switched
+    // tab, or the list was reloaded after a create/delete) is dropped instead of being mixed into the new list.
+    const listReqRef = useRef(0);
+    const reloadList = async (status: string, showSkeleton = true) => {
+        const my = ++listReqRef.current;
+        if (showSkeleton) setIsLoading(true);
+        try {
+            const res = await fetch(listUrl(status, 0));
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const rows = await res.json();
+            if (my !== listReqRef.current) return;
+            setMatches(rows);
+            const total = parseInt(res.headers.get('X-Total-Count') || '0', 10);
+            setListTotal(total);
+            if (status === 'all') setTotalMatchCount(total);
+        } catch (err) {
+            if (my === listReqRef.current) error('Failed to load matches. Please try again.');
+            console.error('Error loading filtered matches:', err);
+        } finally {
+            if (my === listReqRef.current && showSkeleton) setIsLoading(false);
+        }
+    };
+
     const isFirstFilterRun = useRef(true);
     useEffect(() => {
         if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
-        let cancelled = false;
-        (async () => {
-            setIsLoading(true);
-            try {
-                const res = await fetch(listUrl(filterStatus, 0));
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const rows = await res.json();
-                if (cancelled) return;
-                setMatches(rows);
-                setListTotal(parseInt(res.headers.get('X-Total-Count') || '0', 10));
-            } catch (err) {
-                if (!cancelled) error('Failed to load matches. Please try again.');
-                console.error('Error loading filtered matches:', err);
-            } finally {
-                if (!cancelled) setIsLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
+        reloadList(filterStatus);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterStatus]);
 
@@ -251,11 +257,13 @@ function AdminMatchesPageContent() {
     // X-Total-Count header driving the stat card and the Load More button.
     const loadMoreMatches = async () => {
         setIsLoadingMore(true);
+        const my = ++listReqRef.current;
         try {
             const res = await fetch(listUrl(filterStatus, matches.length));
             if (res.ok) {
                 const nextPage: Match[] = await res.json();
-                setMatches(prev => [...prev, ...nextPage]);
+                if (my !== listReqRef.current) return;
+                setMatches(prev => [...prev, ...nextPage.filter(n => !prev.some(p => p.id === n.id))]);
                 const total = parseInt(res.headers.get('X-Total-Count') || '0', 10);
                 setListTotal(total);
                 if (filterStatus === 'all') setTotalMatchCount(total);
@@ -288,9 +296,8 @@ function AdminMatchesPageContent() {
 
             if (response.ok) {
                 const newMatch = await response.json();
-                setMatches([newMatch, ...matches]);
-                setTotalMatchCount(c => c + 1);
-                setListTotal(c => c + 1);
+                // Re-read page 0 of the current tab: the server decides where the new match sorts (or whether it belongs).
+                reloadList(filterStatus, false);
                 fetchStatusCounts();
                 setShowCreateModal(false);
                 setFormData({
@@ -350,9 +357,7 @@ function AdminMatchesPageContent() {
             });
 
             if (response.ok) {
-                setMatches(matches.filter(m => m.id !== deleteDialog.itemId));
-                setTotalMatchCount(c => Math.max(0, c - 1));
-                setListTotal(c => Math.max(0, c - 1));
+                reloadList(filterStatus, false);
                 fetchStatusCounts();
                 success('Match deleted successfully!');
                 setDeleteDialog({ isOpen: false, itemId: null, itemName: '', isDeleting: false });
@@ -697,7 +702,7 @@ function AdminMatchesPageContent() {
                                     </p>
                                     <button
                                         onClick={loadMoreMatches}
-                                        disabled={isLoadingMore}
+                                        disabled={isLoadingMore || isLoading}
                                         className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors disabled:opacity-50"
                                     >
                                         {isLoadingMore ? 'Loading...' : 'Load More'}

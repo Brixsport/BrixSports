@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
         const orderBy =
             order === 'start_asc' ? [asc(matches.startTime), asc(matches.id)] :
             order === 'start_desc' ? [desc(matches.startTime), desc(matches.id)] :
-            [desc(matches.createdAt)];
+            [desc(matches.createdAt), desc(matches.id)];
         const allMatches = await query.orderBy(...orderBy).limit(limit).offset(offset);
 
         // Collect all unique team IDs
