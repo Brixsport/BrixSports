@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, Activity, CheckCircle2, AlertCircle, Clock,
-    Settings, Search, Filter, MoreVertical, Shield,
+    Settings, Search, Filter, Shield,
     Award, Zap, Calendar, MapPin, ChevronRight, UserPlus,
     BarChart3, PieChart, TrendingUp, RefreshCw, X
 } from 'lucide-react';
@@ -360,24 +360,25 @@ function AdminLoggersPageContent() {
 
     return (
         <>
-            <div className="p-6 lg:p-12">
-                <div className="max-w-6xl mx-auto space-y-12">
+            <div className="p-4 sm:p-6 lg:p-12">
+                <div className="max-w-6xl mx-auto space-y-6 sm:space-y-12">
                     <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div>
-                            <h1 className="font-display text-4xl tracking-tight italic uppercase leading-none mb-2">Logger Management</h1>
-                            <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Performance & Coverage Oversight</p>
+                            <h1 className="font-display text-2xl sm:text-4xl tracking-tight italic uppercase leading-none mb-2">Logger Management</h1>
+                            <p className="hidden sm:block text-white/40 text-xs font-bold uppercase tracking-widest">Performance & Coverage Oversight</p>
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 sm:gap-4">
                             <button
                                 onClick={fetchData}
-                                className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
+                                aria-label="Refresh data"
+                                className="min-h-11 min-w-11 flex items-center justify-center bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
                                 title="Refresh Data"
                             >
                                 <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
                             </button>
                             <button
                                 onClick={() => setShowRegisterModal(true)}
-                                className="flex items-center gap-2 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105"
+                                className="flex-1 sm:flex-none min-h-11 justify-center flex items-center gap-2 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105"
                             >
                                 <UserPlus size={16} />
                                 Register Logger
@@ -386,7 +387,7 @@ function AdminLoggersPageContent() {
                     </header>
 
                     {/* Stats Overview */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="hidden md:grid grid-cols-4 gap-6">
                         <StatCard label="Total Loggers" value={loggers.length.toString()} subValue={`${loggers.filter(l => l.isAvailable).length} Available`} icon={<Users className="text-primary" size={24} />} />
                         <StatCard label="Match Coverage" value={coverageStats.total === 0 ? '—' : `${Math.round((coverageStats.assigned / coverageStats.total) * 100)}%`} subValue={`${coverageStats.assigned}/${coverageStats.total} ${coverageScope === 'week' ? 'Live + next 7 days' : 'Matches'}`} icon={<Shield className="text-blue-500" size={24} />} />
                         <StatCard label="Live Handling" value={`${coverageStats.liveAssigned}/${coverageStats.live}`} subValue="Active Matches" icon={<Activity className="text-red-500" size={24} />} />
@@ -401,8 +402,8 @@ function AdminLoggersPageContent() {
                         overflow-x-auto + scrollbar-hide as the safety net if labels still
                         don't fit (rather than truncating/abbreviating real nav labels). */}
                     <div className="flex items-center gap-1 sm:gap-2 p-1 bg-white/5 border border-white/10 rounded-2xl w-full sm:w-fit overflow-x-auto scrollbar-hide">
-                        <TabButton active={activeTab === 'management'} onClick={() => setActiveTab('management')} label="Management" icon={<Users size={12} className="sm:w-3.5 sm:h-3.5" />} />
-                        <TabButton active={activeTab === 'coverage'} onClick={() => setActiveTab('coverage')} label="Match Coverage" icon={<Calendar size={12} className="sm:w-3.5 sm:h-3.5" />} />
+                        <TabButton active={activeTab === 'management'} onClick={() => setActiveTab('management')} label="Management" badge={loggers.length} icon={<Users size={12} className="sm:w-3.5 sm:h-3.5" />} />
+                        <TabButton active={activeTab === 'coverage'} onClick={() => setActiveTab('coverage')} label="Match Coverage" badge={unassignedMatches.length} badgeAlert={unassignedMatches.length > 0} icon={<Calendar size={12} className="sm:w-3.5 sm:h-3.5" />} />
                         <TabButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} label="Analytics" icon={<BarChart3 size={12} className="sm:w-3.5 sm:h-3.5" />} />
                     </div>
 
@@ -421,10 +422,11 @@ function AdminLoggersPageContent() {
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
                                         <input
                                             type="text"
+                                            aria-label="Search loggers"
                                             placeholder="Search loggers by name or email..."
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-primary transition-all"
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 sm:py-4 pl-12 pr-4 text-sm font-bold outline-none focus:border-primary transition-all"
                                         />
                                     </div>
                                 </div>
@@ -436,7 +438,61 @@ function AdminLoggersPageContent() {
                                     the default (mobile) breakpoint, full desktop sizing from sm:
                                     up, and the Matches column hidden below sm: (least essential
                                     column, avatars-only, redundant with the Actions "manage" flow). */}
-                                <div className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
+                                {/* Phones: one card per logger (the six-column table can't fit 375px). */}
+                                <div className="sm:hidden space-y-3">
+                                    {filteredLoggers.map((logger) => {
+                                        const loggerAnalytics = analytics?.loggers?.find((a: any) => a.logger.id === logger.id);
+                                        const activeCount = (logger.assignedMatches ?? []).filter(m => m.status !== 'FINISHED').length;
+                                        return (
+                                            <div key={logger.id} className="bg-white/5 border border-white/10 rounded-3xl p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center border border-white/10 shrink-0">
+                                                        <span className="text-xs font-black italic">{logger.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</span>
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-sm font-bold italic break-words [overflow-wrap:anywhere]">{logger.name}</p>
+                                                        <p className="text-[10px] text-white/40 font-bold break-all">{logger.email}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleEditClick(logger)}
+                                                        aria-label={`Edit ${logger.name}`}
+                                                        className="shrink-0 min-h-11 min-w-11 flex items-center justify-center bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                                                    >
+                                                        <Settings size={18} />
+                                                    </button>
+                                                </div>
+                                                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                                                    <StatusBadge status={logger.status} />
+                                                    <button
+                                                        onClick={() => toggleAvailability(logger.id, logger.isAvailable)}
+                                                        aria-pressed={logger.isAvailable}
+                                                        className={`min-h-11 flex items-center gap-2 px-4 rounded-full border transition-all ${logger.isAvailable
+                                                            ? 'bg-primary/10 border-primary/20 text-primary'
+                                                            : 'bg-white/5 border-white/10 text-white/40'
+                                                            }`}
+                                                    >
+                                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${logger.isAvailable ? 'bg-primary' : 'bg-white/20'}`} />
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">{logger.isAvailable ? 'Available' : 'Busy'}</span>
+                                                    </button>
+                                                </div>
+                                                <div className="mt-3 flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-white/40">
+                                                    <span>Quality <span className="text-white tabular-nums">{loggerAnalytics ? `${loggerAnalytics.metrics.qualityScore}%` : '—'}</span></span>
+                                                    <span>Active matches <span className="text-white tabular-nums">{activeCount}</span></span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {filteredLoggers.length === 0 && (
+                                    <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-white/40 italic">
+                                            {loggers.length === 0 ? 'No loggers registered yet' : 'No loggers match your search'}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="hidden sm:block bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="bg-white/5 text-[10px] font-black uppercase tracking-widest text-white/30">
@@ -511,17 +567,13 @@ function AdminLoggersPageContent() {
                                                             </div>
                                                         </td>
                                                         <td className="p-1 sm:p-6 text-right">
-                                                            <div className="flex items-center justify-end gap-0.5 sm:gap-2">
+                                                            <div className="flex items-center justify-end">
                                                                 <button
                                                                     onClick={() => handleEditClick(logger)}
-                                                                    className="p-1 sm:p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
+                                                                    aria-label={`Edit ${logger.name}`}
+                                                                    className="min-h-11 min-w-11 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
                                                                 >
-                                                                    <Settings size={14} className="sm:hidden" />
-                                                                    <Settings size={16} className="hidden sm:block" />
-                                                                </button>
-                                                                <button className="p-1 sm:p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
-                                                                    <MoreVertical size={14} className="sm:hidden" />
-                                                                    <MoreVertical size={16} className="hidden sm:block" />
+                                                                    <Settings size={16} />
                                                                 </button>
                                                             </div>
                                                         </td>
@@ -850,7 +902,7 @@ function AdminLoggersPageContent() {
             {/* Register Logger Modal */}
             <AnimatePresence>
                 {showRegisterModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -862,7 +914,7 @@ function AdminLoggersPageContent() {
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                            className="relative w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 shadow-2xl"
+                            role="dialog" aria-modal="true" className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[#0a0a0a] border border-white/10 rounded-[32px] p-5 sm:p-8 shadow-2xl"
                         >
                             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
@@ -911,14 +963,14 @@ function AdminLoggersPageContent() {
                                         type="button"
                                         onClick={() => setShowRegisterModal(false)}
                                         disabled={isRegistering}
-                                        className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors disabled:opacity-50"
+                                        className="flex-1 min-h-11 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors disabled:opacity-50"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={isRegistering}
-                                        className="flex-1 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                                        className="flex-1 min-h-11 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
                                     >
                                         {isRegistering ? (
                                             <span className="flex items-center justify-center gap-2">
@@ -939,7 +991,7 @@ function AdminLoggersPageContent() {
             {/* Edit Logger Modal */}
             <AnimatePresence>
                 {showEditModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -951,7 +1003,7 @@ function AdminLoggersPageContent() {
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                            className="relative w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 shadow-2xl"
+                            role="dialog" aria-modal="true" className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[#0a0a0a] border border-white/10 rounded-[32px] p-5 sm:p-8 shadow-2xl"
                         >
                             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
@@ -1027,14 +1079,14 @@ function AdminLoggersPageContent() {
                                         type="button"
                                         onClick={() => setShowEditModal(false)}
                                         disabled={isUpdating}
-                                        className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors disabled:opacity-50"
+                                        className="flex-1 min-h-11 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors disabled:opacity-50"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={isUpdating}
-                                        className="flex-1 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                                        className="flex-1 min-h-11 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
                                     >
                                         {isUpdating ? (
                                             <span className="flex items-center justify-center gap-2">
@@ -1086,17 +1138,20 @@ function StatCard({ label, value, subValue, icon }: { label: string, value: stri
     );
 }
 
-function TabButton({ active, onClick, label, icon }: { active: boolean, onClick: () => void, label: string, icon: React.ReactNode }) {
+function TabButton({ active, onClick, label, icon, badge, badgeAlert }: { active: boolean, onClick: () => void, label: string, icon: React.ReactNode, badge?: number, badgeAlert?: boolean }) {
     return (
         <button
             onClick={onClick}
-            className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${active
+            className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 min-h-11 ${active
                 ? 'bg-white/10 text-white shadow-lg'
                 : 'text-white/40 hover:text-white hover:bg-white/5'
                 }`}
         >
             {icon}
             {label}
+            {badge !== undefined && (
+                <span className={`tabular-nums ${badgeAlert ? 'text-red-500' : 'opacity-60'}`}>{badge}</span>
+            )}
         </button>
     );
 }
