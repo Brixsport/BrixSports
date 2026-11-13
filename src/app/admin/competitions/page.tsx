@@ -83,6 +83,8 @@ const basketballMatchSettings: MatchSettingsForm = {
     playersPerSide: 5,
     maxSubstitutions: null,
     unlimitedSubs: true,
+    allowSubbedOutReentry: true,
+    extraTimeEnabled: true,
     allowDraws: false,
     pointsForWin: 2,
     pointsForDraw: 0,
@@ -153,7 +155,7 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         await onSubmit(form, basketball
-            ? { ...matchSettings, allowDraws: false, pointsForDraw: 0, extraTimeEnabled: false, penaltiesEnabled: false }
+            ? { ...matchSettings, allowDraws: false, pointsForDraw: 0 }
             : matchSettings);
     };
 
