@@ -1,12 +1,12 @@
 'use client';
 
 import React from 'react';
-import { Shirt, ArrowRightLeft } from 'lucide-react';
+import { Shirt, ArrowDown } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 import { SoccerBootIcon } from '../icons/SoccerBootIcon';
 import { Player } from '@/types';
 import { cn } from '@/lib/utils';
-import { formatEventMinute } from '@/lib/eventMinute';
+import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
 import { motion } from 'framer-motion';
 
 // ========== TYPES ==========
@@ -248,8 +248,8 @@ function PlayerDot({
                 )}
                 {isSubstituted && (
                     <span className="flex items-center gap-px text-red-400 text-[9px] font-bold shrink-0" title="Substituted off">
-                        <ArrowRightLeft className="w-2.5 h-2.5" />
-                        {subMinute ? formatEventMinute(subMinute) : ''}
+                        <ArrowDown className="w-2.5 h-2.5" strokeWidth={3} />
+                        {hasKnownMinute(subMinute) ? formatEventMinute(subMinute) : ''}
                     </span>
                 )}
             </div>

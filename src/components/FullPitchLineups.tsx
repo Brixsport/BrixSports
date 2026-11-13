@@ -190,6 +190,8 @@ export function FullPitchLineups({
                     teamColor: '',
                     subbedOn: subMaps.on.has(player.id),
                     onMinute: subMaps.on.get(player.id) ?? null,
+                    subbedOff: subMaps.off.has(player.id),
+                    offMinute: subMaps.off.get(player.id) ?? null,
                 };
             }).filter((p): p is NonNullable<typeof p> => p !== null);
         }
@@ -205,6 +207,8 @@ export function FullPitchLineups({
                     teamColor: '',
                     subbedOn: subMaps.on.has(player.id),
                     onMinute: subMaps.on.get(player.id) ?? null,
+                    subbedOff: subMaps.off.has(player.id),
+                    offMinute: subMaps.off.get(player.id) ?? null,
                 };
             })
             .filter((p): p is NonNullable<typeof p> => p !== null);
@@ -283,6 +287,8 @@ export function FullPitchLineups({
                                         teamColor={homeTeam.color}
                                         subbedOn={homeSubs[i].subbedOn}
                                         onMinute={homeSubs[i].onMinute}
+                                        subbedOff={homeSubs[i].subbedOff}
+                                        offMinute={homeSubs[i].offMinute}
                                         onClick={() => onPlayerClick(homeSubs[i].player)}
                                     />
                                 ) : <div />}
@@ -294,6 +300,8 @@ export function FullPitchLineups({
                                         teamColor={awayTeam.color}
                                         subbedOn={awaySubs[i].subbedOn}
                                         onMinute={awaySubs[i].onMinute}
+                                        subbedOff={awaySubs[i].subbedOff}
+                                        offMinute={awaySubs[i].offMinute}
                                         onClick={() => onPlayerClick(awaySubs[i].player)}
                                         reverse
                                     />
@@ -317,9 +325,12 @@ interface BenchPlayerProps {
     /** Came on during the match (from the Substitution events). */
     subbedOn?: boolean;
     onMinute?: number | null;
+    /** Came on and was then taken off again. */
+    subbedOff?: boolean;
+    offMinute?: number | null;
 }
 
-function BenchPlayer({ player, rating, position, teamColor, onClick, reverse, subbedOn, onMinute }: BenchPlayerProps) {
+function BenchPlayer({ player, rating, position, teamColor, onClick, reverse, subbedOn, onMinute, subbedOff, offMinute }: BenchPlayerProps) {
     const getRatingColor = (rating: number) => {
         if (rating === 0) return 'bg-muted text-foreground/40';
         if (rating >= 7.0) return 'bg-green-500/20 text-green-400';
@@ -351,10 +362,19 @@ function BenchPlayer({ player, rating, position, teamColor, onClick, reverse, su
                     {onMinute != null ? formatEventMinute(onMinute) : ''}
                 </span>
             )}
+            {subbedOn && subbedOff && (
+                <span
+                    className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-400"
+                    title={offMinute != null ? `Went off ${formatEventMinute(offMinute)}` : 'Went off'}
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="h-2.5 w-2.5" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+                    {offMinute != null ? formatEventMinute(offMinute) : ''}
+                </span>
+            )}
 
             {/* Player info */}
             <div className="min-w-0 flex-1">
-                <div className="text-xs sm:text-sm font-semibold text-foreground truncate">
+                <div className="text-xs sm:text-sm font-semibold text-foreground break-words [overflow-wrap:anywhere]">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </div>
                 <div className="text-[9px] sm:text-[10px] text-foreground/60">{position}</div>

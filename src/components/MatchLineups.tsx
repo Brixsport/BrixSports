@@ -285,7 +285,7 @@ const SubstitutionSide = ({ sub, show, alignRight }: { sub: { inName: string; ou
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className={`h-3 w-3 shrink-0 ${arrow === 'in' ? 'text-green-400' : 'text-red-400'}`} aria-label={arrow === 'in' ? 'On' : 'Off'}>
                 <path d={arrow === 'in' ? 'M12 19V5M5 12l7-7 7 7' : 'M12 5v14M19 12l-7 7-7-7'} />
             </svg>
-            <span className={`text-sm truncate ${arrow === 'in' ? 'font-semibold text-foreground' : 'text-foreground/60'}`}>{name}</span>
+            <span className={`text-sm min-w-0 break-words [overflow-wrap:anywhere] ${arrow === 'in' ? 'font-semibold text-foreground' : 'text-foreground/60'}`}>{name}</span>
             {number !== null && number !== undefined && <span className="text-[10px] text-foreground/40 shrink-0">{number}</span>}
         </div>
     );
