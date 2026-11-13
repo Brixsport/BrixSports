@@ -66,6 +66,16 @@ export function MatchDayStrip({ days, selected, todayKey, liveDays, onSelect }: 
         })}
       </div>
 
+      {selected !== todayKey && (
+        <button
+          onClick={() => onSelect(todayKey)}
+          className="shrink-0 min-h-11 px-3 rounded-lg bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider hover:bg-primary/15 transition-colors"
+          aria-label="Jump to today"
+        >
+          Today
+        </button>
+      )}
+
       <button
         onClick={() => next && onSelect(next)}
         disabled={!next}
