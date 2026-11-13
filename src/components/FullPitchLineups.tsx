@@ -220,20 +220,20 @@ export function FullPitchLineups({
     return (
         <div className="w-full space-y-4 md:space-y-6">
             {/* Team Headers */}
-            <div className="hidden md:flex items-center justify-between px-4">
-                <div className="flex items-center gap-3">
-                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
-                    <div>
-                        <span className="font-bold text-lg">{homeTeam.name}</span>
-                        <div className="text-sm text-foreground/60">{homeTeam.formation || getFallbackFormation()}</div>
+            <div className="grid grid-cols-2 gap-3 px-4">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    <img src={homeTeam.logo} alt="" className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 object-contain" />
+                    <div className="min-w-0">
+                        <span className="block font-bold text-sm sm:text-lg leading-tight break-words [overflow-wrap:anywhere]">{homeTeam.name}</span>
+                        <div className="text-xs sm:text-sm text-foreground/60">{homeTeam.formation || getFallbackFormation()}</div>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="text-right">
-                        <span className="font-bold text-lg">{awayTeam.name}</span>
-                        <div className="text-sm text-foreground/60">{awayTeam.formation || getFallbackFormation()}</div>
+                <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
+                    <div className="min-w-0 text-right">
+                        <span className="block font-bold text-sm sm:text-lg leading-tight break-words [overflow-wrap:anywhere]">{awayTeam.name}</span>
+                        <div className="text-xs sm:text-sm text-foreground/60">{awayTeam.formation || getFallbackFormation()}</div>
                     </div>
-                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-10 h-10 object-contain" />
+                    <img src={awayTeam.logo} alt="" className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 object-contain" />
                 </div>
             </div>
 
@@ -254,7 +254,7 @@ export function FullPitchLineups({
                             ? 'aspect-[1/2] max-w-[420px]'
                             : variant === 'basketball'
                                 ? 'aspect-[2/3] max-w-[520px]'
-                                : 'aspect-[3/4] max-w-[720px]'}
+                                : 'aspect-[3/5] sm:aspect-[3/4] max-w-[720px]'}
                     `}
                 >
                     <ResponsivePitch
@@ -341,8 +341,17 @@ function BenchPlayer({ player, rating, position, teamColor, onClick, reverse, su
     return (
         <div
             onClick={onClick}
+            role="button"
+            tabIndex={0}
+            aria-label={`${player.jerseyName || player.name}, number ${player.number}, substitute`}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onClick();
+                }
+            }}
             className={cn(
-                "flex items-center gap-1.5 sm:gap-2 bg-muted hover:bg-muted/70 border border-border rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all",
+                "flex items-center gap-1.5 sm:gap-2 bg-muted hover:bg-muted/70 border border-border rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary",
                 reverse && "flex-row-reverse text-right"
             )}
         >
