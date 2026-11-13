@@ -351,7 +351,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                                 {player.rating != null && player.rating >= 8 && <Star size={16} className="text-primary fill-primary" />}
                                                             </h3>
                                                             <p className="text-sm text-foreground/40">
-                                                                #{player.number} • {player.position}
+                                                                {player.number ? `#${player.number} • ` : ''}{player.position}
                                                             </p>
                                                         </div>
                                                         <div className="px-3 py-1 bg-primary/20 text-primary rounded-lg font-bold text-sm">

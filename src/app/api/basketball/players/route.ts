@@ -22,6 +22,11 @@ const BASKETBALL_PLAYER_FIELDS = {
     attributes: players.attributes,
 };
 
+// The roster number comes from the active affiliation (nullable: unset means no
+// number yet). players.number is NOT NULL default 0, so falling back to it blindly
+// would show "#0" for a player who simply has none.
+const AFFILIATION_NUMBER = playerTeamAffiliations.jerseyNumber;
+
 const PLAYER_TEAM_FIELDS = {
     id: teams.id,
     shortName: teams.shortName,
@@ -57,7 +62,7 @@ export async function GET(request: Request) {
                 desc(players.rating);
 
         let query = db
-            .select({ player: BASKETBALL_PLAYER_FIELDS, team: PLAYER_TEAM_FIELDS })
+            .select({ player: BASKETBALL_PLAYER_FIELDS, team: PLAYER_TEAM_FIELDS, jerseyNumber: AFFILIATION_NUMBER })
             .from(playerTeamAffiliations)
             .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
             .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id));
@@ -82,8 +87,9 @@ export async function GET(request: Request) {
             .limit(100)
             .all();
 
-        const transformedPlayers = basketballPlayers.map(({ player, team }) => ({
+        const transformedPlayers = basketballPlayers.map(({ player, team, jerseyNumber }) => ({
             ...player,
+            number: jerseyNumber ?? (player.number > 0 ? player.number : null),
             team,
         }));
 
