@@ -78,9 +78,16 @@ interface TeamRecord {
     redCards: number;
 }
 
+/** Win/draw points used when a competition has no settings row for the sport. */
+export function sportPointsFallback(sport: string): { pointsForWin: number; pointsForDraw: number } {
+    return sport.toLowerCase().includes('basketball')
+        ? { pointsForWin: 2, pointsForDraw: 0 }
+        : { pointsForWin: DEFAULT_POINTS_FOR_WIN, pointsForDraw: DEFAULT_POINTS_FOR_DRAW };
+}
+
 async function getPointsRule(competitionId: string | null, sport: string) {
     if (!competitionId) {
-        return { pointsForWin: DEFAULT_POINTS_FOR_WIN, pointsForDraw: DEFAULT_POINTS_FOR_DRAW };
+        return sportPointsFallback(sport);
     }
     const settings = await db
         .select({ pointsForWin: competitionSportSettings.pointsForWin, pointsForDraw: competitionSportSettings.pointsForDraw })
@@ -88,8 +95,8 @@ async function getPointsRule(competitionId: string | null, sport: string) {
         .where(and(eq(competitionSportSettings.competitionId, competitionId), eq(competitionSportSettings.sport, sport)))
         .get();
     return {
-        pointsForWin: settings?.pointsForWin ?? DEFAULT_POINTS_FOR_WIN,
-        pointsForDraw: settings?.pointsForDraw ?? DEFAULT_POINTS_FOR_DRAW,
+        pointsForWin: settings?.pointsForWin ?? sportPointsFallback(sport).pointsForWin,
+        pointsForDraw: settings?.pointsForDraw ?? sportPointsFallback(sport).pointsForDraw,
     };
 }
 
