@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
                 .where(
                     or(
                         eq(matches.status, 'UPCOMING'),
-                        eq(matches.status, 'LIVE')
+                        eq(matches.status, 'LIVE'),
+                        eq(matches.status, 'HALF_TIME')
                     )
                 )
                 .orderBy(matches.startTime)
@@ -56,7 +57,8 @@ export async function GET(request: NextRequest) {
                         ),
                         or(
                             eq(matches.status, 'UPCOMING'),
-                            eq(matches.status, 'LIVE')
+                            eq(matches.status, 'LIVE'),
+                            eq(matches.status, 'HALF_TIME')
                         )
                     )
                 )
