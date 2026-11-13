@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -73,6 +73,7 @@ export default function AdminMatchLineupsPage() {
     const { user, loading, isAuthenticated } = useAuth();
     const router = useRouter();
     const [matches, setMatches] = useState<Match[]>([]);
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'LIVE' | 'UPCOMING'>('ALL');
     const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
     const [homeRoster, setHomeRoster] = useState<Player[]>([]);
     const [awayRoster, setAwayRoster] = useState<Player[]>([]);
@@ -109,6 +110,21 @@ export default function AdminMatchLineupsPage() {
             loadMatches();
         }
     }, [user]);
+
+    // Deep link from the admin Matches list: /admin/match-lineups?matchId=... opens that match's lineup
+    // directly. Read once, after the list loads (window.location, not useSearchParams, to avoid a Suspense boundary).
+    const deepLinkHandled = useRef(false);
+    const [deepLinkMissing, setDeepLinkMissing] = useState(false);
+    useEffect(() => {
+        if (deepLinkHandled.current || matches.length === 0) return;
+        deepLinkHandled.current = true;
+        const id = new URLSearchParams(window.location.search).get('matchId');
+        if (!id) return;
+        const target = matches.find(m => m.id === id);
+        if (target) handleMatchSelect(target);
+        else setDeepLinkMissing(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [matches]);
 
     const loadMatches = async () => {
         try {
@@ -398,6 +414,18 @@ export default function AdminMatchLineupsPage() {
     const homeFormationOptions = getFormationsForAdmin('Football', playersPerSide);
     const awayFormationOptions = homeFormationOptions;
 
+    // Soonest first (live matches lead); the API already orders by start time, this keeps it true after filtering.
+    const visibleMatches = matches
+        .filter(m => statusFilter === 'ALL' || m.status === statusFilter)
+        .sort((a, b) => {
+            if ((a.status === 'LIVE') !== (b.status === 'LIVE')) return a.status === 'LIVE' ? -1 : 1;
+            return (Date.parse(a.startTime) || 0) - (Date.parse(b.startTime) || 0);
+        });
+    const dayLabel = (t: string) => {
+        const d = new Date(t);
+        return isNaN(d.getTime()) ? 'Date unknown' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
     const homeDisabled = (user?.role !== 'admin' && selectedMatch?.status !== 'UPCOMING') || (user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked);
     const awayDisabled = (user?.role !== 'admin' && selectedMatch?.status !== 'UPCOMING') || (user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked);
 
@@ -421,24 +449,44 @@ export default function AdminMatchLineupsPage() {
                     /* Match Selection */
                     <div className="space-y-4">
                         <h2 className="text-xl font-bold mb-4">Select a Match</h2>
-                        {matches.length === 0 ? (
+                        {deepLinkMissing && (
+                            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+                                That match is not open for lineups (it may be finished or not assigned to you). Pick one from the list.
+                            </div>
+                        )}
+                        {/* Same format as the admin Matches list: status tabs, soonest first, grouped by day. */}
+                        <div className="flex gap-2 mb-2">
+                            {(['ALL', 'LIVE', 'UPCOMING'] as const).map(s => (
+                                <button
+                                    key={s}
+                                    onClick={() => setStatusFilter(s)}
+                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === s ? 'bg-primary text-black' : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'}`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                        {visibleMatches.length === 0 ? (
                             <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
                                 <Calendar className="mx-auto mb-4 text-white/40" size={48} />
                                 <p className="text-white/60">No matches assigned to you</p>
                             </div>
                         ) : (
-                            matches.map(match => (
+                            visibleMatches.map((match, i) => (
+                                <div key={match.id} className="space-y-2">
+                                {(i === 0 || dayLabel(visibleMatches[i - 1].startTime) !== dayLabel(match.startTime)) && (
+                                    <p className="pt-2 text-[10px] font-black uppercase tracking-widest text-white/40">{dayLabel(match.startTime)}</p>
+                                )}
                                 <button
-                                    key={match.id}
                                     onClick={() => handleMatchSelect(match)}
                                     className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-6 transition-colors text-left"
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-4 mb-2">
-                                                <span className="font-bold">{match.homeTeam.name}</span>
+                                                <span className="font-bold">{match.homeTeam?.name ?? 'TBD'}</span>
                                                 <span className="text-white/40">vs</span>
-                                                <span className="font-bold">{match.awayTeam.name}</span>
+                                                <span className="font-bold">{match.awayTeam?.name ?? 'TBD'}</span>
                                             </div>
                                             <div className="text-sm text-white/60">
                                                 {match.competition} • {new Date(match.startTime).toLocaleString()}
@@ -452,6 +500,7 @@ export default function AdminMatchLineupsPage() {
                                         </div>
                                     </div>
                                 </button>
+                                </div>
                             ))
                         )}
                     </div>
