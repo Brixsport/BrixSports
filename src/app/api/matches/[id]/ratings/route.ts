@@ -34,6 +34,11 @@ export async function GET(
             );
         }
 
+        // Ratings are switched off until they are ready: nothing to show, same shape as "no ratings yet".
+        if (!(await isRatingsEnabled())) {
+            return NextResponse.json({ matchId, matchStatus: match[0].status, ratings: [] });
+        }
+
         // Get all ratings for this match. Ratings are calculated when the match is set
         // FINISHED, so an empty list is the correct answer when none exist yet.
         const ratings = await db

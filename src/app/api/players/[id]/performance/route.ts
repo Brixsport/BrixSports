@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { matchEvents, matches, players } from '@/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 
 export async function GET(
     request: NextRequest,
@@ -64,7 +65,7 @@ export async function GET(
         // else on the platform. Never fabricate a plausible-looking number:
         // null means genuinely not yet rated, same rule as BACKLOG-250/254.
         const recentMatchIds = recentMatches.map(m => m.id);
-        const ratingRows = recentMatchIds.length > 0
+        const ratingRows = recentMatchIds.length > 0 && (await isRatingsEnabled())
             ? await db
                 .select({
                     matchId: playerRatings.matchId,
