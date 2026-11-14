@@ -5,6 +5,7 @@ import { eq, desc, and, sql } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 
 // GET /api/players/stats/leaders - Get top performing players
 export async function GET(request: NextRequest) {
@@ -15,6 +16,12 @@ export async function GET(request: NextRequest) {
         const competitionId = searchParams.get('competitionId');
         const sport = searchParams.get('sport');
         const limit = parseInt(searchParams.get('limit') || '10');
+        const ratingsOn = await isRatingsEnabled();
+
+        // Ratings are switched off until they are ready: a rating-based board is empty, not a ranking.
+        if ((type === 'powerRanking' || type === 'rating') && !(await isRatingsEnabled())) {
+            return NextResponse.json({ type, competition, sport, limit, total: 0, leaders: [] });
+        }
 
         if (type === 'powerRanking') {
             // Only finished matches count towards the power ranking.
@@ -313,7 +320,7 @@ export async function GET(request: NextRequest) {
                     logo: 'logo' in primaryTeam ? primaryTeam.logo : '',
                     color: 'color' in primaryTeam ? primaryTeam.color : '',
                 } : null,
-                stats: r.stats,
+                stats: ratingsOn ? r.stats : { ...(r.stats as object), averageRating: 0 },
                 highlightedStat: getHighlightedStat(r.stats, type),
                 };
             });
