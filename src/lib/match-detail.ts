@@ -15,6 +15,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import { playerRatings } from '@/db/schema-ratings';
 import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 import { toEventDto, gateLineups, toMatchDto } from '@/lib/match-detail-shape';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 
 const teamFields = <T extends Record<'id' | 'name' | 'shortName' | 'logo' | 'university' | 'color', any>>(t: T) => ({
     id: t.id,
@@ -92,6 +93,7 @@ export async function loadMatchDetail(matchId: string, isStaffInput: boolean | P
     if (!matchRow) return null;
 
     const isStaff = await isStaffInput;
+    const ratingsEnabled = await isRatingsEnabled();
     const match = { match: matchRow.match, homeTeam: matchRow.homeTeam };
     const awayTeam = matchRow.awayTeam?.id ? matchRow.awayTeam : undefined;
 
@@ -115,7 +117,7 @@ export async function loadMatchDetail(matchId: string, isStaffInput: boolean | P
     // The stored ratings are merged into whatever lineups end up in the response, so the read
     // starts as soon as it is known that lineups will exist.
     const willHaveLineups = !!lineups || (match.match.sport === 'Basketball' && events.length > 0);
-    const ratingsPromise = willHaveLineups ? fetchMatchRatings(matchId) : null;
+    const ratingsPromise = willHaveLineups && ratingsEnabled ? fetchMatchRatings(matchId) : null;
 
     // If lineups are not available for basketball, generate from events
     if (!lineups && match.match.sport === 'Basketball' && events.length > 0) {
@@ -434,6 +436,21 @@ export async function loadMatchDetail(matchId: string, isStaffInput: boolean | P
         stats.freeThrowPercentage = [pct(stats.homeFreeThrowsMade, stats.homeFreeThrowsAttempted), pct(stats.awayFreeThrowsMade, stats.awayFreeThrowsAttempted)];
     }
 
+
+    // Ratings off: the stored lineup entries can carry live ratings and a Man of the Match flag too, so
+    // blank them (0 = "not rated" for every consumer) instead of only skipping the merge below.
+    if (lineups && !ratingsEnabled) {
+        const blank = (arr: any) => Array.isArray(arr) ? arr.map((p: any) => ({ ...p, rating: 0, isMotM: false })) : arr;
+        const blankTeam = (entry: any) => {
+            if (Array.isArray(entry)) return blank(entry);
+            if (entry && typeof entry === 'object') {
+                return { ...entry, starters: blank(entry.starters), substitutes: blank(entry.substitutes) };
+            }
+            return entry;
+        };
+        if (lineups.home) lineups.home = blankTeam(lineups.home);
+        if (lineups.away) lineups.away = blankTeam(lineups.away);
+    }
 
     // Merge updated ratings into lineups
     if (lineups) {
