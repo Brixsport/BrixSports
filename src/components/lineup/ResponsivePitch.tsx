@@ -226,7 +226,7 @@ function PlayerDot({
                 {isCaptain && (
                     <span className="text-yellow-400 text-[8px] font-black shrink-0">(C)</span>
                 )}
-                <span className="min-w-0 text-white text-[0.625rem] sm:text-xs font-medium break-words [overflow-wrap:anywhere] text-center">
+                <span className="min-w-0 text-white text-[0.625rem] sm:text-xs font-medium break-words text-center">
                     {player.jerseyName || player.name}
                 </span>
                 {card === 'yellow' && (
