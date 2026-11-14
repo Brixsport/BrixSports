@@ -441,6 +441,7 @@ export async function GET(
         return NextResponse.json({
             player: {
                 ...playerPayload,
+                ...(ratingsOn ? {} : { rating: 0 }),
                 team: {
                     ...team,
                     sport: playerSport,
