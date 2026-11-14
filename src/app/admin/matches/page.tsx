@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
@@ -76,6 +77,8 @@ function AdminMatchesPageContent() {
     const [teams, setTeams] = useState<Team[]>([]);
     const [competitions, setCompetitions] = useState<Competition[]>([]);
     const { toasts, removeToast, success, error } = useToast();
+    const isFeatureOn = useFeatureFlags();
+    const ratingsEnabled = isFeatureOn('features.ratings.enabled');
 
     const [deleteDialog, setDeleteDialog] = useState({
         isOpen: false,
@@ -598,7 +601,7 @@ function AdminMatchesPageContent() {
                                                 >
                                                     <ClipboardList size={20} />
                                                 </Link>
-                                                {match.status === 'FINISHED' && (
+                                                {match.status === 'FINISHED' && ratingsEnabled && (
                                                     <Link
                                                         href={`/admin/match-ratings/${match.id}`}
                                                         className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-yellow-500/20 text-yellow-400 transition-colors"
