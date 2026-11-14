@@ -4,6 +4,7 @@ import { playerRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
 import { eq, and, or, inArray, ne } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
@@ -20,6 +21,13 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        if (!(await isRatingsEnabled())) {
+            return NextResponse.json(
+                { error: 'Match ratings are temporarily disabled', code: 'FEATURE_DISABLED' },
+                { status: 403 }
+            );
+        }
+
         const user = await getAuthUser(request);
 
         if (!user) {
@@ -246,6 +254,13 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        if (!(await isRatingsEnabled())) {
+            return NextResponse.json(
+                { error: 'Match ratings are temporarily disabled', code: 'FEATURE_DISABLED' },
+                { status: 403 }
+            );
+        }
+
         const user = await getAuthUser(request);
         if (!user || (user.role !== 'admin' && user.role !== 'logger')) {
             return NextResponse.json(

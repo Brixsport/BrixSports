@@ -10,12 +10,16 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { systemSettings } from '@/db/schema';
 
+// Keys that read as DISABLED when no row exists (and when the read fails).
+const CLOSED_BY_DEFAULT = new Set(['features.ratings.enabled']);
+
 const GATED_KEYS = [
     'features.ads.enabled',
     'features.lineupbuilder.enabled',
     'features.usermanagement.enabled',
     'features.news.enabled',
     'features.transfers.enabled',
+    'features.ratings.enabled',
     // Fan Account Blueprint Phase 3 -- kill switch for the /favourites
     // first-run coachmark tour. Same fail-open default as every other key
     // here: unconfigured reads as enabled, never silently hides the tour.
@@ -32,14 +36,14 @@ export async function GET() {
             // Same fail-open default as isFeatureEnabled() -- an unconfigured key
             // (e.g. before initializeDefaultSettings() has ever run) must not read
             // as "disabled" and hide a feature nobody meant to gate.
-            flags[key] = byKey.has(key) ? byKey.get(key) === 'true' : true;
+            flags[key] = byKey.has(key) ? byKey.get(key) === 'true' : !CLOSED_BY_DEFAULT.has(key);
         }
 
         return NextResponse.json({ flags });
     } catch (error) {
         console.error('[feature-flags] Failed to read flags, failing open:', error);
         const flags: Record<string, boolean> = {};
-        for (const key of GATED_KEYS) flags[key] = true;
+        for (const key of GATED_KEYS) flags[key] = !CLOSED_BY_DEFAULT.has(key);
         return NextResponse.json({ flags });
     }
 }

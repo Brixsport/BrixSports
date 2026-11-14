@@ -8,6 +8,7 @@ import { getPrimaryTeam, getResolvedInstitutionalData, playerMatchesInstitutionF
 import { getCurrentSeason } from '@/lib/rosterService';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 
 // BACKLOG-254: players.rating is the frozen legacy column (BACKLOG-253) --
 // attach the real career-average accessor so list consumers (e.g. xi/page.tsx)
@@ -15,7 +16,9 @@ import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 // rather than replacing it, since this route's consumers aren't fully audited.
 async function withAverageRating<T extends { id: string }>(list: T[]): Promise<(T & { averageRating: number | null })[]> {
     const summaries = await getPlayerRatingSummaries(list.map((p) => p.id));
-    return list.map((p) => ({ ...p, averageRating: summaries.get(p.id)?.averageRating ?? null }));
+    // Ratings off: the legacy `rating` column is a rating too, so it reads as "not rated" (0), not a number.
+    const ratingsOn = await isRatingsEnabled();
+    return list.map((p) => ({ ...p, ...(ratingsOn ? {} : { rating: 0 }), averageRating: summaries.get(p.id)?.averageRating ?? null }));
 }
 
 function playerMatchesSearch(player: EnrichedPlayer, query: string, includeEmail = false) {
