@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players, playerStats, basketballPlayerStats, playerRatings, matches } from '@/db/schema';
+import { players, playerStats, basketballPlayerStats, footballPlayerStats, playerRatings, matches } from '@/db/schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
         const competition = searchParams.get('competition');
         const competitionId = searchParams.get('competitionId');
         const sport = searchParams.get('sport');
-        const limit = parseInt(searchParams.get('limit') || '10');
+        const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '10') || 10, 1), 100);
         const ratingsOn = await isRatingsEnabled();
 
         // Ratings are switched off until they are ready: a rating-based board is empty, not a ranking.
@@ -222,6 +222,114 @@ export async function GET(request: NextRequest) {
                 limit,
                 total: leaders.length,
                 leaders,
+            });
+        }
+
+        // Football boards read football_player_stats, the table live logging and the
+        // player/team pages write. The legacy player_stats table is not kept up to
+        // date for football, so reading it left every competition board empty.
+        if (sport === 'Football' && type !== 'rating') {
+            let footballOrder;
+            switch (type) {
+                case 'assists':
+                    footballOrder = footballPlayerStats.assists;
+                    break;
+                case 'appearances':
+                    footballOrder = footballPlayerStats.appearances;
+                    break;
+                case 'minutes':
+                    footballOrder = footballPlayerStats.minutesPlayed;
+                    break;
+                case 'yellowCards':
+                    footballOrder = footballPlayerStats.yellowCards;
+                    break;
+                case 'redCards':
+                    footballOrder = footballPlayerStats.redCards;
+                    break;
+                case 'cleanSheets':
+                    footballOrder = footballPlayerStats.cleanSheets;
+                    break;
+                case 'saves':
+                    footballOrder = footballPlayerStats.saves;
+                    break;
+                default:
+                    footballOrder = footballPlayerStats.goals;
+            }
+
+            const footballConditions = [sql`${footballOrder} > 0`];
+            // competitionId is authoritative when present; the name is only a fallback,
+            // because two seasons can share an exact name.
+            if (competitionId) {
+                footballConditions.push(eq(footballPlayerStats.competitionId, competitionId));
+            } else if (competition) {
+                footballConditions.push(eq(footballPlayerStats.competition, competition));
+            }
+
+            const footballResults = await db
+                .select({
+                    player: players,
+                    stats: footballPlayerStats,
+                })
+                .from(footballPlayerStats)
+                .leftJoin(players, eq(footballPlayerStats.playerId, players.id))
+                .where(and(...footballConditions))
+                .orderBy(desc(footballOrder))
+                .limit(limit);
+
+            const footballPlayers = await enrichPlayersWithAffiliations(
+                footballResults
+                    .map((result) => result.player)
+                    .filter((player): player is NonNullable<typeof player> => Boolean(player))
+            );
+            const footballPlayerMap = new Map(footballPlayers.map((player) => [player.id, player]));
+            const footballRatings = await getPlayerRatingSummaries(
+                footballResults.filter(r => r.player).map(r => r.player!.id)
+            );
+
+            const footballLeaders = footballResults
+                .filter(r => r.player)
+                .map((r, index) => {
+                    const enrichedPlayer = footballPlayerMap.get(r.player!.id);
+                    const primaryTeam = enrichedPlayer ? getPrimaryTeam(enrichedPlayer) : null;
+                    return {
+                        rank: index + 1,
+                        player: {
+                            id: r.player!.id,
+                            name: r.player!.name,
+                            number: r.player!.number,
+                            position: r.player!.position,
+                            image: r.player!.image,
+                            rating: footballRatings.get(r.player!.id)?.averageRating ?? null,
+                        },
+                        team: primaryTeam ? {
+                            id: primaryTeam.id,
+                            name: primaryTeam.name,
+                            logo: 'logo' in primaryTeam ? primaryTeam.logo : '',
+                            color: 'color' in primaryTeam ? primaryTeam.color : '',
+                            sport: 'Football',
+                        } : null,
+                        stats: {
+                            sport: 'Football',
+                            goals: r.stats.goals ?? 0,
+                            assists: r.stats.assists ?? 0,
+                            appearances: r.stats.appearances ?? 0,
+                            minutesPlayed: r.stats.minutesPlayed ?? 0,
+                            yellowCards: r.stats.yellowCards ?? 0,
+                            redCards: r.stats.redCards ?? 0,
+                            cleanSheets: r.stats.cleanSheets ?? 0,
+                            saves: r.stats.saves ?? 0,
+                        },
+                        highlightedStat: getHighlightedStat(r.stats, type),
+                    };
+                });
+
+            return NextResponse.json({
+                type,
+                competition,
+                sport,
+                limit,
+                total: footballLeaders.length,
+                leaders: footballLeaders,
             });
         }
 
