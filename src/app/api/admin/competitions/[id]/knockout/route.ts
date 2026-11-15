@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { competitions, standings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { normalizeStartTime } from '@/lib/safe-date';
 import { createKnockoutStructure, type QuarterFinalSlot } from '@/lib/bracketService';
 
 // POST — one-shot manual creation of the top-8 knockout bracket (QF x4 -> SF
@@ -64,10 +65,15 @@ export async function POST(
             return NextResponse.json({ error: `Team(s) not registered to this competition: ${unregistered.join(', ')}` }, { status: 422 });
         }
 
+        const invalidStart = qf.findIndex((s: QuarterFinalSlot) => !normalizeStartTime(s.startTime));
+        if (invalidStart !== -1) {
+            return NextResponse.json({ error: `Invalid startTime for quarter-final ${invalidStart + 1}` }, { status: 422 });
+        }
+
         const qfSlots = qf.map((s: QuarterFinalSlot) => ({
             homeTeamId: s.homeTeamId,
             awayTeamId: s.awayTeamId,
-            startTime: new Date(s.startTime).toISOString(),
+            startTime: normalizeStartTime(s.startTime) as string,
             venue: s.venue,
         })) as [QuarterFinalSlot, QuarterFinalSlot, QuarterFinalSlot, QuarterFinalSlot];
 

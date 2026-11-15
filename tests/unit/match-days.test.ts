@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+    dayKeysFromFeed,
+    mergeMatchesById,
+    windowAround,
+    inWindow,
     toDayKey,
     getMatchDays,
     withToday,
@@ -87,5 +91,31 @@ describe('formatDayLabel', () => {
     });
     it('adds the year only when it differs from the current one', () => {
         expect(formatDayLabel('2027-01-09', '2026-11-13').secondary).toBe('9 Jan 2027');
+    });
+});
+
+describe('date-range paging helpers', () => {
+    it('windowAround / inWindow are inclusive day windows', () => {
+        const w = windowAround('2026-11-13', 7);
+        expect(w).toEqual({ from: '2026-11-06', to: '2026-11-20' });
+        expect(inWindow('2026-11-06', w)).toBe(true);
+        expect(inWindow('2026-11-20', w)).toBe(true);
+        expect(inWindow('2026-11-21', w)).toBe(false);
+        expect(inWindow('2026-11-05', w)).toBe(false);
+    });
+    it('mergeMatchesById keeps older rows and lets fresh rows win', () => {
+        const merged = mergeMatchesById(
+            [{ id: 'a', s: 1 }, { id: 'b', s: 1 }],
+            [{ id: 'b', s: 2 }, { id: 'c', s: 2 }],
+        );
+        expect(merged).toEqual([{ id: 'a', s: 1 }, { id: 'b', s: 2 }, { id: 'c', s: 2 }]);
+    });
+    it('dayKeysFromFeed filters by sport and skips unparseable times', () => {
+        const rows = [
+            { sport: 'Football', startTime: '2026-11-14T15:00:00.000Z' },
+            { sport: 'Basketball', startTime: '2026-11-15T15:00:00.000Z' },
+            { sport: 'Football', startTime: 'garbage' },
+        ];
+        expect(dayKeysFromFeed(rows, s => s === 'Football')).toEqual(['2026-11-14']);
     });
 });

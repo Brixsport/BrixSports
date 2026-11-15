@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, matchLoggerAssignments } from '@/db/schema';
-import { eq, and, or, inArray, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
+import { eq, and, or, inArray, desc, asc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { validateMatchTeams } from '@/lib/match-bulk-input';
@@ -88,6 +88,8 @@ export async function GET(request: NextRequest) {
         // the rest of the codebase (BACKLOG-169).
         const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
+        // Optional chronological order for admin lists (default stays newest-created, unchanged for every other caller).
+        const order = searchParams.get('order');
 
         let query = db.select(MATCH_LIST_FIELDS).from(matches);
         let countQuery = db.select({ count: sql<number>`count(*)` }).from(matches);
@@ -143,7 +145,11 @@ export async function GET(request: NextRequest) {
         // route as a bare array today; a header keeps them working unchanged).
         const [{ count: totalCount }] = await countQuery;
 
-        const allMatches = await query.orderBy(desc(matches.createdAt)).limit(limit).offset(offset);
+        const orderBy =
+            order === 'start_asc' ? [asc(matches.startTime), asc(matches.id)] :
+            order === 'start_desc' ? [desc(matches.startTime), desc(matches.id)] :
+            [desc(matches.createdAt), desc(matches.id)];
+        const allMatches = await query.orderBy(...orderBy).limit(limit).offset(offset);
 
         // Collect all unique team IDs
         const teamIds = new Set<string>();

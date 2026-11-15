@@ -9,6 +9,7 @@ import {
 import { FaFutbol } from 'react-icons/fa';
 import { format } from 'date-fns';
 import { formatEventMinute, hasKnownMinute } from '@/lib/eventMinute';
+import { creditedGoal } from '@/lib/scorer-summary';
 
 interface Event {
     id: string;
@@ -665,11 +666,10 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
         const isHomeTeam = event.teamId === homeTeam.id;
         const normType = event.type.toUpperCase().replace(/\s+/g, '_');
 
-        if (normType === 'GOAL') {
-            // An own goal credits the OTHER team's score -- same detection this
-            // file's generateGoalCommentary already uses for the "All" view.
-            const isOwnGoal = event.detail?.toLowerCase().includes('own goal') ?? false;
-            if (isHomeTeam !== isOwnGoal) homeScore += 1; else awayScore += 1;
+        // Goals, penalties and own goals all move the score; an own goal credits the OTHER team.
+        const credit = creditedGoal(event, homeTeam.id, awayTeam.id);
+        if (credit) {
+            if (credit.teamId === homeTeam.id) homeScore += 1; else awayScore += 1;
         }
 
         return { event, isHomeTeam, normType, scoreAtEvent: { home: homeScore, away: awayScore } };
