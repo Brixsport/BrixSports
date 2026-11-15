@@ -66,6 +66,16 @@ export default function CompetitionsDirectoryPage() {
   const [matchesLoading, setMatchesLoading] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState<Record<string, boolean>>({});
 
+  // One star per series: set when any season is favourited, and clearing it clears them all.
+  const isGroupFavourite = (group: CompetitionGroup) => group.seasons.some((s) => isFavoriteCompetition(s.id));
+  const toggleGroupFavourite = async (group: CompetitionGroup) => {
+    if (isGroupFavourite(group)) {
+      for (const s of group.seasons.filter((x) => isFavoriteCompetition(x.id))) await toggleCompetition(s.id);
+    } else {
+      await toggleCompetition(group.latest.id);
+    }
+  };
+
   const filteredGroups = groups.filter((g) => {
     if (sportFilter === 'All') return true;
     if (sportFilter === 'Other') return g.sport !== 'Football' && g.sport !== 'Basketball';
@@ -179,13 +189,13 @@ export default function CompetitionsDirectoryPage() {
                     </Link>
 
                     <button
-                      onClick={() => toggleCompetition(group.latest.id)}
-                      aria-label={isFavoriteCompetition(group.latest.id) ? 'Remove from favourites' : 'Add to favourites'}
+                      onClick={() => toggleGroupFavourite(group)}
+                      aria-label={isGroupFavourite(group) ? 'Remove from favourites' : 'Add to favourites'}
                       className="shrink-0 w-11 h-11 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
                     >
                       <Star
                         size={18}
-                        className={isFavoriteCompetition(group.latest.id) ? 'text-primary fill-primary' : 'text-foreground/40'}
+                        className={isGroupFavourite(group) ? 'text-primary fill-primary' : 'text-foreground/40'}
                       />
                     </button>
 
