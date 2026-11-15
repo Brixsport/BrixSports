@@ -22,6 +22,11 @@
 // hasn't finished yet.
 export const DECISIVE_RESULT_ROUNDS = ['QUARTER_FINAL', 'SEMI_FINAL', 'THIRD_PLACE', 'FINAL'];
 
+/** True when the score is level but the match rules do not allow a draw. */
+export function isDisallowedDraw(allowDraws: boolean, home: number, away: number): boolean {
+    return !allowDraws && home === away;
+}
+
 export function requiresDecisiveResult(round: string | null | undefined): boolean {
     return !!round && DECISIVE_RESULT_ROUNDS.includes(round);
 }

@@ -74,11 +74,21 @@ export function buildScorerSummary(
         .sort((a, b) => (a.firstMinute === b.firstMinute ? 0 : a.firstMinute - b.firstMinute));
 }
 
-/** "Wareez 33', 71'", "Animashaun 51' (P)", or just the name when no minute is known. */
+/**
+ * "Wareez 33', 71'", "Animashaun 51' (P)". When no minute is known (a result
+ * entered after the fact) the goal count and penalty marker still show:
+ * "Animashaun (P)", "Jagun-Jagun x2", "Ade x3 (1P)".
+ */
 export function formatScorerEntry(entry: ScorerSummaryEntry): string {
     const known = entry.goals
         .filter(g => knownMinutes([g.minute]).length > 0)
         .sort((a, b) => a.minute - b.minute);
-    if (known.length === 0) return entry.name;
+    if (known.length === 0) {
+        const total = entry.goals.length;
+        const pens = entry.goals.filter(g => g.penalty).length;
+        const count = total > 1 ? ` x${total}` : '';
+        const pen = pens === 0 ? '' : pens === total ? ' (P)' : ` (${pens}P)`;
+        return `${entry.name}${count}${pen}`;
+    }
     return `${entry.name} ${known.map(g => `${formatScorerLine('', [g.minute]).trim()}${g.penalty ? ' (P)' : ''}`).join(', ')}`;
 }
