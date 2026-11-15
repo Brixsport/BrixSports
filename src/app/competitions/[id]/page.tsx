@@ -11,6 +11,8 @@ import { parseSafeDate, safeToLocale } from '@/lib/safe-date';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
 import { LoadFailedState } from '@/components/resilience/ReadPathStates';
+import BracketView, { type ProjectedPair } from '@/components/competitions/BracketView';
+import { deriveBracket, seedPairs, type BracketRound as BracketRoundView } from '@/lib/competition-bracket';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
@@ -116,6 +118,12 @@ const STAT_CATEGORIES: Record<string, { type: string; label: string }[]> = {
 
 type ViewTab = 'standings' | 'matches' | 'brackets' | 'stats';
 const VALID_TABS: ViewTab[] = ['standings', 'matches', 'brackets', 'stats'];
+const TAB_META: Record<ViewTab, { label: string; icon: typeof ListOrdered }> = {
+  standings: { label: 'Standings', icon: ListOrdered },
+  matches: { label: 'Matches', icon: Calendar },
+  brackets: { label: 'Brackets', icon: LayoutGrid },
+  stats: { label: 'Stats', icon: BarChart3 },
+};
 
 function CompetitionHubContent() {
   const router = useRouter();
@@ -152,6 +160,56 @@ function CompetitionHubContent() {
   // bracket and leaders have all settled, so a tab never claims "no data" mid-load.
   const [detailsLoading, setDetailsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  // Knockout rounds come from the fixtures themselves, so a bracket shows up as
+  // soon as its matches exist; the stored bracket nodes are only a fallback.
+  const bracketRounds = useMemo<BracketRoundView[]>(() => {
+    const derived = deriveBracket(matches);
+    if (derived.length > 0) return derived;
+    return brackets.map((round, i) => ({
+      label: round.round.replace(/_/g, ' '),
+      rank: i,
+      matches: round.matches.map((m) => ({
+        id: m.id,
+        status: m.status,
+        startTime: null,
+        home: m.homeTeam?.name ? { name: m.homeTeam.name, logo: m.homeTeam.logo } : null,
+        away: m.awayTeam?.name ? { name: m.awayTeam.name, logo: m.awayTeam.logo } : null,
+        homeScore: typeof m.homeScore === 'number' ? m.homeScore : null,
+        awayScore: typeof m.awayScore === 'number' ? m.awayScore : null,
+      })),
+    }));
+  }, [matches, brackets]);
+
+  // A swiss-style league sends its top 8 into the quarter-finals: until those
+  // fixtures exist, show who would meet whom if the table finished today.
+  const projection = useMemo<ProjectedPair[] | null>(() => {
+    if (selectedComp?.structure !== 'swiss-top8') return null;
+    if (bracketRounds.some((r) => r.matches.length > 0)) return null;
+    if (standings.length < 8) return null;
+    return seedPairs(8).map((p) => ({
+      homeSeed: p.homeSeed,
+      awaySeed: p.awaySeed,
+      home: standings[p.homeSeed - 1]?.team ?? null,
+      away: standings[p.awaySeed - 1]?.team ?? null,
+    }));
+  }, [selectedComp, bracketRounds, standings]);
+
+  const hasBracket = bracketRounds.length > 0 || projection !== null;
+  const visibleTabs = VALID_TABS.filter((t) => t !== 'brackets' || hasBracket || detailsLoading);
+
+  // The match calendar opens on the next fixture, or the latest one when the
+  // competition is over, rather than on today's month.
+  const focusDate = useMemo(() => {
+    const times = matches
+      .map((m) => parseSafeDate(m.startTime))
+      .filter((d): d is Date => d !== null)
+      .sort((a, b) => a.getTime() - b.getTime());
+    if (times.length === 0) return new Date();
+    const now = Date.now();
+    return times.find((d) => d.getTime() >= now) ?? times[times.length - 1];
+  }, [matches]);
 
   // 1. Fetch all competitions on mount, select the one this route was opened for
   useEffect(() => {
@@ -304,15 +362,50 @@ function CompetitionHubContent() {
   // split into per-group tables when the data actually has >1 distinct group
   // -- otherwise render the familiar single flat table.
   const standingsGroups = useMemo(() => {
-    const distinctGroups = Array.from(new Set(standings.map(s => s.groupName).filter(Boolean))) as string[];
+    let withGroups = standings;
+    if (!standings.some((s) => s.groupName)) {
+      // Standings rows that carry no group name can still be split when the
+      // fixtures are labelled "Group A", "Group B", ...: each team plays inside
+      // exactly one group. Only apply it when every team can be placed.
+      const teamGroup = new Map<string, string>();
+      for (const m of matches) {
+        const label = m.round?.match(/^group\s+([a-z0-9]+)$/i);
+        if (!label) continue;
+        const name = `Group ${label[1].toUpperCase()}`;
+        if (m.homeTeam?.name) teamGroup.set(m.homeTeam.name, name);
+        if (m.awayTeam?.name) teamGroup.set(m.awayTeam.name, name);
+      }
+      if (standings.length > 0 && standings.every((s) => teamGroup.has(s.team.name))) {
+        withGroups = standings.map((s) => ({ ...s, groupName: teamGroup.get(s.team.name) ?? null }));
+      }
+    }
+    const distinctGroups = Array.from(new Set(withGroups.map(s => s.groupName).filter(Boolean))) as string[];
     if (distinctGroups.length < 2) {
       return [{ groupName: null as string | null, rows: standings }];
     }
     return distinctGroups.sort().map(groupName => ({
       groupName,
-      rows: standings.filter(s => s.groupName === groupName),
+      rows: withGroups.filter(s => s.groupName === groupName),
     }));
-  }, [standings]);
+  }, [standings, matches]);
+
+  // A competition has one favourite star for the whole series: it shows as set when
+  // any of its seasons is favourited, and clearing it clears all of them.
+  const seriesIds = selectedGroup ? selectedGroup.seasons.map((s) => s.id) : selectedComp ? [selectedComp.id] : [];
+  const seriesFavourite = seriesIds.some((id) => isFavoriteCompetition(id));
+  const toggleSeriesFavourite = async () => {
+    if (!selectedComp) return;
+    if (seriesFavourite) {
+      for (const id of seriesIds.filter((i) => isFavoriteCompetition(i))) await toggleCompetition(id);
+    } else {
+      await toggleCompetition(selectedComp.id);
+    }
+  };
+
+  // The Brackets tab disappears when there is no bracket; fall back to Standings.
+  useEffect(() => {
+    if (!detailsLoading && view === 'brackets' && !hasBracket) setViewState('standings');
+  }, [detailsLoading, view, hasBracket]);
 
   // Pos+Team are merged into one sticky first column so they stay visible
   // while P/W/D/L/GD/PTS scroll underneath on narrow viewports -- otherwise
@@ -453,13 +546,13 @@ function CompetitionHubContent() {
             </button>
             {selectedComp && (
               <button
-                onClick={() => toggleCompetition(selectedComp.id)}
-                aria-label={isFavoriteCompetition(selectedComp.id) ? 'Remove from favourites' : 'Add to favourites'}
+                onClick={toggleSeriesFavourite}
+                aria-label={seriesFavourite ? 'Remove from favourites' : 'Add to favourites'}
                 className="shrink-0 w-11 h-11 -mr-2 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
               >
                 <Star
                   size={20}
-                  className={isFavoriteCompetition(selectedComp.id) ? 'text-primary fill-primary' : 'text-foreground/40'}
+                  className={seriesFavourite ? 'text-primary fill-primary' : 'text-foreground/40'}
                 />
               </button>
             )}
@@ -512,34 +605,21 @@ function CompetitionHubContent() {
           {/* View Toggle -- flex-1 per tab so all 4 always fit the row width,
               no horizontal scroll (Figma shows all 4 fitting on one line). */}
           <div role="tablist" aria-label="Competition sections" className="flex bg-muted p-1 rounded-2xl border border-border">
-            <button
-              role="tab" aria-selected={view === 'standings'} onClick={() => setView('standings')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
-            >
-              <ListOrdered size={14} className="shrink-0" />
-              <span className="truncate">Standings</span>
-            </button>
-            <button
-              role="tab" aria-selected={view === 'matches'} onClick={() => setView('matches')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
-            >
-              <Calendar size={14} className="shrink-0" />
-              <span className="truncate">Matches</span>
-            </button>
-            <button
-              role="tab" aria-selected={view === 'brackets'} onClick={() => setView('brackets')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
-            >
-              <LayoutGrid size={14} className="shrink-0" />
-              <span className="truncate">Brackets</span>
-            </button>
-            <button
-              role="tab" aria-selected={view === 'stats'} onClick={() => setView('stats')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
-            >
-              <BarChart3 size={14} className="shrink-0" />
-              <span className="truncate">Stats</span>
-            </button>
+            {visibleTabs.map((tab) => {
+              const Icon = TAB_META[tab].icon;
+              return (
+                <button
+                  key={tab}
+                  role="tab"
+                  aria-selected={view === tab}
+                  onClick={() => setView(tab)}
+                  className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === tab ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+                >
+                  <Icon size={14} className="shrink-0" />
+                  <span className="truncate">{TAB_META[tab].label}</span>
+                </button>
+              );
+            })}
           </div>
         </header>
 
@@ -588,56 +668,65 @@ function CompetitionHubContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
+              className="space-y-4"
             >
               {matches.length > 0 && (
-                <MatchCalendar
-                  fixtures={matches}
-                  selectedDate={selectedDate || parseSafeDate(matches[0].startTime) || new Date()}
-                  onDateSelect={(date) => setSelectedDate(date)}
-                />
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[0.625rem] font-black uppercase tracking-widest text-foreground/50">
+                    {selectedDate
+                      ? `Fixtures for ${selectedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
+                      : `${matches.length} fixtures`}
+                    {selectedDate && (
+                      <button onClick={() => setSelectedDate(null)} className="ml-2 underline text-primary">
+                        Clear
+                      </button>
+                    )}
+                  </p>
+                  <button
+                    onClick={() => setShowCalendar((v) => !v)}
+                    aria-expanded={showCalendar}
+                    className="shrink-0 inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl border border-border bg-muted text-[0.625rem] font-black uppercase tracking-widest text-foreground/70 hover:text-foreground"
+                  >
+                    <Calendar size={14} />
+                    {showCalendar ? 'Hide calendar' : 'Calendar'}
+                  </button>
+                </div>
               )}
 
-              {selectedDate && (
-                <p className="text-xs text-foreground/50 text-center">
-                  Showing fixtures for{' '}
-                  {selectedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}{' '}
-                  <button
-                    onClick={() => setSelectedDate(null)}
-                    className="underline text-primary ml-1"
-                  >
-                    Clear
-                  </button>
-                </p>
+              {showCalendar && matches.length > 0 && (
+                <MatchCalendar
+                  fixtures={matches}
+                  selectedDate={selectedDate || focusDate}
+                  initialMonth={focusDate}
+                  onDateSelect={(date) => setSelectedDate(date)}
+                />
               )}
 
               {detailsFailed.matches && matches.length === 0 ? (
                 <LoadFailedState title="Couldn't load fixtures" onRetry={() => setDetailsKey((k) => k + 1)} />
               ) : matches.length > 0 ? (
                 (() => {
-                  // Figma groups matches under a round/stage header ("BUSA LEAGUE
-                  // FOOTBALL - SEMI FINALS") rather than a flat grid. `round` is
-                  // null for regular non-knockout matches -- those fall into a
-                  // single ungrouped "Matches" bucket, so this degrades to
-                  // today's flat list exactly when there's no round data.
-                  const filtered = matches.filter((match) => {
-                    if (!selectedDate) return true;
-                    const matchDate = parseSafeDate(match.startTime);
-                    return matchDate ? isSameDay(matchDate, selectedDate) : false;
-                  });
+                  // Completed competitions read newest first (the final leads); anything
+                  // still running reads in date order so the next fixtures come first.
+                  const newestFirst = selectedComp?.status === 'completed';
+                  const time = (m: Match) => parseSafeDate(m.startTime)?.getTime() ?? 0;
+                  const filtered = matches
+                    .filter((match) => {
+                      if (!selectedDate) return true;
+                      const matchDate = parseSafeDate(match.startTime);
+                      return matchDate ? isSameDay(matchDate, selectedDate) : false;
+                    })
+                    .sort((a, b) => (newestFirst ? time(b) - time(a) : time(a) - time(b)));
                   const roundOrder: string[] = [];
                   const byRound = new Map<string, Match[]>();
-                  filtered
-                    // Unparseable startTime sorts last (epoch 0) -- NaN here broke the comparator (BUG-213).
-                    .sort((a, b) => (parseSafeDate(b.startTime)?.getTime() ?? 0) - (parseSafeDate(a.startTime)?.getTime() ?? 0))
-                    .forEach((match) => {
-                      const key = match.round || 'Matches';
-                      if (!byRound.has(key)) {
-                        byRound.set(key, []);
-                        roundOrder.push(key);
-                      }
-                      byRound.get(key)!.push(match);
-                    });
+                  filtered.forEach((match) => {
+                    const key = match.round || 'Matches';
+                    if (!byRound.has(key)) {
+                      byRound.set(key, []);
+                      roundOrder.push(key);
+                    }
+                    byRound.get(key)!.push(match);
+                  });
 
                   return (
                     <div className="space-y-4">
@@ -646,39 +735,42 @@ function CompetitionHubContent() {
                           <div className="flex items-center gap-2 px-4 py-3 bg-muted border-b border-border">
                             <LayoutGrid size={14} className="text-primary shrink-0" />
                             <span className="text-[0.625rem] font-black uppercase tracking-widest truncate">
-                              {round === 'Matches' ? (selectedComp?.name || 'Matches') : `${selectedComp?.name || ''} - ${round.replace(/_/g, ' ')}`}
+                              {round === 'Matches' ? 'Matches' : round.replace(/_/g, ' ')}
                             </span>
                           </div>
                           <div className="divide-y divide-border/50">
-                            {byRound.get(round)!.map((match) => (
-                              <Link
-                                key={match.id}
-                                href={`/matches/${match.id}`}
-                                className="block px-4 py-3 hover:bg-muted/50 transition-colors"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
-                                  <span className="flex-1 text-sm font-bold truncate">{match.homeTeam?.name || 'Home'}</span>
-                                  <div className="flex flex-col items-center shrink-0 px-2">
-                                    <span className="text-xs font-display italic text-primary">
-                                      {match.status === 'UPCOMING' ? safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, '--:--', []) : `${match.homeScore}-${match.awayScore}`}
-                                    </span>
-                                    {match.status === 'LIVE' && (
-                                      <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>
-                                    )}
-                                    {match.status === 'HALF_TIME' && (
-                                      <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500">HT</span>
-                                    )}
+                            {byRound.get(round)!.map((match) => {
+                              const finished = match.status === 'FINISHED';
+                              const live = match.status === 'LIVE' || match.status === 'HALF_TIME';
+                              const homeWon = finished && match.homeScore > match.awayScore;
+                              const awayWon = finished && match.awayScore > match.homeScore;
+                              return (
+                                <Link
+                                  key={match.id}
+                                  href={`/matches/${match.id}`}
+                                  className="block px-4 py-3 hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
+                                    <span className={`flex-1 text-sm truncate ${homeWon ? 'font-black' : 'font-bold text-foreground/80'}`}>{match.homeTeam?.name || 'Home'}</span>
+                                    <div className="flex flex-col items-center shrink-0 px-2 min-w-[3.5rem]">
+                                      <span className="text-sm font-display italic text-primary">
+                                        {match.status === 'UPCOMING' ? safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, '--:--', []) : `${match.homeScore}-${match.awayScore}`}
+                                      </span>
+                                      {finished && <span className="text-[0.5rem] font-black uppercase tracking-widest text-foreground/50">FT</span>}
+                                      {match.status === 'LIVE' && <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>}
+                                      {match.status === 'HALF_TIME' && <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500">HT</span>}
+                                    </div>
+                                    <span className={`flex-1 text-sm truncate text-right ${awayWon ? 'font-black' : 'font-bold text-foreground/80'}`}>{match.awayTeam?.name || 'Away'}</span>
+                                    <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                                   </div>
-                                  <span className="flex-1 text-sm font-bold truncate text-right">{match.awayTeam?.name || 'Away'}</span>
-                                  <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
-                                </div>
-                                <div className="flex items-center justify-between text-[0.625rem] text-foreground/50 mt-2 pl-11">
-                                  <span className="truncate">{match.venue}</span>
-                                  <span className="shrink-0 pl-2">{safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric', year: 'numeric' }, 'TBD')}</span>
-                                </div>
-                              </Link>
-                            ))}
+                                  <div className="flex items-center justify-between text-[0.625rem] text-foreground/50 mt-2 pl-11">
+                                    <span className="truncate">{live ? 'In play' : match.venue}</span>
+                                    <span className="shrink-0 pl-2">{safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric', year: 'numeric' }, 'TBD')}</span>
+                                  </div>
+                                </Link>
+                              );
+                            })}
                           </div>
                         </div>
                       ))}
@@ -688,7 +780,7 @@ function CompetitionHubContent() {
               ) : (
                 <div className="p-24 text-center bg-muted border border-border rounded-[40px]">
                   <Calendar className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
-                  <p className="text-foreground/20 font-black uppercase tracking-widest text-xs italic">No matches scheduled</p>
+                  <p className="text-foreground/40 font-black uppercase tracking-widest text-xs italic">No matches scheduled</p>
                 </div>
               )}
             </motion.div>
@@ -701,57 +793,10 @@ function CompetitionHubContent() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              {detailsFailed.brackets && brackets.length === 0 ? (
+              {detailsFailed.matches && matches.length === 0 ? (
                 <LoadFailedState title="Couldn't load the bracket" onRetry={() => setDetailsKey((k) => k + 1)} />
-              ) : brackets.length > 0 ? (
-                <div className="relative overflow-x-auto pb-8">
-                  <div className="min-w-[1000px] relative p-8">
-                    <div className="flex justify-around items-start gap-12">
-                      {brackets.map((round) => (
-                        <div key={round.round} className="flex-1 space-y-8">
-                          <h3 className="text-[0.625rem] font-black uppercase tracking-widest text-primary text-center mb-12">
-                            {round.round.replace('_', ' ')}
-                          </h3>
-                          <div className="space-y-8">
-                            {round.matches.map((match) => (
-                              <div key={match.id} className="bg-muted border border-border rounded-3xl p-6 hover:border-primary/30 transition-all">
-                                <div className="flex justify-between items-center mb-4">
-                                  <span className="text-[0.5rem] font-black uppercase tracking-widest text-foreground/30">{match.title}</span>
-                                  <span className={`text-[0.5rem] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : 'bg-muted text-foreground/40'}`}>
-                                    {match.status}
-                                  </span>
-                                </div>
-                                <div className="space-y-3">
-                                  <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                      <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[0.625rem] font-black uppercase text-foreground/60">{match.homeTeam?.name || 'TBD'}</span>
-                                    </div>
-                                    <span className="font-display italic text-lg">{match.homeScore ?? '-'}</span>
-                                  </div>
-                                  <div className="h-px bg-border/50" />
-                                  <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                      <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[0.625rem] font-black uppercase text-foreground/60">{match.awayTeam?.name || 'TBD'}</span>
-                                    </div>
-                                    <span className="font-display italic text-lg">{match.awayScore ?? '-'}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
               ) : (
-                <div className="py-24 px-4 text-center bg-muted border border-border rounded-[40px]">
-                  <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
-                  <p className="text-foreground/40 font-black uppercase tracking-widest text-xs italic">No bracket available</p>
-                  <p className="text-foreground/40 text-[0.625rem] mt-2 italic">Knockout fixtures, where there are any, are listed under Matches.</p>
-                </div>
+                <BracketView rounds={bracketRounds} projection={projection} />
               )}
             </motion.div>
           )}
