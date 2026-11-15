@@ -43,6 +43,22 @@ describe('buildScorerSummary / formatScorerEntry', () => {
         expect(away).toEqual(["Bola 80'"]);
     });
 
+    it('keeps (P) and goal count when no minute is known', () => {
+        const unknown = [
+            ev('Penalty', H, -1, 'Finmash'),
+            ev('Goal', H, -1, 'Jagun'),
+            ev('Goal', H, -1, 'Jagun'),
+            ev('Goal', H, -1, 'Solo'),
+            ev('Penalty', H, -1, 'Mix'),
+            ev('Goal', H, -1, 'Mix'),
+        ];
+        const lines = buildScorerSummary(unknown, H, H, A).map(formatScorerEntry);
+        expect(lines).toContain('Finmash (P)');
+        expect(lines).toContain('Jagun x2');
+        expect(lines).toContain('Solo');
+        expect(lines).toContain('Mix x2 (1P)');
+    });
+
     it('sorts by first minute with unknown minutes last', () => {
         const names = buildScorerSummary(events, H, H, A).map(s => s.name);
         expect(names[names.length - 1]).toBe('Backfill');
