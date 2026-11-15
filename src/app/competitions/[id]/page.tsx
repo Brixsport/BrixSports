@@ -328,20 +328,20 @@ function CompetitionHubContent() {
       <table className="w-full text-left border-collapse min-w-[340px]">
         <thead>
           <tr className="border-b border-border bg-muted">
-            <th className="sticky left-0 z-10 bg-card px-3 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40">Team</th>
-            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">P</th>
-            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">W</th>
-            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
-            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
+            <th className="sticky left-0 z-10 bg-card px-3 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40">Team</th>
+            <th className="px-1.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40 text-center">P</th>
+            <th className="px-1.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40 text-center">W</th>
+            <th className="px-1.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
+            <th className="px-1.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
             {isBasketball ? (
               <>
-                <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PF</th>
-                <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PA</th>
+                <th className="px-1.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40 text-center">PF</th>
+                <th className="px-1.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40 text-center">PA</th>
               </>
             ) : (
-              <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">GD</th>
+              <th className="px-1.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40 text-center">GD</th>
             )}
-            <th className="sticky right-0 z-10 bg-card px-2.5 py-3 text-[9px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
+            <th className="sticky right-0 z-10 bg-card px-2.5 py-3 text-[0.5625rem] font-black uppercase tracking-widest text-primary text-center">Pts</th>
           </tr>
         </thead>
         <tbody>
@@ -389,7 +389,7 @@ function CompetitionHubContent() {
         </tbody>
       </table>
       {isSwissTop8 && rows.length > SWISS_QUALIFIERS && (
-        <p className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-foreground/40">
+        <p className="px-3 py-3 text-[0.625rem] font-bold uppercase tracking-widest text-foreground/40">
           <span className="inline-block w-4 border-t-2 border-dashed border-primary/60 align-middle mr-2" />
           Top 8 advance to the quarter-finals
         </p>
@@ -486,14 +486,14 @@ function CompetitionHubContent() {
                       const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
                       if (chosen) router.push(`/competitions/${chosen.id}?tab=${view}`);
                     }}
-                    className="text-[10px] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 min-h-[44px] focus:outline-none focus:border-primary/50"
+                    className="text-[0.625rem] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 min-h-[44px] focus:outline-none focus:border-primary/50"
                   >
                     {selectedGroup.seasons.map((s) => (
                       <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
                     ))}
                   </select>
                 ) : (
-                  <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
+                  <span className="text-[0.625rem] font-black uppercase tracking-widest text-foreground/40">
                     {[selectedComp?.season, selectedComp?.status].filter(Boolean).join(' • ')}
                   </span>
                 )}
@@ -501,7 +501,7 @@ function CompetitionHubContent() {
               {!!selectedComp?.numberOfTeams && (
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 border border-primary/20 rounded-lg">
                   <Users size={12} className="text-primary" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                  <span className="text-[0.625rem] font-black uppercase tracking-widest text-primary">
                     {selectedComp.numberOfTeams} Teams Registered
                   </span>
                 </div>
@@ -514,28 +514,28 @@ function CompetitionHubContent() {
           <div role="tablist" aria-label="Competition sections" className="flex bg-muted p-1 rounded-2xl border border-border">
             <button
               role="tab" aria-selected={view === 'standings'} onClick={() => setView('standings')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <ListOrdered size={14} className="shrink-0" />
               <span className="truncate">Standings</span>
             </button>
             <button
               role="tab" aria-selected={view === 'matches'} onClick={() => setView('matches')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <Calendar size={14} className="shrink-0" />
               <span className="truncate">Matches</span>
             </button>
             <button
               role="tab" aria-selected={view === 'brackets'} onClick={() => setView('brackets')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <LayoutGrid size={14} className="shrink-0" />
               <span className="truncate">Brackets</span>
             </button>
             <button
               role="tab" aria-selected={view === 'stats'} onClick={() => setView('stats')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[0.625rem] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <BarChart3 size={14} className="shrink-0" />
               <span className="truncate">Stats</span>
@@ -645,7 +645,7 @@ function CompetitionHubContent() {
                         <div key={round} className="bg-muted border border-border rounded-2xl overflow-hidden">
                           <div className="flex items-center gap-2 px-4 py-3 bg-muted border-b border-border">
                             <LayoutGrid size={14} className="text-primary shrink-0" />
-                            <span className="text-[10px] font-black uppercase tracking-widest truncate">
+                            <span className="text-[0.625rem] font-black uppercase tracking-widest truncate">
                               {round === 'Matches' ? (selectedComp?.name || 'Matches') : `${selectedComp?.name || ''} - ${round.replace(/_/g, ' ')}`}
                             </span>
                           </div>
@@ -664,16 +664,16 @@ function CompetitionHubContent() {
                                       {match.status === 'UPCOMING' ? safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, '--:--', []) : `${match.homeScore}-${match.awayScore}`}
                                     </span>
                                     {match.status === 'LIVE' && (
-                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>
+                                      <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>
                                     )}
                                     {match.status === 'HALF_TIME' && (
-                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500">HT</span>
+                                      <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500">HT</span>
                                     )}
                                   </div>
                                   <span className="flex-1 text-sm font-bold truncate text-right">{match.awayTeam?.name || 'Away'}</span>
                                   <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                                 </div>
-                                <div className="flex items-center justify-between text-[10px] text-foreground/50 mt-2 pl-11">
+                                <div className="flex items-center justify-between text-[0.625rem] text-foreground/50 mt-2 pl-11">
                                   <span className="truncate">{match.venue}</span>
                                   <span className="shrink-0 pl-2">{safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric', year: 'numeric' }, 'TBD')}</span>
                                 </div>
@@ -709,15 +709,15 @@ function CompetitionHubContent() {
                     <div className="flex justify-around items-start gap-12">
                       {brackets.map((round) => (
                         <div key={round.round} className="flex-1 space-y-8">
-                          <h3 className="text-[10px] font-black uppercase tracking-widest text-primary text-center mb-12">
+                          <h3 className="text-[0.625rem] font-black uppercase tracking-widest text-primary text-center mb-12">
                             {round.round.replace('_', ' ')}
                           </h3>
                           <div className="space-y-8">
                             {round.matches.map((match) => (
                               <div key={match.id} className="bg-muted border border-border rounded-3xl p-6 hover:border-primary/30 transition-all">
                                 <div className="flex justify-between items-center mb-4">
-                                  <span className="text-[8px] font-black uppercase tracking-widest text-foreground/30">{match.title}</span>
-                                  <span className={`text-[8px] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : 'bg-muted text-foreground/40'}`}>
+                                  <span className="text-[0.5rem] font-black uppercase tracking-widest text-foreground/30">{match.title}</span>
+                                  <span className={`text-[0.5rem] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : 'bg-muted text-foreground/40'}`}>
                                     {match.status}
                                   </span>
                                 </div>
@@ -725,7 +725,7 @@ function CompetitionHubContent() {
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                       <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[10px] font-black uppercase text-foreground/60">{match.homeTeam?.name || 'TBD'}</span>
+                                      <span className="text-[0.625rem] font-black uppercase text-foreground/60">{match.homeTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.homeScore ?? '-'}</span>
                                   </div>
@@ -733,7 +733,7 @@ function CompetitionHubContent() {
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                       <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? 'TBD'} size="sm" />
-                                      <span className="text-[10px] font-black uppercase text-foreground/60">{match.awayTeam?.name || 'TBD'}</span>
+                                      <span className="text-[0.625rem] font-black uppercase text-foreground/60">{match.awayTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.awayScore ?? '-'}</span>
                                   </div>
@@ -750,7 +750,7 @@ function CompetitionHubContent() {
                 <div className="py-24 px-4 text-center bg-muted border border-border rounded-[40px]">
                   <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
                   <p className="text-foreground/40 font-black uppercase tracking-widest text-xs italic">No bracket available</p>
-                  <p className="text-foreground/40 text-[10px] mt-2 italic">Knockout fixtures, where there are any, are listed under Matches.</p>
+                  <p className="text-foreground/40 text-[0.625rem] mt-2 italic">Knockout fixtures, where there are any, are listed under Matches.</p>
                 </div>
               )}
             </motion.div>
@@ -776,7 +776,7 @@ function CompetitionHubContent() {
                       {leaders.length > 0 && (
                         <Link
                           href={`/competitions/${competitionId}/stats/${cat.type}`}
-                          className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline"
+                          className="text-[0.625rem] font-black uppercase tracking-widest text-primary hover:underline"
                         >
                           See all
                         </Link>
@@ -791,12 +791,12 @@ function CompetitionHubContent() {
                             className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
+                              <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[0.625rem] font-black text-primary">
                                 {leader.player.number ?? '-'}
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-bold truncate">{leader.player.name}</p>
-                                <p className="text-[10px] text-foreground/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
+                                <p className="text-[0.625rem] text-foreground/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
                               </div>
                             </div>
                             <span className="text-lg font-display italic text-primary shrink-0">{leader.highlightedStat}</span>
@@ -804,7 +804,7 @@ function CompetitionHubContent() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[10px] text-foreground/20 font-black uppercase tracking-widest text-center py-8">No data yet</p>
+                      <p className="text-[0.625rem] text-foreground/20 font-black uppercase tracking-widest text-center py-8">No data yet</p>
                     )}
                   </div>
                 );
