@@ -123,8 +123,14 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
 
     // Handle player click - show player stats (comparison lives on its own dedicated page)
     const handlePlayerClick = (player: any) => {
-        const playerData = lineups.home?.find((p: any) => p.id === player.id) ||
-            lineups.away?.find((p: any) => p.id === player.id);
+        // lineups.home/away is either a plain array or the API shape
+        // { starters, substitutes } (normalised the same way above). Calling
+        // .find() directly on the object shape threw "find is not a function"
+        // on every player tap (Sentry BRIXSPORT-M), so the stats modal never opened.
+        const toList = (data: any): any[] =>
+            Array.isArray(data) ? data : [...(data?.starters || []), ...(data?.substitutes || [])];
+        const playerData = toList(lineups.home).find((p: any) => p.id === player.id) ||
+            toList(lineups.away).find((p: any) => p.id === player.id);
         setSelectedPlayer({ ...player, ...playerData });
         setShowPlayerModal(true);
     };
