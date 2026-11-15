@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
@@ -22,7 +23,10 @@ import { serializeJsonLd } from '@/lib/json-ld';
 // This is purely an enhancement path -- MatchDetailClient does its own
 // independent data fetching and doesn't depend on this succeeding -- so a
 // failure here degrades to generic metadata instead of taking the page down.
-async function getMatchSeoData(id: string) {
+// Per-request memoisation: generateMetadata and the page body both call this
+// with the same id, and the DB driver (unlike fetch) is not deduped by Next, so
+// every match view used to cost 6 queries instead of 3.
+const getMatchSeoData = cache(async function getMatchSeoData(id: string) {
     try {
         const [match] = await db.select().from(matches).where(eq(matches.id, id)).limit(1);
         if (!match) return null;
@@ -38,7 +42,13 @@ async function getMatchSeoData(id: string) {
         Sentry.captureException(error, { tags: { area: 'match-seo-fallback' }, extra: { matchId: id } });
         return null;
     }
-}
+});
+
+// Edge/ISR-cache the rendered page for 30s. The SEO metadata and JSON-LD here
+// tolerate 30s of staleness; the live score and events come from
+// MatchDetailClient's own polling of /api/matches/[id]/public, not from this
+// server render. Cuts the single most CPU-expensive route (SSR on every view).
+export const revalidate = 30;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
     const { id } = await params;
