@@ -44,12 +44,6 @@ const getMatchSeoData = cache(async function getMatchSeoData(id: string) {
     }
 });
 
-// Edge/ISR-cache the rendered page for 30s. The SEO metadata and JSON-LD here
-// tolerate 30s of staleness; the live score and events come from
-// MatchDetailClient's own polling of /api/matches/[id]/public, not from this
-// server render. Cuts the single most CPU-expensive route (SSR on every view).
-export const revalidate = 30;
-
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
     const { id } = await params;
     const data = await getMatchSeoData(id);
