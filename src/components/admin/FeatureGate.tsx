@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { ShieldOff } from "lucide-react";
+import { fetchFeatureFlags } from "@/lib/feature-flags-client";
 
 interface FeatureGateProps {
   flagKey: string;
@@ -25,11 +26,10 @@ export function FeatureGate({
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/feature-flags")
-      .then((res) => res.json())
-      .then((data) => {
+    fetchFeatureFlags()
+      .then((flags) => {
         if (cancelled) return;
-        setStatus(data?.flags?.[flagKey] === false ? "disabled" : "enabled");
+        setStatus(flags[flagKey] === false ? "disabled" : "enabled");
       })
       .catch(() => {
         // Fail open on a network error -- same reasoning as the API route
