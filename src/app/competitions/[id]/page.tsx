@@ -148,6 +148,9 @@ function CompetitionHubContent() {
   // instead of "No standings data available" / "No matches scheduled".
   const [detailsFailed, setDetailsFailed] = useState({ standings: false, matches: false, brackets: false, stats: false });
   const [detailsKey, setDetailsKey] = useState(0);
+  // True from the moment a competition is chosen until its standings, fixtures,
+  // bracket and leaders have all settled, so a tab never claims "no data" mid-load.
+  const [detailsLoading, setDetailsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // 1. Fetch all competitions on mount, select the one this route was opened for
@@ -196,34 +199,36 @@ function CompetitionHubContent() {
     if (!selectedComp) return;
 
     const fetchDetails = async () => {
-      try {
-        setLoading(true);
-        setDetailsFailed({ standings: false, matches: false, brackets: false, stats: false });
+      setDetailsLoading(true);
+      setDetailsFailed({ standings: false, matches: false, brackets: false, stats: false });
 
-        // BACKLOG-287: the selected SPORT TAB (All/Football/Basketball/Track) is
-        // a filter, not necessarily a real sport with its own /api/<sport>/* route
-        // -- only Football and Basketball do. The selected COMPETITION always has
-        // a concrete sport (or none, if multi-sport), so resolve the fetch endpoint
-        // from that instead of the tab value to avoid ever hitting /api/all/* or
-        // /api/track/*, which don't exist.
-        const fetchSport = selectedComp.sport;
-        if (!fetchSport) {
-          setStandings([]);
-          setMatches([]);
-          setBrackets([]);
-          setStatsLeaders({});
-          return;
-        }
+      // The selected COMPETITION always has a concrete sport (or none, if
+      // multi-sport); only Football and Basketball have their own /api/<sport>/*
+      // routes, so resolve the endpoint from that, never from a filter tab.
+      const fetchSport = selectedComp.sport;
+      if (!fetchSport) {
+        setStandings([]);
+        setMatches([]);
+        setBrackets([]);
+        setStatsLeaders({});
+        setDetailsLoading(false);
+        return;
+      }
 
-        const fetchJson = async (url: string) => {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        };
-        const failed = { standings: false, matches: false, brackets: false, stats: false };
+      const fetchJson = async (url: string) => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      };
+      const failed = { standings: false, matches: false, brackets: false, stats: false };
+      const compQuery = `competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`;
+      const sportPath = fetchSport.toLowerCase();
 
+      // The four sections are independent: fetch them together so a slow one does
+      // not hold the others back, and each records its own failure.
+      const loadStandings = async () => {
         try {
-          const sData = await fetchJson(`/api/${fetchSport.toLowerCase()}/standings?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
+          const sData = await fetchJson(`/api/${sportPath}/standings?${compQuery}`);
           if (!sData.success) throw new Error('standings success=false');
           setStandings(sData.standings || []);
         } catch (err) {
@@ -231,9 +236,11 @@ function CompetitionHubContent() {
           failed.standings = true;
           setStandings([]);
         }
+      };
 
+      const loadMatches = async () => {
         try {
-          const mData = await fetchJson(`/api/${fetchSport.toLowerCase()}/matches?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
+          const mData = await fetchJson(`/api/${sportPath}/matches?${compQuery}`);
           if (!mData.success) throw new Error('matches success=false');
           setMatches(mData.matches || []);
         } catch (err) {
@@ -241,24 +248,25 @@ function CompetitionHubContent() {
           failed.matches = true;
           setMatches([]);
         }
+      };
 
+      const loadBrackets = async () => {
         try {
-          const bData = await fetchJson(`/api/brackets?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}`);
+          const bData = await fetchJson(`/api/brackets?${compQuery}&sport=${fetchSport}`);
           setBrackets(bData.rounds || []);
         } catch (err) {
           console.error('Error fetching brackets:', err);
           failed.brackets = true;
           setBrackets([]);
         }
+      };
 
-        // Stats tab leaderboards -- competition-scoped from the start (the
-        // endpoint already supports competitionId; the global-fetch bug
-        // BACKLOG-290 flagged was in /football/page.tsx's calling code, not
-        // this endpoint, so this avoids that bug rather than carrying it in).
+      // Stats tab leaderboards are competition-scoped from the start.
+      const loadStats = async () => {
         const categories = STAT_CATEGORIES[fetchSport] || [];
         const statsResults = await Promise.all(
           categories.map((cat) =>
-            fetchJson(`/api/players/stats/leaders?type=${cat.type}&competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}&limit=5`)
+            fetchJson(`/api/players/stats/leaders?type=${cat.type}&${compQuery}&sport=${fetchSport}&limit=5`)
               .catch((err) => {
                 console.error('Error fetching stat leaders:', err);
                 failed.stats = true;
@@ -271,13 +279,16 @@ function CompetitionHubContent() {
           nextStats[cat.type] = statsResults[i]?.leaders || [];
         });
         setStatsLeaders(nextStats);
-        setDetailsFailed(failed);
+      };
 
+      try {
+        await Promise.all([loadStandings(), loadMatches(), loadBrackets(), loadStats()]);
+        setDetailsFailed(failed);
       } catch (err) {
         console.error('Error fetching details:', err);
         setDetailsFailed({ standings: true, matches: true, brackets: true, stats: true });
       } finally {
-        setLoading(false);
+        setDetailsLoading(false);
       }
     };
 
@@ -314,38 +325,37 @@ function CompetitionHubContent() {
 
   const renderStandingsTable = (rows: Standing[]) => (
     <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse min-w-[420px]">
+      <table className="w-full text-left border-collapse min-w-[340px]">
         <thead>
           <tr className="border-b border-border bg-muted">
             <th className="sticky left-0 z-10 bg-card px-3 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40">Team</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">P</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">W</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
-            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
+            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">P</th>
+            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">W</th>
+            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
+            <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
             {isBasketball ? (
               <>
-                <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PF</th>
-                <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PA</th>
+                <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PF</th>
+                <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">PA</th>
               </>
             ) : (
-              <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">GD</th>
+              <th className="px-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-foreground/40 text-center">GD</th>
             )}
-            <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
+            <th className="sticky right-0 z-10 bg-card px-2.5 py-3 text-[9px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, idx) => (
             <tr
               key={row.id}
-              onClick={() => router.push(`/teams/${row.teamId}`)}
-              className={`hover:bg-muted/50 transition-colors group cursor-pointer ${
+              className={`hover:bg-muted/50 transition-colors group ${
                 isSwissTop8 && idx === SWISS_QUALIFIERS - 1 && rows.length > SWISS_QUALIFIERS
                   ? 'border-b-2 border-dashed border-primary/60'
                   : 'border-b border-border/50'
               }`}
             >
               <td className="sticky left-0 z-10 bg-card group-hover:bg-muted px-3 py-2.5">
-                <div className="flex items-center gap-2">
+                <Link href={`/teams/${row.teamId}`} className="flex items-center gap-2 min-h-[44px]">
                   <span className={`text-sm font-display italic w-4 shrink-0 text-right ${isSwissTop8 && idx < SWISS_QUALIFIERS ? 'text-primary' : 'text-foreground/30'}`}>
                     {idx + 1}
                   </span>
@@ -353,23 +363,23 @@ function CompetitionHubContent() {
                     <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-tight truncate max-w-[130px]">{row.team.name}</p>
+                    <p className="text-xs font-black uppercase tracking-tight truncate max-w-[96px] sm:max-w-[130px]">{row.team.name}</p>
                   </div>
-                </div>
+                </Link>
               </td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/80">{row.played}</td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-primary">{row.won}</td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
-              <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
+              <td className="px-1.5 py-2.5 text-center text-xs font-bold text-foreground/80">{row.played}</td>
+              <td className="px-1.5 py-2.5 text-center text-xs font-bold text-primary">{row.won}</td>
+              <td className="px-1.5 py-2.5 text-center text-xs font-bold text-foreground/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
+              <td className="px-1.5 py-2.5 text-center text-xs font-bold text-foreground/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
               {isBasketball ? (
                 <>
-                  <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/60">{row.goalsFor}</td>
-                  <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalsAgainst}</td>
+                  <td className="px-1.5 py-2.5 text-center text-xs font-bold text-foreground/60">{row.goalsFor}</td>
+                  <td className="px-1.5 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalsAgainst}</td>
                 </>
               ) : (
-                <td className="px-2 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+                <td className="px-1.5 py-2.5 text-center text-xs font-bold text-foreground/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
               )}
-              <td className="px-3 py-2.5 text-center">
+              <td className="sticky right-0 z-10 bg-card group-hover:bg-muted px-2.5 py-2.5 text-center">
                 <span className="bg-primary/10 text-primary px-2 py-1 rounded-lg font-display italic text-sm border border-primary/20">
                   {row.points}
                 </span>
@@ -435,9 +445,9 @@ function CompetitionHubContent() {
               alone would break.) */}
           <div className="flex items-center justify-between">
             <button
-              onClick={() => router.back()}
+              onClick={() => (window.history.length > 1 ? router.back() : router.push('/competitions'))}
               aria-label="Back"
-              className="shrink-0 p-2 -ml-2 rounded-full hover:bg-muted transition-colors text-foreground/60 hover:text-foreground"
+              className="shrink-0 w-11 h-11 -ml-2 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-foreground/60 hover:text-foreground"
             >
               <ArrowLeft size={20} />
             </button>
@@ -445,7 +455,7 @@ function CompetitionHubContent() {
               <button
                 onClick={() => toggleCompetition(selectedComp.id)}
                 aria-label={isFavoriteCompetition(selectedComp.id) ? 'Remove from favourites' : 'Add to favourites'}
-                className="shrink-0 p-2 -mr-2 rounded-full hover:bg-muted transition-colors"
+                className="shrink-0 w-11 h-11 -mr-2 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
               >
                 <Star
                   size={20}
@@ -474,9 +484,9 @@ function CompetitionHubContent() {
                     value={selectedComp?.id || ''}
                     onChange={(e) => {
                       const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
-                      if (chosen) router.push(`/competitions/${chosen.id}`);
+                      if (chosen) router.push(`/competitions/${chosen.id}?tab=${view}`);
                     }}
-                    className="text-[10px] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
+                    className="text-[10px] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 min-h-[44px] focus:outline-none focus:border-primary/50"
                   >
                     {selectedGroup.seasons.map((s) => (
                       <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
@@ -484,7 +494,7 @@ function CompetitionHubContent() {
                   </select>
                 ) : (
                   <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
-                    {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
+                    {[selectedComp?.season, selectedComp?.status].filter(Boolean).join(' • ')}
                   </span>
                 )}
               </div>
@@ -501,31 +511,31 @@ function CompetitionHubContent() {
 
           {/* View Toggle -- flex-1 per tab so all 4 always fit the row width,
               no horizontal scroll (Figma shows all 4 fitting on one line). */}
-          <div className="flex bg-muted p-1 rounded-2xl border border-border">
+          <div role="tablist" aria-label="Competition sections" className="flex bg-muted p-1 rounded-2xl border border-border">
             <button
-              onClick={() => setView('standings')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              role="tab" aria-selected={view === 'standings'} onClick={() => setView('standings')}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <ListOrdered size={14} className="shrink-0" />
               <span className="truncate">Standings</span>
             </button>
             <button
-              onClick={() => setView('matches')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              role="tab" aria-selected={view === 'matches'} onClick={() => setView('matches')}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <Calendar size={14} className="shrink-0" />
               <span className="truncate">Matches</span>
             </button>
             <button
-              onClick={() => setView('brackets')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              role="tab" aria-selected={view === 'brackets'} onClick={() => setView('brackets')}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <LayoutGrid size={14} className="shrink-0" />
               <span className="truncate">Brackets</span>
             </button>
             <button
-              onClick={() => setView('stats')}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+              role="tab" aria-selected={view === 'stats'} onClick={() => setView('stats')}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-primary-foreground' : 'text-foreground/40 hover:text-foreground'}`}
             >
               <BarChart3 size={14} className="shrink-0" />
               <span className="truncate">Stats</span>
@@ -534,8 +544,13 @@ function CompetitionHubContent() {
         </header>
 
         {/* Content Area */}
+        {detailsLoading && (
+          <div className="flex items-center justify-center py-24" role="status" aria-label="Loading competition">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          </div>
+        )}
         <AnimatePresence mode="wait">
-          {view === 'standings' && (
+          {!detailsLoading && view === 'standings' && (
             <motion.div
               key="standings"
               initial={{ opacity: 0, y: 20 }}
@@ -567,7 +582,7 @@ function CompetitionHubContent() {
             </motion.div>
           )}
 
-          {view === 'matches' && (
+          {!detailsLoading && view === 'matches' && (
             <motion.div
               key="matches"
               initial={{ opacity: 0, y: 20 }}
@@ -636,10 +651,10 @@ function CompetitionHubContent() {
                           </div>
                           <div className="divide-y divide-border/50">
                             {byRound.get(round)!.map((match) => (
-                              <div
+                              <Link
                                 key={match.id}
-                                onClick={() => router.push(`/matches/${match.id}`)}
-                                className="px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
+                                href={`/matches/${match.id}`}
+                                className="block px-4 py-3 hover:bg-muted/50 transition-colors"
                               >
                                 <div className="flex items-center gap-3">
                                   <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
@@ -651,15 +666,18 @@ function CompetitionHubContent() {
                                     {match.status === 'LIVE' && (
                                       <span className="text-[8px] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>
                                     )}
+                                    {match.status === 'HALF_TIME' && (
+                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500">HT</span>
+                                    )}
                                   </div>
                                   <span className="flex-1 text-sm font-bold truncate text-right">{match.awayTeam?.name || 'Away'}</span>
                                   <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                                 </div>
-                                <div className="flex items-center justify-between text-[10px] text-foreground/30 mt-2 pl-11">
+                                <div className="flex items-center justify-between text-[10px] text-foreground/50 mt-2 pl-11">
                                   <span className="truncate">{match.venue}</span>
-                                  <span className="shrink-0 pl-2">{safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric' }, 'TBD')}</span>
+                                  <span className="shrink-0 pl-2">{safeToLocale(match.startTime, 'date', { month: 'short', day: 'numeric', year: 'numeric' }, 'TBD')}</span>
                                 </div>
-                              </div>
+                              </Link>
                             ))}
                           </div>
                         </div>
@@ -676,7 +694,7 @@ function CompetitionHubContent() {
             </motion.div>
           )}
 
-          {view === 'brackets' && (
+          {!detailsLoading && view === 'brackets' && (
             <motion.div
               key="brackets"
               initial={{ opacity: 0, y: 20 }}
@@ -731,14 +749,14 @@ function CompetitionHubContent() {
               ) : (
                 <div className="py-24 px-4 text-center bg-muted border border-border rounded-[40px]">
                   <AlertCircle className="w-12 h-12 text-foreground/10 mx-auto mb-4" />
-                  <p className="text-foreground/20 font-black uppercase tracking-widest text-xs italic">No bracket data available</p>
-                  <p className="text-foreground/10 text-[10px] mt-2 italic">Knockout stages have not started yet.</p>
+                  <p className="text-foreground/40 font-black uppercase tracking-widest text-xs italic">No bracket available</p>
+                  <p className="text-foreground/40 text-[10px] mt-2 italic">Knockout fixtures, where there are any, are listed under Matches.</p>
                 </div>
               )}
             </motion.div>
           )}
 
-          {view === 'stats' && (
+          {!detailsLoading && view === 'stats' && (
             <motion.div
               key="stats"
               initial={{ opacity: 0, y: 20 }}
@@ -767,10 +785,10 @@ function CompetitionHubContent() {
                     {leaders.length > 0 ? (
                       <div className="divide-y divide-border/50">
                         {leaders.map((leader) => (
-                          <div
+                          <Link
                             key={leader.player.id}
-                            onClick={() => router.push(`/players/${leader.player.id}`)}
-                            className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
+                            href={`/players/${leader.player.id}`}
+                            className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors"
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
@@ -782,7 +800,7 @@ function CompetitionHubContent() {
                               </div>
                             </div>
                             <span className="text-lg font-display italic text-primary shrink-0">{leader.highlightedStat}</span>
-                          </div>
+                          </Link>
                         ))}
                       </div>
                     ) : (
