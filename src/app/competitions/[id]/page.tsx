@@ -12,7 +12,7 @@ import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
 import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 import BracketView, { type ProjectedPair } from '@/components/competitions/BracketView';
-import { deriveBracket, seedPairs, type BracketRound as BracketRoundView } from '@/lib/competition-bracket';
+import { deriveBracket, seedPairs, shootoutLabel, type BracketRound as BracketRoundView } from '@/lib/competition-bracket';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
@@ -72,6 +72,8 @@ interface Match {
   startTime: string;
   status: string;
   venue: string;
+  shootoutHomeScore?: number | null;
+  shootoutAwayScore?: number | null;
   competition: string;
   round?: string | null;
 }
@@ -178,6 +180,7 @@ function CompetitionHubContent() {
         away: m.awayTeam?.name ? { name: m.awayTeam.name, logo: m.awayTeam.logo } : null,
         homeScore: typeof m.homeScore === 'number' ? m.homeScore : null,
         awayScore: typeof m.awayScore === 'number' ? m.awayScore : null,
+        shootout: null,
       })),
     }));
   }, [matches, brackets]);
@@ -742,8 +745,10 @@ function CompetitionHubContent() {
                             {byRound.get(round)!.map((match) => {
                               const finished = match.status === 'FINISHED';
                               const live = match.status === 'LIVE' || match.status === 'HALF_TIME';
-                              const homeWon = finished && match.homeScore > match.awayScore;
-                              const awayWon = finished && match.awayScore > match.homeScore;
+                              const pens = shootoutLabel(match);
+                              const penScore = pens ? pens.match(/^(d+)-(d+)/) : null;
+                              const homeWon = finished && (match.homeScore > match.awayScore || (penScore !== null && Number(penScore[1]) > Number(penScore[2])));
+                              const awayWon = finished && (match.awayScore > match.homeScore || (penScore !== null && Number(penScore[2]) > Number(penScore[1])));
                               return (
                                 <Link
                                   key={match.id}
@@ -757,7 +762,7 @@ function CompetitionHubContent() {
                                       <span className="text-sm font-display italic text-primary">
                                         {match.status === 'UPCOMING' ? safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, '--:--', []) : `${match.homeScore}-${match.awayScore}`}
                                       </span>
-                                      {finished && <span className="text-[0.5rem] font-black uppercase tracking-widest text-foreground/50">FT</span>}
+                                      {finished && <span className="text-[0.5rem] font-black uppercase tracking-widest text-foreground/50">{pens ? `FT · ${pens}` : 'FT'}</span>}
                                       {match.status === 'LIVE' && <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>}
                                       {match.status === 'HALF_TIME' && <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500">HT</span>}
                                     </div>

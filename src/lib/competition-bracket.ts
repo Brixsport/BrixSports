@@ -14,6 +14,7 @@ export interface BracketMatch {
   away: BracketTeam | null;
   homeScore: number | null;
   awayScore: number | null;
+  shootout: string | null;
 }
 
 export interface BracketRound {
@@ -31,6 +32,8 @@ export interface FixtureLike {
   awayTeam?: { name?: string; logo?: string | null } | null;
   homeScore?: number | null;
   awayScore?: number | null;
+  shootoutHomeScore?: number | null;
+  shootoutAwayScore?: number | null;
 }
 
 /** Lower rank = earlier stage. Null means the round is not a knockout stage. */
@@ -47,6 +50,24 @@ export function knockoutRank(round: string | null | undefined): number | null {
   return null;
 }
 
+/**
+ * "4-3 pens" for a finished match level after play that went to a shootout. The
+ * shootout columns default to 0 on every match, so a 0-0 pair means no shootout.
+ */
+export function shootoutLabel(m: {
+  status: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  shootoutHomeScore?: number | null;
+  shootoutAwayScore?: number | null;
+}): string | null {
+  if (m.status !== 'FINISHED' || m.homeScore !== m.awayScore) return null;
+  const h = m.shootoutHomeScore ?? 0;
+  const a = m.shootoutAwayScore ?? 0;
+  if (h + a === 0 || h === a) return null;
+  return `${h}-${a} pens`;
+}
+
 export function deriveBracket(fixtures: FixtureLike[]): BracketRound[] {
   const byRound = new Map<string, BracketRound>();
   for (const f of fixtures) {
@@ -61,6 +82,7 @@ export function deriveBracket(fixtures: FixtureLike[]): BracketRound[] {
       away: f.awayTeam?.name ? { name: f.awayTeam.name, logo: f.awayTeam.logo } : null,
       homeScore: typeof f.homeScore === 'number' ? f.homeScore : null,
       awayScore: typeof f.awayScore === 'number' ? f.awayScore : null,
+      shootout: shootoutLabel(f),
     });
     byRound.set(f.round, round);
   }
