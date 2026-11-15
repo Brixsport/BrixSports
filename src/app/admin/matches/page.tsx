@@ -7,6 +7,7 @@ import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Fi
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
@@ -93,6 +94,8 @@ function AdminMatchesPageContent() {
     const [teams, setTeams] = useState<Team[]>([]);
     const [competitions, setCompetitions] = useState<Competition[]>([]);
     const { toasts, removeToast, success, error } = useToast();
+    const isFeatureOn = useFeatureFlags();
+    const ratingsEnabled = isFeatureOn('features.ratings.enabled');
 
     const [deleteDialog, setDeleteDialog] = useState({
         isOpen: false,
@@ -644,7 +647,7 @@ function AdminMatchesPageContent() {
                                                             <Link href={`/admin/match-lineups?matchId=${encodeURIComponent(match.id)}`}><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
                                                         </DropdownMenuItem>
                                                     )}
-                                                    {match.status === 'FINISHED' && (
+                                                    {match.status === 'FINISHED' && ratingsEnabled && (
                                                         <DropdownMenuItem asChild className={itemClass}>
                                                             <Link href={`/admin/match-ratings/${match.id}`}><Star size={16} className="text-yellow-400" />Adjust ratings</Link>
                                                         </DropdownMenuItem>

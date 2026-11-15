@@ -28,5 +28,8 @@ export function useFeatureFlags() {
 
     // Fail open: an unknown/not-yet-loaded key reads as enabled, only an
     // explicit `false` hides anything.
-    return (flagKey: string) => flags[flagKey] !== false;
+    // Closed-by-default keys (ratings) are the exception: hidden until the API
+    // says they are on, so a slow or failed fetch never flashes them open.
+    return (flagKey: string) =>
+        flagKey === 'features.ratings.enabled' ? flags[flagKey] === true : flags[flagKey] !== false;
 }

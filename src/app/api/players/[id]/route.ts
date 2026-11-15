@@ -11,6 +11,7 @@ import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getCurrentSeason } from '@/lib/rosterService';
 import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 import { playerRatings } from '@/db/schema-ratings';
 
 interface RouteParams {
@@ -46,6 +47,8 @@ export async function GET(
         // shared accessor -- players.rating is a frozen/legacy default (7.0),
         // never updated by the real ratings pipeline.
         const ownRatingSummary = (await getPlayerRatingSummaries([id])).get(id) ?? null;
+        // The stored per-season average (a column that defaults to 7.0) is a rating too.
+        const ratingsOn = await isRatingsEnabled();
 
         // Get player's active memberships and primary team
         let team = null;
@@ -195,7 +198,7 @@ export async function GET(
         // career-wide players.rating (BACKLOG-253) for every row. Real per-match
         // ratings, batched over just these <=5 matches.
         const recentMatchIds = [...seenMatchIds];
-        const recentMatchRatings = recentMatchIds.length > 0
+        const recentMatchRatings = recentMatchIds.length > 0 && (await isRatingsEnabled())
             ? await db
                 .select({
                     matchId: playerRatings.matchId,
@@ -368,7 +371,7 @@ export async function GET(
             assists: stat.assists || 0,
             appearances: stat.appearances || 0,
             minutesPlayed: stat.minutesPlayed || 0,
-            averageRating: stat.averageRating || 0,
+            averageRating: ratingsOn ? (stat.averageRating || 0) : 0,
             pointsPerGame: stat.appearances ? ((stat.goals || 0) / stat.appearances).toFixed(1) : '0.0',
             assistsPerGame: stat.appearances ? ((stat.assists || 0) / stat.appearances).toFixed(1) : '0.0',
         }));
@@ -438,6 +441,7 @@ export async function GET(
         return NextResponse.json({
             player: {
                 ...playerPayload,
+                ...(ratingsOn ? {} : { rating: 0 }),
                 team: {
                     ...team,
                     sport: playerSport,

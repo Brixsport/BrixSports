@@ -15,7 +15,7 @@ import { db } from '@/db';
 import { systemSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
-export async function isFeatureEnabled(key: string): Promise<boolean> {
+export async function isFeatureEnabled(key: string, fallback = true): Promise<boolean> {
     try {
         const [row] = await db
             .select({ value: systemSettings.value })
@@ -23,12 +23,22 @@ export async function isFeatureEnabled(key: string): Promise<boolean> {
             .where(eq(systemSettings.key, key))
             .limit(1);
 
-        if (!row) return true;
+        if (!row) return fallback;
         return row.value === 'true';
     } catch (error) {
         // A DB error here must never take down the feature it's gating -- fail open,
-        // same reasoning as the unrecognized-key case above.
-        console.error(`[featureFlags] Failed to read "${key}", failing open:`, error);
-        return true;
+        // same reasoning as the unrecognized-key case above. A flag that is closed
+        // by default passes `fallback = false` and stays closed instead.
+        console.error(`[featureFlags] Failed to read "${key}", using fallback ${fallback}:`, error);
+        return fallback;
     }
+}
+
+// Ratings are not ready for production (semi-automated, cannot be edited
+// reliably, auto-recalculates on FINISHED). Closed by default: a missing row
+// or a DB error reads as DISABLED, so it stays hidden without anyone having
+// to create the setting first.
+export const RATINGS_FLAG = 'features.ratings.enabled';
+export function isRatingsEnabled(): Promise<boolean> {
+    return isFeatureEnabled(RATINGS_FLAG, false);
 }

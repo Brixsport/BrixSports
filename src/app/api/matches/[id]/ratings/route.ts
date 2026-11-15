@@ -4,6 +4,7 @@ import { playerRatings } from '@/db/schema-ratings';
 import { matches, players } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { toPublicMatchRating } from '@/lib/public-ratings';
@@ -31,6 +32,11 @@ export async function GET(
                 { error: 'Match not found' },
                 { status: 404 }
             );
+        }
+
+        // Ratings are switched off until they are ready: nothing to show, same shape as "no ratings yet".
+        if (!(await isRatingsEnabled())) {
+            return NextResponse.json({ matchId, matchStatus: match[0].status, ratings: [] });
         }
 
         // Get all ratings for this match. Ratings are calculated when the match is set
@@ -89,6 +95,13 @@ export async function POST(
         const { id: matchId } = await params;
         if (user.role === 'logger' && !(await isLoggerAssigned(matchId, user.id))) {
             return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+        }
+
+        if (!(await isRatingsEnabled())) {
+            return NextResponse.json(
+                { error: 'Match ratings are temporarily disabled', code: 'FEATURE_DISABLED' },
+                { status: 403 }
+            );
         }
 
         // BACKLOG-124: this used to duplicate the entire calculation inline, which is

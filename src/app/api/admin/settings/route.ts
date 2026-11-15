@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS = {
     'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'User Management / Access Control admin panel' },
     'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'News Management' },
     'features.transfers.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Transfers admin panel (news/rumor announcements)' },
+    'features.ratings.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Match ratings: admin rating pages, rating APIs and the automatic recalculation when a match finishes' },
 };
 
 // Initialize default settings in database if they don't exist

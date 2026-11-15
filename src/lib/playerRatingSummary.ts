@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { playerRatings } from '@/db/schema-ratings';
 import { matches } from '@/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 
 // BACKLOG-253 (Ratings Redesign Phase 3): the one place the
 // COALESCE(finalRating, autoRating)/AVG logic lives, sourced from
@@ -18,6 +19,8 @@ const EMPTY_SUMMARY: PlayerRatingSummary = { averageRating: null, matchesRated: 
 export async function getPlayerRatingSummaries(playerIds: string[]): Promise<Map<string, PlayerRatingSummary>> {
     const map = new Map<string, PlayerRatingSummary>();
     if (playerIds.length === 0) return map;
+    // Ratings are switched off until they are ready: nobody has a rating, never a made-up one.
+    if (!(await isRatingsEnabled())) return map;
 
     const rows = await db
         .select({

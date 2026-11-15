@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Activity, Lock, User, CheckCircle2, AlertCircle, ChevronRight, Globe, WifiOff } from 'lucide-react';
 import { MatchLoggerUI } from '@/components/MatchLoggerUI';
@@ -17,6 +18,8 @@ import { Match, Logger } from '@/db/schema';
 
 export default function LoggerPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const isFeatureOn = useFeatureFlags();
+  const ratingsEnabled = isFeatureOn('features.ratings.enabled');
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const rehydratedRef = useRef(false);
   const [username, setUsername] = useState('');
@@ -384,7 +387,7 @@ export default function LoggerPage() {
             const homeTeam = teams.find(t => t.id === match.homeTeamId);
             const awayTeam = teams.find(t => t.id === match.awayTeamId);
             const isLoggable = match.status === 'UPCOMING' || match.status === 'LIVE';
-            const isRateable = match.status === 'FINISHED';
+            const isRateable = match.status === 'FINISHED' && ratingsEnabled;
 
             return (
               <motion.div

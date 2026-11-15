@@ -5,6 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
 import { getPlayerRatingSummary } from '@/lib/playerRatingSummary';
+import { isRatingsEnabled } from '@/lib/featureFlags';
 
 // GET /api/players/[id]/stats - Get player statistics
 export async function GET(
@@ -63,7 +64,9 @@ export async function GET(
                 .where(and(...conditions));
         }
 
-        const stats = await statsQuery;
+        const ratingsOn = await isRatingsEnabled();
+        // The stored per-row average (default 7.0) is a rating too: blanked while ratings are off.
+        const stats = (await statsQuery).map((stat) => ratingsOn ? stat : { ...stat, averageRating: 0 });
 
         // Calculate totals across all competitions
         const totals = stats.reduce((acc, stat) => ({
