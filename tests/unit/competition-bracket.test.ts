@@ -36,3 +36,16 @@ describe('deriveBracket', () => {
     expect(rounds[1].matches[0].homeScore).toBe(1);
   });
 });
+
+import { shootoutLabel } from '@/lib/competition-bracket';
+
+describe('shootoutLabel', () => {
+  it('labels a level finished match decided on penalties', () => {
+    expect(shootoutLabel({ status: 'FINISHED', homeScore: 0, awayScore: 0, shootoutHomeScore: 4, shootoutAwayScore: 3 })).toBe('4-3 pens');
+  });
+  it('ignores the 0-0 default, decided matches and unfinished matches', () => {
+    expect(shootoutLabel({ status: 'FINISHED', homeScore: 1, awayScore: 1, shootoutHomeScore: 0, shootoutAwayScore: 0 })).toBeNull();
+    expect(shootoutLabel({ status: 'FINISHED', homeScore: 2, awayScore: 1, shootoutHomeScore: 4, shootoutAwayScore: 3 })).toBeNull();
+    expect(shootoutLabel({ status: 'LIVE', homeScore: 0, awayScore: 0, shootoutHomeScore: 2, shootoutAwayScore: 1 })).toBeNull();
+  });
+});
