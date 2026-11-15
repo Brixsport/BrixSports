@@ -26,7 +26,8 @@ import { safeParseEventValue } from '@/lib/eventValue';
 import { advanceBracketForMatch } from '@/lib/bracketService';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { isRatingsEnabled } from '@/lib/featureFlags';
-import { requiresDecisiveResult } from '@/lib/matchRules';
+import { requiresDecisiveResult, isDisallowedDraw } from '@/lib/matchRules';
+import { getMatchConfig } from '@/lib/matchConfig';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { isFinishedLockViolation } from '@/lib/match-finished-lock';
 
@@ -327,9 +328,27 @@ export async function PATCH(
                     awayScore: matches.awayScore,
                     shootoutHomeScore: matches.shootoutHomeScore,
                     shootoutAwayScore: matches.shootoutAwayScore,
+                    sport: matches.sport,
                 })
                 .from(matches)
                 .where(eq(matches.id, matchId));
+
+            // A league basketball game cannot finish level: a draw earns no standings points
+            // and counts as neither a win nor a loss. Only the transition into FINISHED is
+            // checked, so editing an already-finished match is unaffected.
+            if (current && stored.status !== 'FINISHED' && (current.sport ?? '').toLowerCase().includes('basketball')) {
+                const effectiveHome = updateData.homeScore ?? current.homeScore ?? 0;
+                const effectiveAway = updateData.awayScore ?? current.awayScore ?? 0;
+                if (effectiveHome === effectiveAway) {
+                    const resolved = await getMatchConfig(matchId);
+                    if (resolved && isDisallowedDraw(resolved.config.allowDraws, effectiveHome, effectiveAway)) {
+                        return NextResponse.json({
+                            error: 'This match cannot finish level -- play overtime until one team leads.',
+                            code: 'DRAW_NOT_ALLOWED',
+                        }, { status: 422 });
+                    }
+                }
+            }
 
             if (current && requiresDecisiveResult(current.round)) {
                 const effectiveHome = updateData.homeScore ?? current.homeScore ?? 0;
