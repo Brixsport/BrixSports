@@ -57,7 +57,8 @@ interface LiveMatchTimelineProps {
     sport?: string;
 }
 
-const KEY_EVENT_TYPES = new Set(['GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION']);
+const KEY_EVENT_TYPES = new Set(['GOAL', 'PENALTY', 'OWN_GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION']);
+const SCORING_ROW_TYPES = new Set(['GOAL', 'PENALTY', 'OWN_GOAL']);
 
 // BACKLOG-294: show the jersey/known-as name everywhere a player
 // appears on this page, not the full real name.
@@ -700,7 +701,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                 // always comes first. One flex group per row: outer div picks the
                 // edge (justify-start/end), flex-row-reverse (goal/sub, away only)
                 // handles the internal mirror.
-                const mirrorsOrder = normType === 'GOAL' || normType === 'SUBSTITUTION';
+                const mirrorsOrder = SCORING_ROW_TYPES.has(normType) || normType === 'SUBSTITUTION';
 
                 return (
                     <div
@@ -712,13 +713,15 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                             <span className="text-xs font-bold text-primary flex-shrink-0">
                                 {minuteLabel(event)}
                             </span>
-                            {normType === 'GOAL' && (
+                            {SCORING_ROW_TYPES.has(normType) && (
                                 <>
                                     <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-border text-xs font-bold">
                                         {scoreAtEvent.home}-{scoreAtEvent.away}
                                     </span>
                                     <FaFutbol className="w-3.5 h-3.5 flex-shrink-0 text-foreground/80" />
                                     <span className="font-bold truncate max-w-[160px]">{playerName}</span>
+                                    {normType === 'PENALTY' && <span className="flex-shrink-0 text-xs font-bold text-foreground/50">(P)</span>}
+                                    {normType === 'OWN_GOAL' && <span className="flex-shrink-0 text-xs font-bold text-foreground/50">(OG)</span>}
                                     {/* Assist name is secondary info -- capped at a small fixed
                                         width so it can't eat into the scorer's own name space
                                         (both truncating equally made the scorer's name
