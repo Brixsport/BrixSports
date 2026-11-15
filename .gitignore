@@ -60,3 +60,4 @@ data/*
 graphify-out/
 .claude/settings.json
 .claude/skills/
+.agents/
