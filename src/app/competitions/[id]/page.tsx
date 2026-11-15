@@ -752,7 +752,7 @@ function CompetitionHubContent() {
                                 >
                                   <div className="flex items-center gap-3">
                                     <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
-                                    <span className={`flex-1 text-sm truncate ${homeWon ? 'font-black' : 'font-bold text-foreground/80'}`}>{match.homeTeam?.name || 'Home'}</span>
+                                    <span className={`flex-1 min-w-0 text-sm leading-tight break-words ${homeWon ? 'font-black' : 'font-bold text-foreground/80'}`}>{match.homeTeam?.name || 'Home'}</span>
                                     <div className="flex flex-col items-center shrink-0 px-2 min-w-[3.5rem]">
                                       <span className="text-sm font-display italic text-primary">
                                         {match.status === 'UPCOMING' ? safeToLocale(match.startTime, 'time', { hour: '2-digit', minute: '2-digit' }, '--:--', []) : `${match.homeScore}-${match.awayScore}`}
@@ -761,7 +761,7 @@ function CompetitionHubContent() {
                                       {match.status === 'LIVE' && <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>}
                                       {match.status === 'HALF_TIME' && <span className="text-[0.5rem] font-black uppercase tracking-widest text-red-500">HT</span>}
                                     </div>
-                                    <span className={`flex-1 text-sm truncate text-right ${awayWon ? 'font-black' : 'font-bold text-foreground/80'}`}>{match.awayTeam?.name || 'Away'}</span>
+                                    <span className={`flex-1 min-w-0 text-sm leading-tight break-words text-right ${awayWon ? 'font-black' : 'font-bold text-foreground/80'}`}>{match.awayTeam?.name || 'Away'}</span>
                                     <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                                   </div>
                                   <div className="flex items-center justify-between text-[0.625rem] text-foreground/50 mt-2 pl-11">
