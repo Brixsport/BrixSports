@@ -152,7 +152,7 @@ function PlayerDot({
         <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group flex flex-col items-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            className="absolute w-max transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group flex flex-col items-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
             role="button"
             tabIndex={0}
             aria-label={`${player.jerseyName || player.name}, number ${player.number}`}
