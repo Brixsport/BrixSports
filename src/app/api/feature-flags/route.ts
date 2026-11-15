@@ -26,6 +26,13 @@ const GATED_KEYS = [
     'features.onboarding.tour.enabled',
 ];
 
+// Identity-independent booleans that change on an admin toggle (about monthly):
+// cache 60s at the edge + 5 min stale-while-revalidate. A flipped flag reaches
+// viewers within ~1-6 minutes. The fail-open fallback below is NOT cached, so a
+// transient DB failure can never get pinned at the edge as "everything enabled".
+const PUBLIC_CACHE_HEADERS = { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' };
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+
 export async function GET() {
     try {
         const rows = await db.select({ key: systemSettings.key, value: systemSettings.value }).from(systemSettings);
@@ -39,11 +46,11 @@ export async function GET() {
             flags[key] = byKey.has(key) ? byKey.get(key) === 'true' : !CLOSED_BY_DEFAULT.has(key);
         }
 
-        return NextResponse.json({ flags });
+        return NextResponse.json({ flags }, { headers: PUBLIC_CACHE_HEADERS });
     } catch (error) {
         console.error('[feature-flags] Failed to read flags, failing open:', error);
         const flags: Record<string, boolean> = {};
         for (const key of GATED_KEYS) flags[key] = !CLOSED_BY_DEFAULT.has(key);
-        return NextResponse.json({ flags });
+        return NextResponse.json({ flags }, { headers: NO_STORE_HEADERS });
     }
 }

@@ -52,9 +52,21 @@ export function LiveNowSection() {
 
         fetchLiveStreams();
 
-        // Refresh every 30 seconds
-        const interval = setInterval(fetchLiveStreams, 30000);
-        return () => clearInterval(interval);
+        // Refresh every 30 seconds, but only while the tab is visible: a
+        // backgrounded tab left open for hours was polling for nobody. On
+        // returning to the tab, refresh immediately instead of waiting out the
+        // remainder of the interval.
+        const interval = setInterval(() => {
+            if (document.visibilityState === 'visible') fetchLiveStreams();
+        }, 30000);
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') fetchLiveStreams();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
     }, []);
 
     if (loading) {

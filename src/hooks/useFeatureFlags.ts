@@ -5,16 +5,16 @@
 // content -- one fetch, one fail-open policy, instead of duplicating the
 // fetch/state boilerplate at every nav call site.
 import { useEffect, useState } from 'react';
+import { fetchFeatureFlags } from '@/lib/feature-flags-client';
 
 export function useFeatureFlags() {
     const [flags, setFlags] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         let cancelled = false;
-        fetch('/api/feature-flags')
-            .then((res) => res.json())
-            .then((data) => {
-                if (!cancelled) setFlags(data?.flags ?? {});
+        fetchFeatureFlags()
+            .then((flags) => {
+                if (!cancelled) setFlags(flags);
             })
             .catch(() => {
                 // Fail open, same reasoning as FeatureGate.tsx and the API route

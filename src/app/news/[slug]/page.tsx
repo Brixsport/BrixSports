@@ -22,6 +22,17 @@ async function getArticle(slug: string) {
     }
 }
 
+// A dynamic segment with no generateStaticParams renders on every request
+// (private, no-store). The empty list opts this route into on-demand ISR: the
+// first visit to a slug renders once, then the CDN serves it for 60s. Article
+// content loads client-side in NewsDetailClient; only metadata and JSON-LD are
+// server-rendered here, and they tolerate a minute of staleness.
+export async function generateStaticParams() {
+    return [];
+}
+
+export const revalidate = 60;
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
     const { slug } = await params;
     const article = await getArticle(slug);
