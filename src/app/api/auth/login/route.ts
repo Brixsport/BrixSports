@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
+import { incrMetric, incrAbuseMetric } from '@/lib/metrics';
 import { isFailureLimited, recordFailure, clearFailures, ipSubject, emailSubject } from '@/lib/rate-limit';
 import { setAuthCookie } from '@/lib/auth-cookie';
 
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
         if (emailLimit.limited) return tooManyAttempts(emailLimit.retryAfterSeconds);
 
         const recordLoginFailure = async () => {
+            await incrAbuseMetric('login_fail');
             await recordFailure('login', ipSubject(request), IP_FAILURES);
             await recordFailure('login', emailSubject(email), EMAIL_FAILURES);
         };
@@ -121,6 +123,7 @@ export async function POST(request: NextRequest) {
         });
 
         setAuthCookie(response, request, token);
+        await incrMetric('login_ok');
 
         return response;
     } catch (error) {

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, foreignKey, unique, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, foreignKey, unique, index, primaryKey } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
 // Organizations table
@@ -578,6 +578,17 @@ export const userActivity = sqliteTable('user_activity', {
     metadata: text('metadata'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+// Daily product/ops counters. One row per (day, metric, dimension); written only
+// through src/lib/metrics.ts. No per-user or per-visitor data is stored here.
+export const metricsDaily = sqliteTable('metrics_daily', {
+    day: text('day').notNull(), // YYYY-MM-DD, Africa/Lagos
+    metric: text('metric').notNull(),
+    dimension: text('dimension').notNull().default(''),
+    value: integer('value').notNull().default(0),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.day, t.metric, t.dimension] }),
+}));
 
 // Player Statistics table
 export const playerStats = sqliteTable('player_stats', {
