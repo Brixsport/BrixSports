@@ -12,6 +12,7 @@ import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { toPublicCompetition, toPublicGroup } from '@/lib/competition-public';
+import { seriesBaseName } from '@/lib/competition-series';
 
 // BACKLOG-333: the admin create-competition flow never set an org at all, so every
 // competition created through the real admin UI silently dropped out of
@@ -69,7 +70,7 @@ async function validateOrgId(id: string | undefined, label: string): Promise<str
 function buildCompetitionGroups(comps: any[]) {
     const bySportName = new Map<string, any[]>();
     for (const c of comps) {
-        const coarseKey = `${c.sport ?? 'multi'}::${c.name.trim().toLowerCase()}`;
+        const coarseKey = `${c.sport ?? 'multi'}::${seriesBaseName(c.name).toLowerCase()}`;
         if (!bySportName.has(coarseKey)) bySportName.set(coarseKey, []);
         bySportName.get(coarseKey)!.push(c);
     }
@@ -101,7 +102,7 @@ function buildCompetitionGroups(comps: any[]) {
         });
         return {
             groupKey,
-            name: sorted[0].name,
+            name: seriesBaseName(sorted[0].name),
             sport: sorted[0].sport,
             latest: sorted[0],
             seasons: sorted,
