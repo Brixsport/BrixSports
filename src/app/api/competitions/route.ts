@@ -228,10 +228,20 @@ export async function GET(request: NextRequest) {
                 })
             );
 
+            // Only an admin session gets the raw rows (organisation ids, entry fee,
+            // rules and so on); everyone else gets the same whitelist as the plain list.
+            const statsCaller = await getAuthUser(request);
+            const isAdminCaller = statsCaller?.role === 'admin';
+            const pageRows = competitionsWithStats.slice(offset, offset + limit);
+
             return NextResponse.json({
-                competitions: competitionsWithStats.slice(offset, offset + limit),
+                competitions: isAdminCaller
+                    ? pageRows
+                    : pageRows.map((c) => ({ ...toPublicCompetition(c), stats: c.stats })),
                 total: totalFiltered,
-                groups: buildCompetitionGroups(competitionsWithStats),
+                groups: isAdminCaller
+                    ? buildCompetitionGroups(competitionsWithStats)
+                    : buildCompetitionGroups(competitionsWithStats).map(toPublicGroup),
             }, {
                 headers: {
                     'X-Total-Count': String(totalFiltered),
