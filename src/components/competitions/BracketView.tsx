@@ -52,7 +52,7 @@ export default function BracketView({
           <div className="grid gap-3 sm:grid-cols-2">
             {round.matches.map((m) => {
               const finished = m.status === 'FINISHED';
-              const pens = m.shootout?.match(/^(d+)-(d+)/);
+              const pens = m.shootout?.match(/^([0-9]+)-([0-9]+)/);
               const homeWon = finished && m.homeScore !== null && m.awayScore !== null && (m.homeScore > m.awayScore || (pens !== null && pens !== undefined && Number(pens[1]) > Number(pens[2])));
               const awayWon = finished && m.homeScore !== null && m.awayScore !== null && (m.awayScore > m.homeScore || (pens !== null && pens !== undefined && Number(pens[2]) > Number(pens[1])));
               const showScore = m.status !== 'UPCOMING';

@@ -72,6 +72,8 @@ interface Match {
   startTime: string;
   status: string;
   venue: string;
+  shootoutHomeScore?: number | null;
+  shootoutAwayScore?: number | null;
   competition: string;
   round?: string | null;
 }
@@ -178,6 +180,7 @@ function CompetitionHubContent() {
         away: m.awayTeam?.name ? { name: m.awayTeam.name, logo: m.awayTeam.logo } : null,
         homeScore: typeof m.homeScore === 'number' ? m.homeScore : null,
         awayScore: typeof m.awayScore === 'number' ? m.awayScore : null,
+        shootout: null,
       })),
     }));
   }, [matches, brackets]);
@@ -743,7 +746,7 @@ function CompetitionHubContent() {
                               const finished = match.status === 'FINISHED';
                               const live = match.status === 'LIVE' || match.status === 'HALF_TIME';
                               const pens = shootoutLabel(match);
-                              const penScore = pens ? pens.match(/^(d+)-(d+)/) : null;
+                              const penScore = pens ? pens.match(/^([0-9]+)-([0-9]+)/) : null;
                               const homeWon = finished && (match.homeScore > match.awayScore || (penScore !== null && Number(penScore[1]) > Number(penScore[2])));
                               const awayWon = finished && (match.awayScore > match.homeScore || (penScore !== null && Number(penScore[2]) > Number(penScore[1])));
                               return (
