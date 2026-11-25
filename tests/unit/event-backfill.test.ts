@@ -62,6 +62,19 @@ describe('validateBackfillEvents', () => {
         expect(errors).toHaveLength(6);
     });
 
+    it('rejects non-text player ids, over-long ids, and a scorer link on anything but an Assist', () => {
+        const { errors } = validateBackfillEvents(
+            [
+                { type: 'Goal', teamId: H, playerId: { x: 1 } as never },
+                { type: 'Goal', teamId: H, playerId: 'a'.repeat(65) },
+                { type: 'Goal', teamId: H, playerId: 'a', relatedPlayerId: 'b' },
+                { type: 'Assist', teamId: H, playerId: 'b', relatedPlayerId: ['a'] as never },
+            ],
+            match
+        );
+        expect(errors).toHaveLength(4);
+    });
+
     it('refuses an empty list, too many events and a non-football match', () => {
         expect(validateBackfillEvents([], match).errors).toHaveLength(1);
         expect(validateBackfillEvents(Array(61).fill({ type: 'Goal', teamId: H }), match).errors).toHaveLength(1);

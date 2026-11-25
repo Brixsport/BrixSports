@@ -92,6 +92,15 @@ export function validateBackfillEvents(events: unknown, match: BackfillMatch): B
             errors.push(`${label}: ${inputError}`);
             return;
         }
+        const idOk = (v: unknown) => v === undefined || v === null || (typeof v === 'string' && v.length <= 64);
+        if (!idOk(e.playerId) || !idOk(e.relatedPlayerId)) {
+            errors.push(`${label}: player ids must be text of at most 64 characters`);
+            return;
+        }
+        if (type !== 'Assist' && e.relatedPlayerId) {
+            errors.push(`${label}: only an Assist can link to a scorer`);
+            return;
+        }
         const hasPlayer = typeof e.playerId === 'string' && e.playerId !== '';
         const hasRelated = typeof e.relatedPlayerId === 'string' && e.relatedPlayerId !== '';
         if (type !== 'Goal' && type !== 'Penalty' && !hasPlayer) {

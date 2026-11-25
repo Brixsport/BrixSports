@@ -141,6 +141,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         if (!fixture.ok) return NextResponse.json({ error: fixture.reason }, { status: 409 });
 
         const entered = parseScore(body.score);
+        if (body.score !== undefined && body.score !== null && !entered) {
+            return NextResponse.json({ error: 'score must be whole numbers from 0 to 99 for home and away' }, { status: 422 });
+        }
         const target: BackfillScore =
             fixture.mode === 'finished-scored'
                 ? { home: match.homeScore ?? 0, away: match.awayScore ?? 0 }
@@ -243,15 +246,11 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
         let removed = 0;
 
         await db.transaction(async tx => {
-            // Only unknown-minute events carrying one of the two backfill markers: live-logged events are never touched.
+            // Delete first and revert stats only for the rows this call actually removed: two simultaneous
+            // Reopens can then never both revert the same events. Only unknown-minute events carrying one of
+            // the two backfill markers are touched; live-logged events never match.
             const doomed = await tx
-                .select({
-                    id: matchEvents.id,
-                    type: matchEvents.type,
-                    playerId: matchEvents.playerId,
-                    relatedPlayerId: matchEvents.relatedPlayerId,
-                })
-                .from(matchEvents)
+                .delete(matchEvents)
                 .where(
                     and(
                         eq(matchEvents.matchId, matchId),
@@ -259,7 +258,12 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
                         inArray(matchEvents.loggerName, [...BACKFILL_MARKERS])
                     )
                 )
-                .limit(200);
+                .returning({
+                    id: matchEvents.id,
+                    type: matchEvents.type,
+                    playerId: matchEvents.playerId,
+                    relatedPlayerId: matchEvents.relatedPlayerId,
+                });
             if (doomed.length === 0) throw new RouteError(404, 'No backfilled events to reopen on this match');
 
             if (statsApply) {
@@ -271,7 +275,6 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
                     }
                 }
             }
-            await tx.delete(matchEvents).where(inArray(matchEvents.id, doomed.map(e => e.id)));
             removed = doomed.length;
         });
 
@@ -293,7 +296,7 @@ async function runStep(area: string, matchId: string, step: () => Promise<unknow
         if (message === 'No lineups found for this match' || message.startsWith('calculateAndSaveRatings: no rating model exists for sport')) {
             return 'skipped';
         }
-        console.error(`backfill-events ${area} failed`, error);
+        console.error(`backfill-events ${area} failed`, error instanceof Error ? error.message : 'unknown error');
         Sentry.captureException(error, { tags: { area }, extra: { matchId } });
         return 'failed';
     }
@@ -303,7 +306,7 @@ function errorResponse(error: unknown, area: string) {
     if (error instanceof RouteError) {
         return NextResponse.json({ error: error.message, ...(error.extra ?? {}) }, { status: error.status });
     }
-    console.error(`${area} failed`, error);
+    console.error(`${area} failed`, error instanceof Error ? error.message : 'unknown error');
     Sentry.captureException(error, { tags: { area } });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
 }
