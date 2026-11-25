@@ -31,6 +31,15 @@ interface MatchItem {
     competition?: string;
     matchType?: string;
 }
+interface ExistingEvent { id: string; type: string; minute: number; teamId: string | null; playerId: string | null; relatedPlayerId: string | null; backfilled: boolean }
+interface Existing {
+    status: string;
+    homeScore: number;
+    awayScore: number;
+    existingGoals: { home: number; away: number };
+    backfilledCount: number;
+    events: ExistingEvent[];
+}
 interface Effect { playerId: string; deltas: Record<string, number> }
 interface Preview {
     mode: string;
@@ -112,6 +121,7 @@ export default function BackfillEventsPage() {
     const [match, setMatch] = useState<MatchItem | null>(null);
     const [rosters, setRosters] = useState<{ home: RosterPlayer[]; away: RosterPlayer[] }>({ home: [], away: [] });
     const [rows, setRows] = useState<EventRow[]>([]);
+    const [existing, setExisting] = useState<Existing | null>(null);
     const [scoreOverride, setScoreOverride] = useState<{ home: string; away: string } | null>(null);
     const [allowMismatch, setAllowMismatch] = useState(false);
     const [preview, setPreview] = useState<Preview | null>(null);
@@ -161,12 +171,24 @@ export default function BackfillEventsPage() {
         return list;
     };
 
-    const resetForm = () => { setRows([]); setScoreOverride(null); setAllowMismatch(false); setPreview(null); setProblems([]); setFollowUps(null); };
+    const loadExisting = async (matchId: string) => {
+        try {
+            const res = await fetch(`/api/admin/matches/${matchId}/backfill-events`);
+            if (!res.ok) throw new Error(String(res.status));
+            setExisting(await res.json());
+        } catch {
+            setExisting(null);
+            error('Could not load the events already on this match. Reload before saving.');
+        }
+    };
+
+    const resetForm = () => { setRows([]); setScoreOverride(null); setAllowMismatch(false); setPreview(null); setProblems([]); setFollowUps(null); setExisting(null); };
 
     const openMatch = async (m: MatchItem) => {
         resetForm();
         setMatch(m);
         setRosters({ home: [], away: [] });
+        loadExisting(m.id);
         try {
             const [home, away] = await Promise.all([loadRoster(m.homeTeamId), loadRoster(m.awayTeamId)]);
             setRosters({ home, away });
@@ -176,7 +198,9 @@ export default function BackfillEventsPage() {
     };
 
     const isUpcoming = match?.status === 'UPCOMING';
-    const computed = useMemo(() => scoreFromRows(rows), [rows]);
+    const added = useMemo(() => scoreFromRows(rows), [rows]);
+    // On a finished match the goals already logged count toward the stored score too.
+    const computed = !isUpcoming && existing ? { home: added.home + existing.existingGoals.home, away: added.away + existing.existingGoals.away } : added;
     const target = !match ? computed : isUpcoming
         ? { home: scoreOverride ? Number(scoreOverride.home) : computed.home, away: scoreOverride ? Number(scoreOverride.away) : computed.away }
         : { home: match.homeScore, away: match.awayScore };
@@ -221,6 +245,7 @@ export default function BackfillEventsPage() {
             const json = await send(false);
             if (json) {
                 success(`Saved ${json.eventsInserted} events. Final score ${json.score.home}-${json.score.away}.`);
+                if (match) loadExisting(match.id);
                 setFollowUps(json.followUps ?? {});
                 setRows([]); setPreview(null); setScoreOverride(null); setAllowMismatch(false);
                 setMatch(prev => prev ? { ...prev, status: 'FINISHED', homeScore: json.score.home, awayScore: json.score.away } : prev);
@@ -240,6 +265,7 @@ export default function BackfillEventsPage() {
             if (!res.ok) { error(json.error ?? 'Reopen failed'); return; }
             success(`Removed ${json.eventsRemoved} backfilled events and reversed their stats.`);
             setPreview(null); setFollowUps(null);
+            if (match) loadExisting(match.id);
         } catch { error('Reopen failed. Reload the match and check its events before retrying.'); }
         finally { setBusy(null); }
     };
@@ -290,12 +316,28 @@ export default function BackfillEventsPage() {
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p className="text-lg font-black">{teamName(match, 'home')} vs {teamName(match, 'away')}</p>
-                            <p className="text-xs text-white/40">{match.status === 'UPCOMING' ? 'Upcoming 0-0: saving will mark it finished' : `Finished ${match.homeScore}-${match.awayScore}: the stored score is kept`}</p>
+                            <p className="text-xs text-white/40">{match.status === 'UPCOMING' ? 'Upcoming 0-0: saving will mark it finished' : `Finished ${match.homeScore}-${match.awayScore}: the stored score is kept${existing ? `. ${existing.events.length} events already logged` : ''}`}</p>
                         </div>
-                        {!isUpcoming && (
+                        {!isUpcoming && (existing?.backfilledCount ?? 0) > 0 && (
                             <button disabled={busy !== null} onClick={() => setConfirm('reopen')} className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-red-400 hover:text-red-300 disabled:opacity-40"><RotateCcw size={14} /> Reopen (remove backfilled events)</button>
                         )}
                     </div>
+
+                    {existing && existing.events.length > 0 && (
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+                            <p className="text-xs font-black uppercase tracking-widest text-white/40 mb-2">Already on this match ({existing.events.length}). Do not add these again.</p>
+                            <ul className="text-sm space-y-1">
+                                {existing.events.map(e => (
+                                    <li key={e.id} className="flex flex-wrap gap-x-2">
+                                        <span className="text-white/40 w-10">{e.minute >= 0 ? `${e.minute}'` : '–'}</span>
+                                        <span className="font-bold">{e.type}</span>
+                                        <span className="text-white/50">{[e.playerId ? nameOf(e.playerId) : 'unknown player', e.teamId === match.homeTeamId ? teamName(match, 'home') : e.teamId === match.awayTeamId ? teamName(match, 'away') : ''].filter(Boolean).join(' · ')}</span>
+                                        {e.backfilled && <span className="text-[10px] font-black uppercase tracking-widest text-yellow-400">backfilled</span>}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     {rows.length === 0 && (
                         <div className="border border-dashed border-white/10 rounded-2xl p-6 mb-3 text-center">
@@ -339,7 +381,7 @@ export default function BackfillEventsPage() {
                                 <span className="text-xs text-white/30">Events add up to {computed.home}-{computed.away}</span>
                             </div>
                         ) : (
-                            <p className="font-black">{match.homeScore}-{match.awayScore} <span className="text-xs font-normal text-white/30">events add up to {computed.home}-{computed.away}</span></p>
+                            <p className="font-black">{match.homeScore}-{match.awayScore} <span className="text-xs font-normal text-white/30">{existing && existing.events.length > 0 ? `already logged ${existing.existingGoals.home}-${existing.existingGoals.away}, with your new events ${computed.home}-${computed.away}` : `events add up to ${computed.home}-${computed.away}`}</span></p>
                         )}
                         {mismatch && (
                             <label className="mt-3 flex items-center gap-2 text-xs text-yellow-400">
