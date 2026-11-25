@@ -42,6 +42,12 @@ interface Preview {
 }
 
 const inputCls = 'bg-[#121212] border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white focus:outline-none focus:border-primary';
+const STAT_LABELS: Record<string, string> = {
+    goals: 'Goals', assists: 'Assists', shotsOnTarget: 'Shots on target', penaltiesScored: 'Penalties scored',
+    yellowCards: 'Yellow cards', redCards: 'Red cards', ownGoals: 'Own goals',
+};
+const statLabel = (k: string) => STAT_LABELS[k] ?? k.replace(/([A-Z])/g, ' $1').toLowerCase();
+const shortDate = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); };
 let rowCounter = 0;
 const newRow = (side: Side): EventRow => ({ key: `r${++rowCounter}`, type: 'Goal', side, playerId: '', relatedPlayerId: '' });
 
@@ -64,6 +70,10 @@ function PlayerPicker({ roster, value, onChange, placeholder, allowedIds }: {
     return (
         <div className="relative flex-1 min-w-[180px]">
             <input
+                role="combobox"
+                aria-expanded={open}
+                aria-autocomplete="list"
+                aria-label={placeholder}
                 value={open ? query : selected ? playerLabel(selected) : ''}
                 onFocus={() => { setOpen(true); setQuery(''); }}
                 onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -96,6 +106,7 @@ export default function BackfillEventsPage() {
     const [matches, setMatches] = useState<MatchItem[]>([]);
     const [loadingList, setLoadingList] = useState(true);
     const [filter, setFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'UPCOMING' | 'FINISHED'>('all');
     const [match, setMatch] = useState<MatchItem | null>(null);
     const [rosters, setRosters] = useState<{ home: RosterPlayer[]; away: RosterPlayer[] }>({ home: [], away: [] });
     const [rows, setRows] = useState<EventRow[]>([]);
@@ -129,9 +140,10 @@ export default function BackfillEventsPage() {
 
     const shown = useMemo(() => {
         const q = filter.trim().toLowerCase();
-        if (!q) return matches;
-        return matches.filter(m => [teamName(m, 'home'), teamName(m, 'away'), m.homeTeam?.name, m.awayTeam?.name, m.competition, m.id].some(v => v?.toLowerCase().includes(q)));
-    }, [matches, filter]);
+        const byStatus = statusFilter === 'all' ? matches : matches.filter(m => m.status === statusFilter);
+        if (!q) return byStatus;
+        return byStatus.filter(m => [teamName(m, 'home'), teamName(m, 'away'), m.homeTeam?.name, m.awayTeam?.name, m.competition, m.id].some(v => v?.toLowerCase().includes(q)));
+    }, [matches, filter, statusFilter]);
 
     const loadRoster = async (teamId: string): Promise<RosterPlayer[]> => {
         const res = await fetch(`/api/admin/teams/${teamId}/roster`);
@@ -235,8 +247,11 @@ export default function BackfillEventsPage() {
     return (
         <div className="max-w-5xl mx-auto p-4 sm:p-8 text-white">
             <ToastContainer toasts={toasts} onClose={removeToast} />
-            <h1 className="text-2xl font-black uppercase tracking-tight mb-1">Add match events</h1>
-            <p className="text-sm text-white/50 mb-6">For football matches that were not logged live. Events are saved with no minute and update player stats. Not for changing a score by itself.</p>
+            <div className="pr-14 sm:pr-0 mb-6">
+                <h1 className="text-2xl sm:text-4xl font-display italic uppercase tracking-tight leading-none mb-2">Add Match Events</h1>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Football matches that were not logged live</p>
+                <p className="text-sm text-white/50 mt-2">Events are saved with no minute and update player stats. To change a score on its own, use Match Management instead.</p>
+            </div>
 
             {!match && (
                 <div>
@@ -244,14 +259,21 @@ export default function BackfillEventsPage() {
                         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
                         <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search by team or competition" className={`${inputCls} w-full pl-9`} />
                     </div>
+                    <div className="flex gap-2 mb-4" role="group" aria-label="Filter by status">
+                        {(['all', 'UPCOMING', 'FINISHED'] as const).map(f => (
+                            <button key={f} onClick={() => setStatusFilter(f)} aria-pressed={statusFilter === f} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${statusFilter === f ? 'bg-primary text-black border-primary' : 'border-white/10 text-white/50 hover:text-white'}`}>
+                                {f === 'all' ? 'All' : f === 'UPCOMING' ? 'Upcoming' : 'Finished'}
+                            </button>
+                        ))}
+                    </div>
                     {loadingList && <p className="text-white/30 text-sm">Loading matches…</p>}
-                    {!loadingList && shown.length === 0 && <p className="text-white/30 text-sm">No upcoming or finished football matches found.</p>}
+                    {!loadingList && shown.length === 0 && <p className="text-white/30 text-sm">No football matches match this search. Only upcoming and finished matches can be backfilled.</p>}
                     <div className="space-y-2">
                         {shown.map(m => (
                             <button key={m.id} onClick={() => openMatch(m)} className="w-full text-left bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-3">
                                 <div>
                                     <p className="font-black">{teamName(m, 'home')} <span className="text-white/40">{m.status === 'UPCOMING' ? 'vs' : `${m.homeScore}-${m.awayScore}`}</span> {teamName(m, 'away')}</p>
-                                    <p className="text-xs text-white/40">{m.competition ?? 'Friendly'} · {new Date(m.startTime).toLocaleDateString()}</p>
+                                    <p className="text-xs text-white/40">{[m.competition ?? 'Friendly', shortDate(m.startTime)].filter(Boolean).join(' · ')}</p>
                                 </div>
                                 <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${m.status === 'UPCOMING' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-green-500/10 text-green-400'}`}>{m.status}</span>
                             </button>
@@ -273,16 +295,22 @@ export default function BackfillEventsPage() {
                         )}
                     </div>
 
+                    {rows.length === 0 && (
+                        <div className="border border-dashed border-white/10 rounded-2xl p-6 mb-3 text-center">
+                            <p className="text-sm text-white/60 font-bold">No events yet</p>
+                            <p className="text-xs text-white/30 mt-1">Add the goals first, then the assists linked to them, then cards.</p>
+                        </div>
+                    )}
                     {rows.map((row, i) => {
                         const roster = rosters[row.side];
                         const scorers = scorerOptions(rows, row.side);
                         return (
                             <div key={row.key} className="bg-white/5 border border-white/10 rounded-2xl p-3 mb-3 flex flex-wrap items-center gap-2">
                                 <span className="text-xs font-black text-white/30 w-6">{i + 1}</span>
-                                <select value={row.type} onChange={e => updateRow(row.key, { type: e.target.value as EventRow['type'], relatedPlayerId: '' })} className={inputCls}>
+                                <select aria-label={`Event ${i + 1} type`} value={row.type} onChange={e => updateRow(row.key, { type: e.target.value as EventRow['type'], relatedPlayerId: '' })} className={inputCls}>
                                     {BACKFILL_EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
-                                <select value={row.side} onChange={e => updateRow(row.key, { side: e.target.value as Side, playerId: '', relatedPlayerId: '' })} className={inputCls}>
+                                <select aria-label={`Event ${i + 1} team`} value={row.side} onChange={e => updateRow(row.key, { side: e.target.value as Side, playerId: '', relatedPlayerId: '' })} className={inputCls}>
                                     <option value="home">{teamName(match, 'home')}</option>
                                     <option value="away">{teamName(match, 'away')}</option>
                                 </select>
@@ -290,13 +318,13 @@ export default function BackfillEventsPage() {
                                 {row.type === 'Assist' && (
                                     <PlayerPicker roster={roster} allowedIds={scorers} value={row.relatedPlayerId} onChange={id => updateRow(row.key, { relatedPlayerId: id })} placeholder={scorers.length ? 'Scorer' : 'Add the goal first'} />
                                 )}
-                                <button onClick={() => { setRows(prev => prev.filter(r => r.key !== row.key)); setPreview(null); }} className="text-white/20 hover:text-red-400" aria-label="Remove event"><Trash2 size={16} /></button>
+                                <button onClick={() => { setRows(prev => prev.filter(r => r.key !== row.key)); setPreview(null); }} className="p-2 text-white/30 hover:text-red-400" aria-label={`Remove event ${i + 1}`}><Trash2 size={18} /></button>
                             </div>
                         );
                     })}
 
                     <div className="flex gap-4 mb-6">
-                        <button onClick={() => { setRows(prev => [...prev, newRow('home')]); setPreview(null); }} className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary hover:text-white"><Plus size={14} /> Add event</button>
+                        <button onClick={() => { setRows(prev => [...prev, newRow(prev.length ? prev[prev.length - 1].side : 'home')]); setPreview(null); }} className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary hover:text-white"><Plus size={14} /> Add event</button>
                     </div>
 
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
@@ -331,7 +359,7 @@ export default function BackfillEventsPage() {
                             <p className="text-sm mb-2">Final score {preview.score.home}-{preview.score.away}. {preview.statsApplied ? 'Player stats that will change:' : 'Friendly match: no player stats are credited.'}</p>
                             <ul className="text-sm space-y-1">
                                 {preview.statEffects.map(e => (
-                                    <li key={e.playerId}><span className="font-bold">{nameOf(e.playerId)}</span> <span className="text-white/50">{Object.entries(e.deltas).map(([k, v]) => `${k} +${v}`).join(', ')}</span></li>
+                                    <li key={e.playerId}><span className="font-bold">{nameOf(e.playerId)}</span> <span className="text-white/50">{Object.entries(e.deltas).map(([k, v]) => `${statLabel(k)} +${v}`).join(', ')}</span></li>
                                 ))}
                             </ul>
                         </div>
@@ -340,11 +368,16 @@ export default function BackfillEventsPage() {
                     {followUps && (
                         <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4 mb-4 text-sm text-green-300">
                             Saved. {Object.entries(followUps).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'Score and standings were already final.'}
+                            <div className="flex gap-4 mt-2">
+                                <a href={`/matches/${match.id}`} target="_blank" rel="noreferrer" className="text-xs font-black uppercase tracking-widest text-green-200 underline">View match page</a>
+                                <button onClick={() => { setMatch(null); resetForm(); }} className="text-xs font-black uppercase tracking-widest text-green-200 underline">Add events to another match</button>
+                            </div>
                             {Object.values(followUps).includes('failed') && <p className="text-red-300 mt-1">A follow-up step failed. The events are saved; recalculate standings from the competition page.</p>}
                         </div>
                     )}
 
-                    <div className="flex flex-wrap gap-3">
+                    <div className="sticky bottom-0 -mx-4 sm:mx-0 px-4 sm:px-0 py-3 bg-[#050505]/95 backdrop-blur border-t border-white/10 sm:border-0 flex flex-wrap items-center gap-3">
+                        <span className="text-xs text-white/40 mr-auto">{rows.length} {rows.length === 1 ? 'event' : 'events'} · {target.home}-{target.away}</span>
                         <button disabled={busy !== null || rows.length === 0} onClick={runPreview} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-black uppercase tracking-widest disabled:opacity-40"><Eye size={14} /> {busy === 'preview' ? 'Checking…' : 'Preview'}</button>
                         <button disabled={busy !== null || rows.length === 0 || (mismatch && !allowMismatch)} onClick={() => { const { problems: p } = rowsToPayload(rows, { home: match.homeTeamId, away: match.awayTeamId }); setProblems(p); if (p.length === 0) setConfirm('save'); }} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-widest disabled:opacity-40"><Save size={14} /> {busy === 'save' ? 'Saving…' : 'Save events'}</button>
                     </div>
