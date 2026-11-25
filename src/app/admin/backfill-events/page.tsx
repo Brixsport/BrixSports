@@ -54,11 +54,12 @@ const newRow = (side: Side): EventRow => ({ key: `r${++rowCounter}`, type: 'Goal
 const teamName = (m: MatchItem, side: Side) => (side === 'home' ? m.homeTeam?.shortName || m.homeTeam?.name || m.homeTeamId : m.awayTeam?.shortName || m.awayTeam?.name || m.awayTeamId);
 
 /** Search box + dropdown of roster players, matching name, jersey name, nickname and number. */
-function PlayerPicker({ roster, value, onChange, placeholder, allowedIds }: {
+function PlayerPicker({ roster, value, onChange, placeholder, label, allowedIds }: {
     roster: RosterPlayer[];
     value: string;
     onChange: (id: string) => void;
     placeholder: string;
+    label: string;
     allowedIds?: string[];
 }) {
     const [query, setQuery] = useState('');
@@ -69,6 +70,7 @@ function PlayerPicker({ roster, value, onChange, placeholder, allowedIds }: {
 
     return (
         <div className="relative flex-1 min-w-[180px]">
+            <span className="block text-[9px] font-black uppercase tracking-widest text-white/30 mb-1">{label}</span>
             <input
                 role="combobox"
                 aria-expanded={open}
@@ -314,9 +316,9 @@ export default function BackfillEventsPage() {
                                     <option value="home">{teamName(match, 'home')}</option>
                                     <option value="away">{teamName(match, 'away')}</option>
                                 </select>
-                                <PlayerPicker roster={roster} value={row.playerId} onChange={id => updateRow(row.key, { playerId: id })} placeholder={row.type === 'Goal' || row.type === 'Penalty' ? 'Scorer (leave empty if unknown)' : row.type === 'Assist' ? 'Assisted by' : 'Player'} />
+                                <PlayerPicker roster={roster} value={row.playerId} label={row.type === 'Goal' || row.type === 'Penalty' ? 'Scorer' : row.type === 'Assist' ? 'Assisted by' : 'Player'} onChange={id => updateRow(row.key, { playerId: id })} placeholder={row.type === 'Goal' || row.type === 'Penalty' ? 'Scorer (leave empty if unknown)' : row.type === 'Assist' ? 'Assisted by' : 'Player'} />
                                 {row.type === 'Assist' && (
-                                    <PlayerPicker roster={roster} allowedIds={scorers} value={row.relatedPlayerId} onChange={id => updateRow(row.key, { relatedPlayerId: id })} placeholder={scorers.length ? 'Scorer' : 'Add the goal first'} />
+                                    <PlayerPicker roster={roster} allowedIds={scorers} label="Scored by" value={row.relatedPlayerId} onChange={id => updateRow(row.key, { relatedPlayerId: id })} placeholder={scorers.length ? 'Scorer' : 'Add the goal first'} />
                                 )}
                                 <button onClick={() => { setRows(prev => prev.filter(r => r.key !== row.key)); setPreview(null); }} className="p-2 text-white/30 hover:text-red-400" aria-label={`Remove event ${i + 1}`}><Trash2 size={18} /></button>
                             </div>
@@ -377,9 +379,9 @@ export default function BackfillEventsPage() {
                     )}
 
                     <div className="sticky bottom-0 -mx-4 sm:mx-0 px-4 sm:px-0 py-3 bg-[#050505]/95 backdrop-blur border-t border-white/10 sm:border-0 flex flex-wrap items-center gap-3">
-                        <span className="text-xs text-white/40 mr-auto">{rows.length} {rows.length === 1 ? 'event' : 'events'} · {target.home}-{target.away}</span>
-                        <button disabled={busy !== null || rows.length === 0} onClick={runPreview} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-black uppercase tracking-widest disabled:opacity-40"><Eye size={14} /> {busy === 'preview' ? 'Checking…' : 'Preview'}</button>
-                        <button disabled={busy !== null || rows.length === 0 || (mismatch && !allowMismatch)} onClick={() => { const { problems: p } = rowsToPayload(rows, { home: match.homeTeamId, away: match.awayTeamId }); setProblems(p); if (p.length === 0) setConfirm('save'); }} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-widest disabled:opacity-40"><Save size={14} /> {busy === 'save' ? 'Saving…' : 'Save events'}</button>
+                        <span className="text-xs text-white/40 w-full sm:w-auto sm:mr-auto">{rows.length} {rows.length === 1 ? 'event' : 'events'} · {target.home}-{target.away}</span>
+                        <button disabled={busy !== null || rows.length === 0} onClick={runPreview} className="flex flex-1 sm:flex-none justify-center items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-black uppercase tracking-widest disabled:opacity-40"><Eye size={14} /> {busy === 'preview' ? 'Checking…' : 'Preview'}</button>
+                        <button disabled={busy !== null || rows.length === 0 || (mismatch && !allowMismatch)} onClick={() => { const { problems: p } = rowsToPayload(rows, { home: match.homeTeamId, away: match.awayTeamId }); setProblems(p); if (p.length === 0) setConfirm('save'); }} className="flex flex-1 sm:flex-none justify-center items-center gap-2 px-4 py-2 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-widest disabled:opacity-40"><Save size={14} /> {busy === 'save' ? 'Saving…' : 'Save events'}</button>
                     </div>
                 </div>
             )}
