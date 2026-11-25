@@ -166,7 +166,7 @@ export default function BackfillEventsPage() {
     const target = !match ? computed : isUpcoming
         ? { home: scoreOverride ? Number(scoreOverride.home) : computed.home, away: scoreOverride ? Number(scoreOverride.away) : computed.away }
         : { home: match.homeScore, away: match.awayScore };
-    const mismatch = !!match && (computed.home !== target.home || computed.away !== target.away);
+    const mismatch = !!match && rows.length > 0 && (computed.home !== target.home || computed.away !== target.away);
 
     const updateRow = (key: string, patch: Partial<EventRow>) => { setRows(prev => prev.map(r => (r.key === key ? { ...r, ...patch } : r))); setPreview(null); };
 
