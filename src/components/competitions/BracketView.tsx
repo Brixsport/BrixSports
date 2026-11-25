@@ -52,8 +52,9 @@ export default function BracketView({
           <div className="grid gap-3 sm:grid-cols-2">
             {round.matches.map((m) => {
               const finished = m.status === 'FINISHED';
-              const homeWon = finished && m.homeScore !== null && m.awayScore !== null && m.homeScore > m.awayScore;
-              const awayWon = finished && m.homeScore !== null && m.awayScore !== null && m.awayScore > m.homeScore;
+              const pens = m.shootout?.match(/^([0-9]+)-([0-9]+)/);
+              const homeWon = finished && m.homeScore !== null && m.awayScore !== null && (m.homeScore > m.awayScore || (pens !== null && pens !== undefined && Number(pens[1]) > Number(pens[2])));
+              const awayWon = finished && m.homeScore !== null && m.awayScore !== null && (m.awayScore > m.homeScore || (pens !== null && pens !== undefined && Number(pens[2]) > Number(pens[1])));
               const showScore = m.status !== 'UPCOMING';
               return (
                 <Link
@@ -65,7 +66,7 @@ export default function BracketView({
                   <div className="my-1 h-px bg-border/50" />
                   <TeamLine team={m.away} score={showScore ? m.awayScore : null} won={awayWon} />
                   <p className="mt-2 text-[0.625rem] font-bold uppercase tracking-widest text-foreground/50">
-                    {finished ? 'FT' : m.status === 'LIVE' ? 'Live' : m.status === 'HALF_TIME' ? 'HT' : 'Upcoming'}
+                    {finished ? (m.shootout ? `FT · ${m.shootout}` : 'FT') : m.status === 'LIVE' ? 'Live' : m.status === 'HALF_TIME' ? 'HT' : 'Upcoming'}
                     {' · '}
                     {safeToLocale(m.startTime ?? '', 'date', { day: 'numeric', month: 'short', year: 'numeric' }, 'Date TBC')}
                   </p>
