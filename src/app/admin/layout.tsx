@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
 import { isRatingsEnabled } from '@/lib/featureFlags';
+import { isLoggerScopedAdminPath } from '@/lib/logger-admin-paths';
 import { PWAProvider } from '@/components/pwa/PWAProvider';
 import { AdminDashboardLayout } from '@/components/admin/AdminDashboardLayout';
 
@@ -53,11 +54,9 @@ export default async function AdminLayout({
         // through via the x-pathname header since a layout has no other way
         // to know it.
         const pathname = (await headers()).get('x-pathname') ?? '';
-        const isScopedRatingsLogger =
-            payload.role === 'logger' &&
-            (pathname === '/admin/match-ratings' || pathname.startsWith('/admin/match-ratings/'));
+        const isScopedLoggerPath = isLoggerScopedAdminPath(payload.role, pathname);
 
-        if (payload.role !== 'admin' && payload.role !== 'logger_manager' && !isScopedRatingsLogger) {
+        if (payload.role !== 'admin' && payload.role !== 'logger_manager' && !isScopedLoggerPath) {
             redirect('/');
         }
 

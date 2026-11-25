@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
 import { isBackscopedPath } from '@/lib/backscopedFeatures';
+import { isLoggerScopedAdminPath } from '@/lib/logger-admin-paths';
 
 if (!env.jwtSecret) {
     throw new Error('JWT_SECRET is not configured');
@@ -125,11 +126,12 @@ export async function middleware(request: NextRequest) {
             // real logger clicking that link was silently redirected to `/`
             // before the page (or its already-permissive API calls) ever ran --
             // same shape as the logger_manager gap this file already fixed once.
-            const isScopedRatingsLogger =
-                payload.role === 'logger' &&
-                (pathname === '/admin/match-ratings' || pathname.startsWith('/admin/match-ratings/'));
+            // Football loggers post their own lineups: /admin/match-lineups and
+            // the two API routes it calls (src/lib/logger-admin-paths.ts). Both
+            // handlers re-check role + match assignment themselves.
+            const isScopedLoggerPath = isLoggerScopedAdminPath(payload.role, pathname);
 
-            if (!isAdmin && !isScopedLoggerManager && !isScopedRatingsLogger) {
+            if (!isAdmin && !isScopedLoggerManager && !isScopedLoggerPath) {
                 if (pathname.startsWith('/api/')) {
                     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
                 }

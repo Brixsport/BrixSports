@@ -532,6 +532,11 @@ export default function AdminMatchLineupsPage() {
                                     >
                                         ← Back to matches
                                     </button>
+                                    {user?.role === 'logger' && (
+                                        <Link href="/logger" className="text-white/60 hover:text-white">
+                                            Back to logger
+                                        </Link>
+                                    )}
                                 </div>
                             </div>
 

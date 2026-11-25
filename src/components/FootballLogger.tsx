@@ -1533,8 +1533,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 </div>
                 <h2 className="text-2xl font-display italic uppercase">No Lineup Available</h2>
                 <p className="text-white/40 text-center max-w-sm">
-                    The admin has not set a lineup for this match yet. Please wait for the lineup to be published.
+                    No lineup has been published for this match yet. Post it yourself, or wait for an admin to publish it.
                 </p>
+                {match.status === 'UPCOMING' && (
+                    <a
+                        href={`/admin/match-lineups?matchId=${match.id}`}
+                        className="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-colors"
+                    >
+                        Set Lineup
+                    </a>
+                )}
                 <button
                     onClick={fetchLineups}
                     className="flex items-center gap-2 px-6 py-3 bg-primary text-black font-bold rounded-xl hover:scale-105 transition-transform"

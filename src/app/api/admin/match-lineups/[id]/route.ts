@@ -7,6 +7,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { resolveSlot } from '@/lib/lineup/placement';
 import { getMatchConfig } from '@/lib/matchConfig';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
+import { decideLineupPost } from '@/lib/lineup/logger-lineup-permission';
 import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
@@ -17,11 +18,11 @@ export async function POST(
     try {
         const user = await getAuthUser(request);
 
-        if (!user || (user.role !== 'admin' && user.role !== 'logger')) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 403 }
-            );
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (user.role !== 'admin' && user.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const params = await props.params;
@@ -61,12 +62,15 @@ export async function POST(
             );
         }
 
-        // If logger, verify they're assigned to this match
-        if (user.role === 'logger' && !(await isLoggerAssigned(matchId, user.id))) {
-            return NextResponse.json(
-                { error: 'Not assigned to this match' },
-                { status: 403 }
-            );
+        // Role + assignment + kick-off rule, decided server-side from the verified
+        // session (never from the client). See decideLineupPost.
+        const decision = decideLineupPost({
+            role: user.role,
+            isAssigned: user.role === 'logger' ? await isLoggerAssigned(matchId, user.id) : false,
+            matchStatus: match[0].status,
+        });
+        if (!decision.allow) {
+            return NextResponse.json({ error: decision.error }, { status: decision.status });
         }
 
         // BACKLOG-329 (found live-testing BACKLOG-323 step 6): this used to run
