@@ -135,22 +135,42 @@ export interface FixtureCheck {
 }
 
 /**
- * A fixture can take backfilled events only when it has none yet and is either an untouched
- * upcoming 0-0, or already finished with a score (the score is then the reference, never overwritten).
+ * A fixture can take backfilled events when it is an untouched upcoming 0-0 with no events (the score then
+ * comes from the events), or already FINISHED, with or without live-logged events (the stored score is the
+ * reference and is never overwritten; the new events must fill the gap between it and what is already logged).
  */
 export function checkFixtureState(
     match: { status: string | null; homeScore: number | null; awayScore: number | null; sport: string },
     existingEventCount: number
 ): FixtureCheck {
     if (match.sport !== 'Football') return { ok: false, reason: 'Only football matches can be backfilled' };
-    if (existingEventCount > 0) {
-        return { ok: false, reason: 'This match already has events. Reopen the backfill first, or edit them from the logger.' };
-    }
     const home = match.homeScore ?? 0;
     const away = match.awayScore ?? 0;
-    if (match.status === 'UPCOMING' && home === 0 && away === 0) return { ok: true, mode: 'from-upcoming' };
+    if (match.status === 'UPCOMING') {
+        if (existingEventCount > 0) {
+            return { ok: false, reason: 'This match already has events. Reopen the backfill first, or edit them from the logger.' };
+        }
+        if (home === 0 && away === 0) return { ok: true, mode: 'from-upcoming' };
+    }
     if (match.status === 'FINISHED') return { ok: true, mode: 'finished-scored' };
     return { ok: false, reason: `Match is ${match.status ?? 'in an unknown state'}; only an upcoming 0-0 or a finished match can be backfilled` };
+}
+
+/** Goals already on the board from events logged earlier (live logger or earlier backfill). Shootout events never count. */
+export function tallyExistingGoals(
+    events: Array<{ type: string | null; detail: string | null; teamId: string | null; period?: string | null }>,
+    homeTeamId: string,
+    awayTeamId: string
+): BackfillScore {
+    const score: BackfillScore = { home: 0, away: 0 };
+    for (const e of events) {
+        if (e.period === 'PENALTY_SHOOTOUT') continue;
+        const credit = creditedGoal({ type: e.type, detail: e.detail, teamId: e.teamId, minute: 0 }, homeTeamId, awayTeamId);
+        if (!credit) continue;
+        if (credit.teamId === homeTeamId) score.home += 1;
+        else if (credit.teamId === awayTeamId) score.away += 1;
+    }
+    return score;
 }
 
 /** Warning text when the entered events do not add up to the score, or null when they do. */

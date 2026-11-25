@@ -22,6 +22,7 @@ import {
     buildBackfillEventRows,
     checkFixtureState,
     scoreMismatch,
+    tallyExistingGoals,
     validateBackfillEvents,
     type BackfillEventInput,
     type BackfillScore,
@@ -36,6 +37,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const FULL_TIME_PERIOD = 'FINISHED';
 const ROSTER_CHECK_LIMIT = 500;
+const EXISTING_EVENT_LIMIT = 500;
 
 class RouteError extends Error {
     constructor(public status: number, message: string, public extra?: Record<string, unknown>) {
@@ -132,13 +134,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
             return NextResponse.json({ error: 'Invalid players', details: rosterErrors }, { status: 422 });
         }
 
-        const eventCount = await db
-            .select({ n: sql<number>`count(*)` })
+        // Events already on the match: live-logged or from an earlier backfill. Their goals count toward the score.
+        const existing = await db
+            .select({ id: matchEvents.id, type: matchEvents.type, detail: matchEvents.detail, teamId: matchEvents.teamId, period: matchEvents.period })
             .from(matchEvents)
             .where(eq(matchEvents.matchId, matchId))
-            .get();
-        const fixture = checkFixtureState(match, Number(eventCount?.n ?? 0));
+            .limit(EXISTING_EVENT_LIMIT);
+        const existingCount = existing.length;
+        const fixture = checkFixtureState(match, existingCount);
         if (!fixture.ok) return NextResponse.json({ error: fixture.reason }, { status: 409 });
+        const existingGoals = tallyExistingGoals(existing, match.homeTeamId, match.awayTeamId);
 
         const entered = parseScore(body.score);
         if (body.score !== undefined && body.score !== null && !entered) {
@@ -148,9 +153,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
             fixture.mode === 'finished-scored'
                 ? { home: match.homeScore ?? 0, away: match.awayScore ?? 0 }
                 : entered ?? validation.score;
-        const mismatch = scoreMismatch(validation.score, target);
+        const combined: BackfillScore = { home: validation.score.home + existingGoals.home, away: validation.score.away + existingGoals.away };
+        const mismatch = scoreMismatch(combined, target);
         if (mismatch && !allowMismatch) {
-            return NextResponse.json({ error: mismatch, code: 'SCORE_MISMATCH', eventsScore: validation.score, score: target }, { status: 422 });
+            return NextResponse.json({ error: mismatch, code: 'SCORE_MISMATCH', eventsScore: combined, score: target }, { status: 422 });
         }
 
         const statsApply = match.matchType !== 'friendly';
@@ -162,7 +168,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
                 dryRun: true,
                 mode: fixture.mode,
                 score: target,
-                eventsScore: validation.score,
+                eventsScore: combined,
+                existingGoals,
+                existingEventCount: existingCount,
                 scoreWarning: mismatch,
                 eventCount: events.length,
                 statsApplied: statsApply,
@@ -181,8 +189,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
                 .where(eq(matchEvents.matchId, matchId))
                 .get();
             const again = current ? checkFixtureState(current, Number(count?.n ?? 0)) : { ok: false, reason: 'Match not found' };
-            if (!again.ok || again.mode !== fixture.mode) {
-                throw new RouteError(409, again.reason ?? 'Match changed while saving; reload and try again');
+            if (!again.ok || again.mode !== fixture.mode || Number(count?.n ?? 0) !== existingCount) {
+                throw new RouteError(409, again.reason ?? 'The match changed while saving; reload and try again');
             }
 
             await tx.insert(matchEvents).values(rows);
@@ -215,7 +223,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
                 action: 'backfill_events',
                 entityType: 'match',
                 entityId: matchId,
-                details: JSON.stringify({ mode: fixture.mode, eventCount: rows.length, score: target, scoreMismatchAllowed: !!mismatch, statsApplied: statsApply }),
+                details: JSON.stringify({ mode: fixture.mode, eventCount: rows.length, existingEventCount: existingCount, score: target, scoreMismatchAllowed: !!mismatch, statsApplied: statsApply }),
             });
         });
 
@@ -240,6 +248,55 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         });
     } catch (error) {
         return errorResponse(error, 'backfill-events-post');
+    }
+}
+
+export async function GET(request: NextRequest, { params }: RouteContext) {
+    try {
+        const auth = await requireAdmin(request);
+        if (auth.error) return auth.error;
+        const { id: matchId } = await params;
+
+        const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
+        if (!match) return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+
+        const events = await db
+            .select({
+                id: matchEvents.id,
+                type: matchEvents.type,
+                minute: matchEvents.minute,
+                detail: matchEvents.detail,
+                period: matchEvents.period,
+                teamId: matchEvents.teamId,
+                playerId: matchEvents.playerId,
+                relatedPlayerId: matchEvents.relatedPlayerId,
+                loggerName: matchEvents.loggerName,
+            })
+            .from(matchEvents)
+            .where(eq(matchEvents.matchId, matchId))
+            .limit(EXISTING_EVENT_LIMIT);
+
+        const markers: readonly string[] = BACKFILL_MARKERS;
+        const isBackfilled = (e: { minute: number; loggerName: string | null }) => e.minute === BACKFILL_MINUTE && !!e.loggerName && markers.includes(e.loggerName);
+        return NextResponse.json({
+            status: match.status,
+            homeScore: match.homeScore ?? 0,
+            awayScore: match.awayScore ?? 0,
+            matchType: match.matchType,
+            existingGoals: tallyExistingGoals(events, match.homeTeamId, match.awayTeamId),
+            backfilledCount: events.filter(isBackfilled).length,
+            events: events.map(e => ({
+                id: e.id,
+                type: e.type,
+                minute: e.minute,
+                teamId: e.teamId,
+                playerId: e.playerId,
+                relatedPlayerId: e.relatedPlayerId,
+                backfilled: isBackfilled(e),
+            })),
+        });
+    } catch (error) {
+        return errorResponse(error, 'backfill-events-get');
     }
 }
 

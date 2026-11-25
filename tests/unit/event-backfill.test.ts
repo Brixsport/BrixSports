@@ -8,6 +8,7 @@ import {
     canonicalBackfillType,
     checkFixtureState,
     scoreMismatch,
+    tallyExistingGoals,
     validateBackfillEvents,
 } from '@/lib/event-backfill';
 
@@ -88,7 +89,10 @@ describe('checkFixtureState', () => {
         expect(checkFixtureState({ ...base, status: 'UPCOMING' }, 0)).toEqual({ ok: true, mode: 'from-upcoming' });
         expect(checkFixtureState({ ...base, status: 'FINISHED', homeScore: 7, awayScore: 1 }, 0)).toEqual({ ok: true, mode: 'finished-scored' });
     });
-    it('refuses a match that has events, is live, or is an upcoming match with a score', () => {
+    it('accepts a finished match that already has live-logged events', () => {
+        expect(checkFixtureState({ ...base, status: 'FINISHED', homeScore: 3, awayScore: 1 }, 9)).toEqual({ ok: true, mode: 'finished-scored' });
+    });
+    it('refuses an upcoming match that has events, a live match, or an upcoming match with a score', () => {
         expect(checkFixtureState({ ...base, status: 'UPCOMING' }, 3).ok).toBe(false);
         expect(checkFixtureState({ ...base, status: 'LIVE' }, 0).ok).toBe(false);
         expect(checkFixtureState({ ...base, status: 'UPCOMING', homeScore: 1 }, 0).ok).toBe(false);
@@ -138,5 +142,24 @@ describe('backfillStatEffects', () => {
         expect(byPlayer.c).toEqual({ penaltiesScored: 1, shotsOnTarget: 1 });
         expect(byPlayer.d).toEqual({ redCards: 1 });
         expect(effects).toHaveLength(4);
+    });
+});
+
+describe('tallyExistingGoals', () => {
+    it('counts goals, penalties and own goals (to the other side) and ignores shootout and non-goals', () => {
+        const score = tallyExistingGoals(
+            [
+                { type: 'Goal', detail: null, teamId: H },
+                { type: 'Penalty', detail: null, teamId: A },
+                { type: 'Own Goal', detail: null, teamId: A },
+                { type: 'Goal', detail: 'own goal', teamId: H },
+                { type: 'Penalty', detail: null, teamId: H, period: 'PENALTY_SHOOTOUT' },
+                { type: 'Yellow Card', detail: null, teamId: H },
+                { type: 'Assist', detail: null, teamId: H },
+            ],
+            H,
+            A
+        );
+        expect(score).toEqual({ home: 2, away: 2 });
     });
 });
