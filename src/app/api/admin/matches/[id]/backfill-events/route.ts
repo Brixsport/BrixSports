@@ -13,7 +13,7 @@ import * as Sentry from '@sentry/nextjs';
 import { nanoid } from 'nanoid';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { matches, matchEvents, playerTeamAffiliations, players } from '@/db/schema';
+import { adminAuditLog, matches, matchEvents, playerTeamAffiliations, players } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
 import {
     BACKFILL_MARKERS,
@@ -207,6 +207,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
                     await incrementPlayerStats(match.sport, effect.playerId, key, effect.deltas, tx);
                 }
             }
+
+            // Who did this: committed with the events, so it exists exactly when the change does.
+            await tx.insert(adminAuditLog).values({
+                id: `aud_${nanoid()}`,
+                adminUserId: auth.user.id,
+                action: 'backfill_events',
+                entityType: 'match',
+                entityId: matchId,
+                details: JSON.stringify({ mode: fixture.mode, eventCount: rows.length, score: target, scoreMismatchAllowed: !!mismatch, statsApplied: statsApply }),
+            });
         });
 
         // After the commit: the match became FINISHED only when it was upcoming. Each step is isolated
@@ -276,6 +286,15 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
                 }
             }
             removed = doomed.length;
+
+            await tx.insert(adminAuditLog).values({
+                id: `aud_${nanoid()}`,
+                adminUserId: auth.user.id,
+                action: 'backfill_reopen',
+                entityType: 'match',
+                entityId: matchId,
+                details: JSON.stringify({ eventsRemoved: removed, statsReverted: statsApply }),
+            });
         });
 
         // Status and score are left as they are: a finished match with a score and no events is a valid
