@@ -11,6 +11,7 @@ import { sql, eq, or, and, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { toPublicCompetition, toPublicGroup } from '@/lib/competition-public';
 
 // BACKLOG-333: the admin create-competition flow never set an org at all, so every
 // competition created through the real admin UI silently dropped out of
@@ -243,9 +244,9 @@ export async function GET(request: NextRequest) {
         // every caller and safe to share at the edge: 30s fresh plus 60s stale-while-revalidate.
         // The includeStats variant above feeds the admin page and stays uncached.
         return NextResponse.json({
-            competitions: filteredCompetitions.slice(offset, offset + limit),
+            competitions: filteredCompetitions.slice(offset, offset + limit).map(toPublicCompetition),
             total: totalFiltered,
-            groups: allSeasonsGroups,
+            groups: allSeasonsGroups.map(toPublicGroup),
         }, {
             headers: {
                 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
