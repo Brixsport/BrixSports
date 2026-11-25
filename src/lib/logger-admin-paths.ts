@@ -11,14 +11,14 @@ const isUnder = (pathname: string, base: string) =>
     pathname === base || pathname.startsWith(`${base}/`);
 
 /** Admin pages a logger may open. */
-const LOGGER_PAGE_BASES = ['/admin/match-ratings', '/admin/match-lineups'];
+const LOGGER_PAGE_BASES = ['/admin/match-ratings'];
 
 /**
- * Admin API routes a logger may call. Only what the lineup page needs:
- * the assigned-matches list (already scoped to the caller's assignments in the
- * handler) and the lineup publish route (assignment re-checked in the handler).
+ * Admin API routes a logger may call: only the lineup publish route used by the
+ * football logger's pre-match lineup editor (role, assignment and kick-off are
+ * re-checked in the handler).
  */
-const LOGGER_API_BASES = ['/api/admin/assigned-matches', '/api/admin/match-lineups'];
+const LOGGER_API_BASES = ['/api/admin/match-lineups'];
 
 export function isLoggerScopedAdminPath(role: unknown, pathname: string): boolean {
     if (role !== 'logger') return false;

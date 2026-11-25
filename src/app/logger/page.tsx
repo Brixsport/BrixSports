@@ -9,7 +9,6 @@ import { BrandMark } from '@/components/BrandMark';
 import { BasketballLogger } from '@/components/BasketballLogger';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { FootballLogger } from '@/components/FootballLogger';
-import { isFootballFamilySport } from '@/lib/lineup/logger-lineup-permission';
 import { TrackLogger } from '@/components/TrackLogger';
 import { SessionExpiryBanner } from '@/components/logger/SessionExpiryBanner';
 import { LoggerErrorBoundary } from '@/components/logger/LoggerErrorBoundary';
@@ -446,15 +445,6 @@ export default function LoggerPage() {
                   </span>
                   {isLoggable ? (
                     <div className="flex items-center gap-3">
-                      {match.status === 'UPCOMING' && isFootballFamilySport(match.sport) && (
-                        <a
-                          href={`/admin/match-lineups?matchId=${match.id}`}
-                          className="flex items-center gap-2 px-3 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-colors border border-primary/20"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span>Set Lineup</span>
-                        </a>
-                      )}
                       <div className="flex items-center gap-1 group-hover:text-primary transition-colors">
                         Start Input
                         <ChevronRight size={14} />

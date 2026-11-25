@@ -34,3 +34,20 @@ const FOOTBALL_FAMILY = new Set(['football', 'five-a-side', '5-a-side', '5-aside
 export function isFootballFamilySport(sport: string | null | undefined): boolean {
     return FOOTBALL_FAMILY.has((sport || '').trim().toLowerCase());
 }
+
+/**
+ * Lock rule for overwriting an already-published lineup via the lineup POST route.
+ * - Not published, or explicitly unlocked: anyone who passed decideLineupPost may write.
+ * - Admin: may always correct a published lineup.
+ * - Logger: may correct a lineup a logger published (matches how basketball loggers
+ *   can edit), but not one an admin published and locked.
+ */
+export function canOverwritePublishedLineup(input: {
+    callerRole: string;
+    existing: { status?: string; unlocked?: boolean; publishedByRole?: string } | null | undefined;
+}): boolean {
+    const { callerRole, existing } = input;
+    if (!existing || existing.status !== 'published' || existing.unlocked) return true;
+    if (callerRole === 'admin') return true;
+    return callerRole === 'logger' && existing.publishedByRole !== 'admin';
+}

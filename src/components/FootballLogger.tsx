@@ -49,6 +49,7 @@ function reconstructMatchEventFromSync(s: SyncEvent, matchId: string, manager: M
 }
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { MatchLineupEditor } from '@/components/lineup/MatchLineupEditor';
 
 import { Match, Logger, Player, Team } from '@/db/schema';
 
@@ -166,7 +167,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [pendingFoulPlayerId, setPendingFoulPlayerId] = useState<string | null>(null);
 
     // Pre-match States
-    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active' | 'load_error'>('loading');
+    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'edit_lineup' | 'active' | 'load_error'>('loading');
     const [lineups, setLineups] = useState<any>({ home: null, away: null });
     const [showCommsModal, setShowCommsModal] = useState(false);
     const [comms, setComms] = useState<any[]>([]);
@@ -1525,6 +1526,48 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         );
     }
 
+    // Pre-match lineup editor: shown instead of the "no lineup" wait screen while the
+    // match has not started, and from "Edit Lineup" on the confirm screen. Publishing
+    // goes through the same endpoint/placement engine as the admin page.
+    const canEditLineup = match.status === 'UPCOMING' && !!homeTeam && !!awayTeam;
+    if ((viewState === 'check_lineup' && canEditLineup) || viewState === 'edit_lineup') {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white overflow-y-auto p-4 md:p-8">
+                <div className="max-w-6xl mx-auto space-y-6">
+                    <header className="flex items-center justify-between gap-3">
+                        <h1 className="text-2xl md:text-3xl font-display italic uppercase">Match Lineups</h1>
+                        <div className="flex items-center gap-2">
+                            {viewState === 'edit_lineup' && (
+                                <button onClick={() => setViewState('confirm_lineup')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-black uppercase tracking-widest">
+                                    Back
+                                </button>
+                            )}
+                            <button onClick={fetchLineups} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-black uppercase tracking-widest">
+                                Refresh
+                            </button>
+                        </div>
+                    </header>
+                    <p className="text-sm text-white/50">
+                        Set and publish both lineups, then confirm and start the match. You can correct a lineup you published until kick-off.
+                    </p>
+                    <MatchLineupEditor
+                        match={{
+                            id: match.id,
+                            homeTeamId: match.homeTeamId,
+                            awayTeamId: match.awayTeamId,
+                            homeTeam: { name: homeTeam!.name, shortName: (homeTeam as any).shortName },
+                            awayTeam: { name: awayTeam!.name, shortName: (awayTeam as any).shortName },
+                            competitionLevel: (match as any).competitionLevel,
+                            status: match.status,
+                        }}
+                        role="logger"
+                        onPublished={fetchLineups}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     if (viewState === 'check_lineup') {
         return (
             <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-8 space-y-6">
@@ -1533,16 +1576,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 </div>
                 <h2 className="text-2xl font-display italic uppercase">No Lineup Available</h2>
                 <p className="text-white/40 text-center max-w-sm">
-                    No lineup has been published for this match yet. Post it yourself, or wait for an admin to publish it.
+                    No lineup has been published for this match yet. Check back once it is published.
                 </p>
-                {match.status === 'UPCOMING' && (
-                    <a
-                        href={`/admin/match-lineups?matchId=${match.id}`}
-                        className="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-colors"
-                    >
-                        Set Lineup
-                    </a>
-                )}
                 <button
                     onClick={fetchLineups}
                     className="flex items-center gap-2 px-6 py-3 bg-primary text-black font-bold rounded-xl hover:scale-105 transition-transform"
@@ -1560,6 +1595,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 <div className="max-w-4xl mx-auto space-y-8">
                     <header className="flex items-center justify-between">
                         <h1 className="text-3xl font-display italic uppercase">Confirm Lineups</h1>
+                        {canEditLineup && (
+                            <button onClick={() => setViewState('edit_lineup')} className="px-4 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-black uppercase tracking-widest">
+                                Edit Lineup
+                            </button>
+                        )}
                         <button onClick={handleConfirmLineup} className="px-8 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-green-500/20">
                             Confirm & Start Match
                         </button>
