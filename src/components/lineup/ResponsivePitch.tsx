@@ -152,7 +152,7 @@ function PlayerDot({
         <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group flex flex-col items-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            className="absolute w-max transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group flex flex-col items-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
             role="button"
             tabIndex={0}
             aria-label={`${player.jerseyName || player.name}, number ${player.number}`}
@@ -222,11 +222,11 @@ function PlayerDot({
                 more slack for than the horizontal space between neighbouring
                 markers, so it doesn't reintroduce the overlap risk the cqw-based
                 width clamp above was already added to prevent. */}
-            <div className="mt-1 flex items-start gap-0.5" style={{ maxWidth: nameRowMaxWidth, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+            <div className="mt-1 flex flex-wrap items-start justify-center gap-x-0.5" style={{ maxWidth: nameRowMaxWidth, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
                 {isCaptain && (
                     <span className="text-yellow-400 text-[8px] font-black shrink-0">(C)</span>
                 )}
-                <span className="min-w-0 text-white text-[0.625rem] sm:text-xs font-medium break-words [overflow-wrap:anywhere] text-center">
+                <span className="max-w-full text-white text-[0.625rem] sm:text-xs font-medium break-words text-center">
                     {player.jerseyName || player.name}
                 </span>
                 {card === 'yellow' && (

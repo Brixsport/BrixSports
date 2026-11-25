@@ -148,7 +148,7 @@ export default function StatCategoryPage() {
               <h1 className="font-display text-2xl md:text-4xl tracking-tighter italic uppercase leading-none mb-2">
                 {competition?.name || ''}
               </h1>
-              <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
+              <span className="text-[0.625rem] font-black uppercase tracking-widest text-foreground/40">
                 {competition?.season || 'Current Season'} • {competition?.status || 'Active'}
               </span>
             </div>
@@ -160,8 +160,8 @@ export default function StatCategoryPage() {
         {leaders.length > 0 ? (
           <div className="bg-muted border border-border rounded-[32px] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 border-b border-border">
-              <span className="text-[9px] font-black uppercase tracking-widest text-foreground/40">Player Name</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-foreground/40">Stat</span>
+              <span className="text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40">Player Name</span>
+              <span className="text-[0.5625rem] font-black uppercase tracking-widest text-foreground/40">Stat</span>
             </div>
             <div className="divide-y divide-border/50">
               {leaders.map((leader) => (
@@ -174,18 +174,18 @@ export default function StatCategoryPage() {
                     <span className={`text-sm font-display italic w-5 shrink-0 text-right ${leader.rank <= 3 ? 'text-primary' : 'text-foreground/20'}`}>
                       {leader.rank}
                     </span>
-                    <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
+                    <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[0.625rem] font-black text-primary">
                       {leader.player.number ?? '-'}
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-bold truncate">{leader.player.name}</p>
-                      <p className="text-[10px] text-foreground/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
+                      <p className="text-[0.625rem] text-foreground/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-lg font-display italic text-primary">{leader.highlightedStat}</span>
                     {typeof leader.player.rating === 'number' && (
-                      <span className="flex items-center gap-1 bg-card px-2 py-0.5 rounded-full text-[10px] font-bold text-foreground/70">
+                      <span className="flex items-center gap-1 bg-card px-2 py-0.5 rounded-full text-[0.625rem] font-bold text-foreground/70">
                         {leader.player.rating.toFixed(1)}
                         <Star size={10} className="fill-primary text-primary" />
                       </span>

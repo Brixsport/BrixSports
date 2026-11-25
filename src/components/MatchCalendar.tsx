@@ -17,13 +17,14 @@ import { useState } from 'react';
 import { safeFormat } from '@/lib/safe-date';
 
 interface MatchCalendarProps {
+    initialMonth?: Date;
     fixtures: any[];
     onDateSelect: (date: Date) => void;
     selectedDate: Date;
 }
 
-export default function MatchCalendar({ fixtures, onDateSelect, selectedDate }: MatchCalendarProps) {
-    const [currentMonth, setCurrentMonth] = useState(new Date());
+export default function MatchCalendar({ fixtures, onDateSelect, selectedDate, initialMonth }: MatchCalendarProps) {
+    const [currentMonth, setCurrentMonth] = useState(initialMonth ?? new Date());
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);

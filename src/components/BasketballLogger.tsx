@@ -848,7 +848,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const isOT = quarter > periodCount;
         const periodLengthMinutes = isOT ? overtimeDurationMinutes : quarterDuration;
         const minutesElapsedInPeriod = Math.min(periodLengthMinutes, Math.floor(getElapsedSecondsInPeriod() / 60));
-        const priorMinutes = isOT ? periodCount * quarterDuration : (quarter - 1) * quarterDuration;
+        // Overtime minutes continue after regulation and after every earlier overtime.
+        const priorMinutes = isOT
+            ? periodCount * quarterDuration + Math.max(0, (otNumber || 1) - 1) * overtimeDurationMinutes
+            : (quarter - 1) * quarterDuration;
         return priorMinutes + minutesElapsedInPeriod;
     };
 
@@ -1227,7 +1230,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setMatchEnded(true);
                 alert('Match finalized successfully! All events have been saved.');
             } else {
-                alert('Failed to finalize match. Please try again.');
+                const refusal = await response.json().catch(() => null);
+                alert(response.status === 422 && refusal?.error ? refusal.error : 'Failed to finalize match. Please try again.');
             }
         } catch (error) {
             console.error('Error finalizing match:', error);
@@ -2313,18 +2317,29 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             };
 
                                             try {
-                                                const [homeRes, awayRes] = await Promise.all([
-                                                    fetch(`/api/matches/${match.id}/lineup`, {
+                                                // One team at a time: both teams share one stored lineups
+                                                // value and the server rejects a write made against a stale
+                                                // copy (409), so two requests in flight lose one team.
+                                                const saveLineup = async (team: 'home' | 'away', payload: unknown) => {
+                                                    let res = await fetch(`/api/matches/${match.id}/lineup`, {
                                                         method: 'POST',
                                                         headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({ team: 'home', lineup: toLineupPayload(homeStarters, homeSubIds, homePlayers) }),
-                                                    }),
-                                                    fetch(`/api/matches/${match.id}/lineup`, {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({ team: 'away', lineup: toLineupPayload(awayStarters, awaySubIds, awayPlayers) }),
-                                                    }),
-                                                ]);
+                                                        body: JSON.stringify({ team, lineup: payload }),
+                                                    });
+                                                    if (res.status === 409) {
+                                                        const refusal = await res.clone().json().catch(() => null);
+                                                        if (refusal?.code !== 'LINEUP_LOCKED') {
+                                                            res = await fetch(`/api/matches/${match.id}/lineup`, {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ team, lineup: payload }),
+                                                            });
+                                                        }
+                                                    }
+                                                    return res;
+                                                };
+                                                const homeRes = await saveLineup('home', toLineupPayload(homeStarters, homeSubIds, homePlayers));
+                                                const awayRes = await saveLineup('away', toLineupPayload(awayStarters, awaySubIds, awayPlayers));
                                                 if (!homeRes.ok || !awayRes.ok) {
                                                     setEventSaveError('Lineup confirmed locally but failed to save to the server — it will not survive a refresh or be visible to other loggers.');
                                                 }
