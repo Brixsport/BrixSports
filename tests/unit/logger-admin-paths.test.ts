@@ -32,7 +32,7 @@ describe('isLoggerScopedAdminPath', () => {
     });
 });
 
-import { decideLineupPost, isFootballFamilySport, canOverwritePublishedLineup } from '@/lib/lineup/logger-lineup-permission';
+import { decideLineupPost, isFootballFamilySport, canOverwritePublishedLineup, sidesNeedingLineupNotification } from '@/lib/lineup/logger-lineup-permission';
 
 describe('decideLineupPost', () => {
     it('allows an assigned logger before kick-off', () => {
@@ -80,5 +80,16 @@ describe('canOverwritePublishedLineup', () => {
     it('lets an admin correct any published lineup', () => {
         expect(canOverwritePublishedLineup({ callerRole: 'admin', existing: pub('admin') })).toBe(true);
         expect(canOverwritePublishedLineup({ callerRole: 'admin', existing: pub('logger') })).toBe(true);
+    });
+});
+
+describe('sidesNeedingLineupNotification', () => {
+    it('notifies first-time publishes only', () => {
+        expect(sidesNeedingLineupNotification(null, ['home', 'away'])).toEqual(['home', 'away']);
+        expect(sidesNeedingLineupNotification({ home: { status: 'draft' } }, ['home', 'away'])).toEqual(['home', 'away']);
+    });
+    it('does not re-notify corrections to an already-published side', () => {
+        expect(sidesNeedingLineupNotification({ home: { status: 'published' }, away: { status: 'published' } }, ['home', 'away'])).toEqual([]);
+        expect(sidesNeedingLineupNotification({ home: { status: 'published' } }, ['home', 'away'])).toEqual(['away']);
     });
 });

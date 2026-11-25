@@ -8,7 +8,7 @@ import { resolveSlot } from '@/lib/lineup/placement';
 import { getMatchConfig } from '@/lib/matchConfig';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
-import { decideLineupPost, canOverwritePublishedLineup } from '@/lib/lineup/logger-lineup-permission';
+import { decideLineupPost, canOverwritePublishedLineup, sidesNeedingLineupNotification } from '@/lib/lineup/logger-lineup-permission';
 
 type Side = 'home' | 'away';
 
@@ -211,6 +211,9 @@ export async function POST(
             }
         }
 
+        // Captured before we overwrite: only first-time publishes notify followers.
+        const notifySides = sidesNeedingLineupNotification(existingLineups, entries.map(([team]) => team));
+
         const now = new Date().toISOString();
         for (const [team, lineup] of entries) {
             existingLineups[team] = {
@@ -230,8 +233,8 @@ export async function POST(
             return NextResponse.json(CONCURRENT_MODIFICATION_RESPONSE, { status: 409 });
         }
 
-        // Send push notification for lineup availability (per side published)
-        for (const [team] of entries) {
+        // Push notification for lineup availability (first-time publishes only, not corrections)
+        for (const team of notifySides) {
             try {
                 await sendMatchEventNotification({
                     matchId,

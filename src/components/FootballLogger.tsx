@@ -172,6 +172,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [lineups, setLineups] = useState<any>({ home: null, away: null });
     const [showLineupOverlay, setShowLineupOverlay] = useState(false);
     const [lineupConfirmed, setLineupConfirmed] = useState(false);
+    const [lineupDirty, setLineupDirty] = useState(false);
     const [showCommsModal, setShowCommsModal] = useState(false);
     const [comms, setComms] = useState<any[]>([]);
     const [noteContent, setNoteContent] = useState('');
@@ -587,7 +588,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         setLineups(lineupsData.lineups);
                     }
                     setViewState('active');
-                } else if (match.status === 'UPCOMING') {
+                } else if (match.status === 'UPCOMING' && home && away) {
                     // Pre-kick-off: lineups are set/confirmed in the overlay shown when the
                     // logger presses Start Match, so go straight to the match screen.
                     if (lineupsData.success && lineupsData.lineups) setLineups(lineupsData.lineups);
@@ -1486,11 +1487,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
             const payload = { team: editingTeam, lineup: lineupPayload };
 
-            await fetch(`/api/matches/${match.id}/lineup`, {
+            const saveRes = await fetch(`/api/matches/${match.id}/lineup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+            if (!saveRes.ok) {
+                const err = await saveRes.json().catch(() => ({}));
+                throw new Error(err.message || err.error || `Server returned ${saveRes.status}`);
+            }
 
             // Refresh local
             setLineups((prev: any) => ({
@@ -1499,7 +1504,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }));
 
             // Broadcast update via socket
-            if (isSocketConnected) {
+            if (isSocketConnected && lineupPayload.status === 'published') {
                 emit('match:lineup:update', {
                     matchId: match.id,
                     lineups: {
@@ -1512,7 +1517,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             setShowLineupEditModal(false);
         } catch (e) {
             console.error("Failed to save lineup", e);
-            alert("Failed to save lineup changes");
+            alert(`Failed to save lineup changes: ${e instanceof Error ? e.message : 'unknown error'}`);
         }
     };
 
@@ -1934,16 +1939,18 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 }}
                                 role="logger"
                                 onPublished={fetchLineups}
+                                onDirtyChange={setLineupDirty}
                             />
                             <div className="mt-6 flex flex-col items-center gap-2">
                                 <button
-                                    disabled={isStartingMatch || lineups.home?.status !== 'published' || lineups.away?.status !== 'published'}
+                                    disabled={isStartingMatch || lineupDirty || lineups.home?.status !== 'published' || lineups.away?.status !== 'published'}
                                     onClick={() => { setLineupConfirmed(true); setShowLineupOverlay(false); void startMatch(); }}
                                     className="px-8 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl disabled:bg-white/10 disabled:text-white/40 disabled:cursor-not-allowed"
                                 >
                                     {isStartingMatch ? 'Starting...' : 'Confirm & Start Match'}
                                 </button>
-                                {(lineups.home?.status !== 'published' || lineups.away?.status !== 'published') && (
+                                {lineupDirty && <p className="text-xs text-amber-400">Publish your changes first (press Update Lineups).</p>}
+                                {!lineupDirty && (lineups.home?.status !== 'published' || lineups.away?.status !== 'published') && (
                                     <p className="text-xs text-amber-400">Publish both lineups to enable start.</p>
                                 )}
                             </div>
@@ -1961,6 +1968,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 // Before kick-off the logger confirms/edits the lineups in an overlay first.
                                 if (canEditLineup && !lineupConfirmed) {
                                     setShowLineupOverlay(true);
+                                    return;
+                                }
+                                // Never start an upcoming match without both lineups published.
+                                if (match.status === 'UPCOMING' && (lineups.home?.status !== 'published' || lineups.away?.status !== 'published')) {
+                                    alert('Team details are still loading or missing. Reload this match and publish both lineups before starting.');
                                     return;
                                 }
                                 void startMatch();
@@ -2523,7 +2535,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             <div className="space-y-2">
                                 <button
                                     disabled={currentPeriod !== 'NOT_STARTED'}
-                                    onClick={() => { setViewState('confirm_lineup'); setShowSettingsModal(false); }}
+                                    onClick={() => {
+                                        if (canEditLineup) setShowLineupOverlay(true); else setViewState('confirm_lineup');
+                                        setShowSettingsModal(false);
+                                    }}
                                     className={`w-full px-4 py-3 border rounded-xl text-sm font-bold text-left transition-colors ${currentPeriod !== 'NOT_STARTED'
                                         ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
                                         : 'bg-white/5 hover:bg-white/10 border-white/10'

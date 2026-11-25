@@ -5,7 +5,7 @@
 // Used by the admin Match Lineups page and by the football logger's pre-match
 // screen, so both write through the same endpoint and placement engine.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CheckCircle, AlertCircle, Save, Lock as LockIcon } from 'lucide-react';
 import { getClientErrorMessage } from '@/lib/client-error';
 import { useLineupPlacement, type PlacementEntry } from './useLineupPlacement';
@@ -51,15 +51,28 @@ function deriveInitialPlacements(teamLineup: any): PlacementEntry[] {
     return seedPlacementsFromLegacy(teamLineup.starters, teamLineup.formation);
 }
 
+// Stable signature of a team's placement state, used to detect unsaved edits.
+function placementSignature(formationId: string, placements: PlacementEntry[]): string {
+    return JSON.stringify([
+        formationId,
+        [...placements]
+            .map((p) => [p.slotId, p.playerId, !!p.isCaptain, !!p.isViceCaptain])
+            .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    ]);
+}
+
 export function MatchLineupEditor({
     match,
     role,
     onPublished,
+    onDirtyChange,
 }: {
     match: LineupEditorMatch;
     role: 'admin' | 'logger';
     /** Called after a successful publish (and reload), e.g. so the logger screen can refresh its own lineup state. */
     onPublished?: () => void;
+    /** True while placements/formation differ from what is saved on the server. */
+    onDirtyChange?: (dirty: boolean) => void;
 }) {
     const [homeRoster, setHomeRoster] = useState<Player[]>([]);
     const [awayRoster, setAwayRoster] = useState<Player[]>([]);
@@ -72,6 +85,7 @@ export function MatchLineupEditor({
     const [unlocking, setUnlocking] = useState(false);
     const [playersPerSide, setPlayersPerSide] = useState(11);
 
+    const savedSig = useRef<{ home: string; away: string } | null>(null);
     const homePlacement = useLineupPlacement({ formationId: '4-3-3' });
     const awayPlacement = useLineupPlacement({ formationId: '4-3-3' });
 
@@ -111,27 +125,18 @@ export function MatchLineupEditor({
             const lineupResponse = await fetch(`/api/matches/${match.id}/lineup`);
             const lineupData = await lineupResponse.json();
 
-            if (lineupData.success && lineupData.lineups?.home) {
-                homePlacement.reset({
-                    formationId: lineupData.lineups.home.formation || formationDefaults.home,
-                    placements: deriveInitialPlacements(lineupData.lineups.home),
-                });
-                setHomeLineupStatus(lineupData.lineups.home);
-            } else {
-                homePlacement.reset({ formationId: formationDefaults.home });
-                setHomeLineupStatus(null);
+            const sigs = { home: '', away: '' };
+            for (const side of ['home', 'away'] as const) {
+                const placement = side === 'home' ? homePlacement : awayPlacement;
+                const setStatus = side === 'home' ? setHomeLineupStatus : setAwayLineupStatus;
+                const saved = lineupData.success ? lineupData.lineups?.[side] : null;
+                const formationId = saved?.formation || formationDefaults[side];
+                const placements = saved ? deriveInitialPlacements(saved) : [];
+                placement.reset(saved ? { formationId, placements } : { formationId });
+                sigs[side] = placementSignature(formationId, placements);
+                setStatus(saved || null);
             }
-
-            if (lineupData.success && lineupData.lineups?.away) {
-                awayPlacement.reset({
-                    formationId: lineupData.lineups.away.formation || formationDefaults.away,
-                    placements: deriveInitialPlacements(lineupData.lineups.away),
-                });
-                setAwayLineupStatus(lineupData.lineups.away);
-            } else {
-                awayPlacement.reset({ formationId: formationDefaults.away });
-                setAwayLineupStatus(null);
-            }
+            savedSig.current = sigs;
         } catch (error) {
             console.error('Error loading rosters:', error);
             setLoadError('Failed to load player rosters. Check your connection and retry.');
@@ -161,6 +166,12 @@ export function MatchLineupEditor({
         void init();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [match.id]);
+
+    const dirty = !!savedSig.current && !loadingData && (
+        placementSignature(homePlacement.formationId, homePlacement.placements) !== savedSig.current.home ||
+        placementSignature(awayPlacement.formationId, awayPlacement.placements) !== savedSig.current.away
+    );
+    useEffect(() => { onDirtyChange?.(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Re-arranges currently-placed starters into the new formation's slots
     // (bucket-matched by real position); nothing is destroyed.
@@ -233,10 +244,22 @@ export function MatchLineupEditor({
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
+                if (res.status === 409) {
+                    // Changed elsewhere (or locked by an admin): reload the server copy and
+                    // let the user review. Never auto-retry, it could overwrite another person's change.
+                    await loadRosters({ home: homePlacement.formationId, away: awayPlacement.formationId });
+                    setNotice({
+                        kind: 'error',
+                        text: data.code === 'LINEUP_LOCKED'
+                            ? 'This lineup was published and locked by an admin. Reloaded the saved lineup.'
+                            : 'The lineup changed elsewhere. Reloaded the latest, review it and publish again.',
+                    });
+                    return;
+                }
                 throw new Error(data.message || data.error || 'Failed to publish');
             }
 
-            setNotice({ kind: 'ok', text: 'Lineups published. Nothing was changed on failure, both teams saved together.' });
+            setNotice({ kind: 'ok', text: 'Both lineups published.' });
             await loadRosters({ home: homePlacement.formationId, away: awayPlacement.formationId });
             onPublished?.();
         } catch (error) {

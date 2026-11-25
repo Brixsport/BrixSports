@@ -51,3 +51,14 @@ export function canOverwritePublishedLineup(input: {
     if (callerRole === 'admin') return true;
     return callerRole === 'logger' && existing.publishedByRole !== 'admin';
 }
+
+/**
+ * Sides that should trigger a "lineup available" push: only those that were not
+ * already published. Corrections to a published lineup must not re-notify followers.
+ */
+export function sidesNeedingLineupNotification(
+    previous: Record<string, { status?: string } | undefined> | null | undefined,
+    published: Array<'home' | 'away'>
+): Array<'home' | 'away'> {
+    return published.filter((side) => previous?.[side]?.status !== 'published');
+}
