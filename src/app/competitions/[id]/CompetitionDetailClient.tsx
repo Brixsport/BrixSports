@@ -12,6 +12,7 @@ import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
 import { LoadFailedState } from '@/components/resilience/ReadPathStates';
 import BracketView, { type ProjectedPair } from '@/components/competitions/BracketView';
+import { editionLabel } from '@/lib/competition-series';
 import { deriveBracket, seedPairs, shootoutLabel, type BracketRound as BracketRoundView } from '@/lib/competition-bracket';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
@@ -585,7 +586,7 @@ function CompetitionHubContent() {
                     className="text-[0.625rem] font-black uppercase tracking-widest text-foreground/60 bg-muted border border-border rounded-lg px-2 min-h-[44px] focus:outline-none focus:border-primary/50"
                   >
                     {selectedGroup.seasons.map((s) => (
-                      <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
+                      <option key={s.id} value={s.id}>{[s.season || 'Unknown Season', editionLabel(s.name)].filter(Boolean).join(' · ')}</option>
                     ))}
                   </select>
                 ) : (

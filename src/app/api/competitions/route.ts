@@ -11,6 +11,8 @@ import { sql, eq, or, and, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { toPublicCompetition, toPublicGroup } from '@/lib/competition-public';
+import { seriesBaseName } from '@/lib/competition-series';
 
 // BACKLOG-333: the admin create-competition flow never set an org at all, so every
 // competition created through the real admin UI silently dropped out of
@@ -68,7 +70,7 @@ async function validateOrgId(id: string | undefined, label: string): Promise<str
 function buildCompetitionGroups(comps: any[]) {
     const bySportName = new Map<string, any[]>();
     for (const c of comps) {
-        const coarseKey = `${c.sport ?? 'multi'}::${c.name.trim().toLowerCase()}`;
+        const coarseKey = `${c.sport ?? 'multi'}::${seriesBaseName(c.name).toLowerCase()}`;
         if (!bySportName.has(coarseKey)) bySportName.set(coarseKey, []);
         bySportName.get(coarseKey)!.push(c);
     }
@@ -100,7 +102,7 @@ function buildCompetitionGroups(comps: any[]) {
         });
         return {
             groupKey,
-            name: sorted[0].name,
+            name: seriesBaseName(sorted[0].name),
             sport: sorted[0].sport,
             latest: sorted[0],
             seasons: sorted,
@@ -226,10 +228,20 @@ export async function GET(request: NextRequest) {
                 })
             );
 
+            // Only an admin session gets the raw rows (organisation ids, entry fee,
+            // rules and so on); everyone else gets the same whitelist as the plain list.
+            const statsCaller = await getAuthUser(request);
+            const isAdminCaller = statsCaller?.role === 'admin';
+            const pageRows = competitionsWithStats.slice(offset, offset + limit);
+
             return NextResponse.json({
-                competitions: competitionsWithStats.slice(offset, offset + limit),
+                competitions: isAdminCaller
+                    ? pageRows
+                    : pageRows.map((c) => ({ ...toPublicCompetition(c), stats: c.stats })),
                 total: totalFiltered,
-                groups: buildCompetitionGroups(competitionsWithStats),
+                groups: isAdminCaller
+                    ? buildCompetitionGroups(competitionsWithStats)
+                    : buildCompetitionGroups(competitionsWithStats).map(toPublicGroup),
             }, {
                 headers: {
                     'X-Total-Count': String(totalFiltered),
@@ -243,9 +255,9 @@ export async function GET(request: NextRequest) {
         // every caller and safe to share at the edge: 30s fresh plus 60s stale-while-revalidate.
         // The includeStats variant above feeds the admin page and stays uncached.
         return NextResponse.json({
-            competitions: filteredCompetitions.slice(offset, offset + limit),
+            competitions: filteredCompetitions.slice(offset, offset + limit).map(toPublicCompetition),
             total: totalFiltered,
-            groups: allSeasonsGroups,
+            groups: allSeasonsGroups.map(toPublicGroup),
         }, {
             headers: {
                 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
