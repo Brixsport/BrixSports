@@ -1279,8 +1279,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             {/* Header - Sticky */}
             <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-lg border-b border-white/10 -mx-4 px-4 pb-4 mb-4">
                 <div className="max-w-7xl mx-auto">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                        <div className="flex min-w-0 items-center gap-4">
                             <button
                                 onClick={onExit}
                                 className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all"
@@ -1300,7 +1300,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                             {!matchStarted && (
                                 <button
                                     disabled={isStartingMatch}
