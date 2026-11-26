@@ -366,6 +366,27 @@ export async function PATCH(
             }
         }
 
+        // Editing the score of an already-finished basketball match must not leave it level
+        // either: standings would count a game with no winner (0 points, no win or loss).
+        if (
+            stored.status === 'FINISHED' &&
+            body.status === undefined &&
+            (updateData.homeScore !== undefined || updateData.awayScore !== undefined) &&
+            (stored.sport ?? '').toLowerCase().includes('basketball')
+        ) {
+            const editedHome = updateData.homeScore ?? stored.homeScore ?? 0;
+            const editedAway = updateData.awayScore ?? stored.awayScore ?? 0;
+            if (editedHome === editedAway) {
+                const resolved = await getMatchConfig(matchId);
+                if (resolved && isDisallowedDraw(resolved.config.allowDraws, editedHome, editedAway)) {
+                    return NextResponse.json({
+                        error: 'This match cannot be left level -- correct the score so one team leads.',
+                        code: 'DRAW_NOT_ALLOWED',
+                    }, { status: 422 });
+                }
+            }
+        }
+
         // Stored period before this write: the period push below fires only on a real change.
         const previousRow = body.currentPeriod !== undefined
             ? { currentPeriod: stored.currentPeriod, matchType: stored.matchType }
