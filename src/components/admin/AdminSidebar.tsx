@@ -23,6 +23,7 @@ const navItems = [
     { icon: <Calendar size={18} />, label: "Matches", href: "/admin/matches" },
     { icon: <ClipboardList size={18} />, label: "Match Lineups", href: "/admin/match-lineups", adminOnly: true },
     { icon: <Calendar size={18} />, label: "Import Matches", href: "/admin/past-matches/import", adminOnly: true },
+    { icon: <ClipboardList size={18} />, label: "Add Match Events", href: "/admin/backfill-events", adminOnly: true },
     { icon: <Timer size={18} />, label: "Track Events", href: "/admin/track-events" },
     { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams", adminOnly: true },
     // D3/BACKLOG-155: these 4 already gate their own page content behind

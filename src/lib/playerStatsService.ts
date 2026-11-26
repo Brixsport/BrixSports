@@ -14,6 +14,9 @@ import {
 
 type StatsTable = typeof footballPlayerStats | typeof basketballPlayerStats;
 
+/** The shared db client, or the handle of a surrounding db.transaction(). Defaults to the shared client. */
+export type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 function tableFor(sport: string): StatsTable | null {
     if (sport === 'Basketball') return basketballPlayerStats;
     if (sport === 'Football') return footballPlayerStats;
@@ -25,11 +28,11 @@ function tableFor(sport: string): StatsTable | null {
  * match's competition, falling back to the current season; rows written before seasons existed
  * are a frozen baseline that is never written to again once a real season is derivable.
  */
-export async function resolveStatsKey(competitionId: string | null): Promise<StatsKey> {
+export async function resolveStatsKey(competitionId: string | null, executor: DbExecutor = db): Promise<StatsKey> {
     const currentSeason = await getCurrentSeason();
     let competitionSeason: string | null = null;
     if (competitionId) {
-        const competition = await db
+        const competition = await (executor as typeof db)
             .select({ season: competitions.season })
             .from(competitions)
             .where(eq(competitions.id, competitionId))
@@ -62,10 +65,19 @@ function incrementSet(table: StatsTable, deltas: StatDeltas): Record<string, unk
  * by (player, season, competition IS NULL) first and updated, or inserted when absent, inside a
  * single transaction instead of inserting a new row per event.
  */
-export async function incrementPlayerStats(sport: string, playerId: string, key: StatsKey, deltas: StatDeltas) {
+export async function incrementPlayerStats(
+    sport: string,
+    playerId: string,
+    key: StatsKey,
+    deltas: StatDeltas,
+    executor: DbExecutor = db
+) {
     const table = tableFor(sport);
     if (!table || Object.keys(deltas).length === 0) return;
     const t = table as any;
+    const runner = executor as typeof db;
+    // Passed a transaction handle, the caller's transaction already makes the write atomic.
+    const inCallerTransaction = executor !== db;
 
     const insertValues = {
         id: `stats_${nanoid()}`,
@@ -76,7 +88,7 @@ export async function incrementPlayerStats(sport: string, playerId: string, key:
     };
 
     if (key.competitionId) {
-        await db
+        await runner
             .insert(t)
             .values(insertValues)
             .onConflictDoUpdate({
@@ -86,7 +98,7 @@ export async function incrementPlayerStats(sport: string, playerId: string, key:
         return;
     }
 
-    await db.transaction(async (tx) => {
+    const writeNullCompetitionRow = async (tx: typeof db) => {
         const existing = await tx
             .select({ id: t.id })
             .from(t)
@@ -98,17 +110,30 @@ export async function incrementPlayerStats(sport: string, playerId: string, key:
         } else {
             await tx.insert(t).values(insertValues);
         }
-    });
+    };
+
+    if (inCallerTransaction) {
+        await writeNullCompetitionRow(runner);
+        return;
+    }
+    await db.transaction(async (tx) => writeNullCompetitionRow(tx as unknown as typeof db));
 }
 
 /**
  * Subtract deltas from the player's row for this exact key only (never another season or
  * competition), floored at zero, as a single atomic statement. A missing row is a no-op.
  */
-export async function decrementPlayerStats(sport: string, playerId: string, key: StatsKey, deltas: StatDeltas) {
+export async function decrementPlayerStats(
+    sport: string,
+    playerId: string,
+    key: StatsKey,
+    deltas: StatDeltas,
+    executor: DbExecutor = db
+) {
     const table = tableFor(sport);
     if (!table || Object.keys(deltas).length === 0) return;
     const t = table as any;
+    const runner = executor as typeof db;
 
     const set: Record<string, unknown> = {};
     for (const [column, delta] of Object.entries(deltas)) {
@@ -118,11 +143,11 @@ export async function decrementPlayerStats(sport: string, playerId: string, key:
     let where = keyCondition(table, playerId, key);
     if (!key.competitionId) {
         // Several NULL-competition rows can exist for one key; touch exactly one.
-        const row = await db.select({ id: t.id }).from(t).where(where).limit(1).get();
+        const row = await runner.select({ id: t.id }).from(t).where(where).limit(1).get();
         if (!row) return;
         where = eq(t.id, row.id);
     }
-    await db.update(t).set(set).where(where);
+    await runner.update(t).set(set).where(where);
 }
 
 /** Credit an event's stat effects. Never throws: the event itself is already saved. */
