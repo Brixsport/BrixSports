@@ -644,17 +644,17 @@ function AdminMatchesPageContent() {
                                                 <DropdownMenuContent align="end" className="min-w-52 bg-[#111] border-white/10 text-white">
                                                     {(match.status === 'UPCOMING' || match.status === 'LIVE' || match.status === 'HALF_TIME') && (
                                                         <DropdownMenuItem asChild className={itemClass}>
-                                                            <Link href={`/admin/match-lineups?matchId=${encodeURIComponent(match.id)}`}><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
+                                                            <Link prefetch={false} href={`/admin/match-lineups?matchId=${encodeURIComponent(match.id)}`}><ClipboardList size={16} className="text-blue-400" />Manage lineups</Link>
                                                         </DropdownMenuItem>
                                                     )}
                                                     {match.status === 'FINISHED' && ratingsEnabled && (
                                                         <DropdownMenuItem asChild className={itemClass}>
-                                                            <Link href={`/admin/match-ratings/${match.id}`}><Star size={16} className="text-yellow-400" />Adjust ratings</Link>
+                                                            <Link prefetch={false} href={`/admin/match-ratings/${match.id}`}><Star size={16} className="text-yellow-400" />Adjust ratings</Link>
                                                         </DropdownMenuItem>
                                                     )}
                                                     {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
                                                         <DropdownMenuItem asChild className={itemClass}>
-                                                            <Link href={`/admin/livestreams?matchId=${match.id}`}><Video size={16} className="text-red-400" />Manage livestream</Link>
+                                                            <Link prefetch={false} href={`/admin/livestreams?matchId=${match.id}`}><Video size={16} className="text-red-400" />Manage livestream</Link>
                                                         </DropdownMenuItem>
                                                     )}
                                                     <DropdownMenuItem asChild className={itemClass}>

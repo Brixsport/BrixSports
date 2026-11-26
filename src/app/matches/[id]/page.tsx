@@ -46,14 +46,14 @@ const getMatchSeoData = cache(async function getMatchSeoData(id: string) {
 
 // A dynamic segment with no generateStaticParams renders on every request
 // (private, no-store). The empty list opts this route into on-demand ISR: the
-// first visit to an id renders once, then the CDN serves it for 30s. Metadata
+// first visit to an id renders once, then the CDN serves it for 2 minutes. Metadata
 // and JSON-LD tolerate 30s of staleness; live score and events come from
 // MatchDetailClient's own polling of /api/matches/[id]/public.
 export async function generateStaticParams() {
     return [];
 }
 
-export const revalidate = 30;
+export const revalidate = 120;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
     const { id } = await params;

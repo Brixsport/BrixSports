@@ -389,7 +389,7 @@ function ValidationRow({ match, onApprove, onSelect, isSelected }: any) {
                     <button className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl hover:bg-red-500 hover:text-black transition-all">
                         <ThumbsDown size={14} />
                     </button>
-                    <Link
+                    <Link prefetch={false}
                         href={`/admin/matches/${match.id}`}
                         onClick={(e) => e.stopPropagation()}
                         className="p-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all"
@@ -435,7 +435,7 @@ function LiveOperationCard({ match, loggers }: any) {
                     <div className="p-3 bg-white/5 border border-white/10 rounded-2xl">
                         <Clock size={16} className="text-primary/40" />
                     </div>
-                    <Link href={`/admin/matches/${match.id}`} className="p-3 bg-white/10 rounded-2xl hover:bg-primary hover:text-black transition-all">
+                    <Link prefetch={false} href={`/admin/matches/${match.id}`} className="p-3 bg-white/10 rounded-2xl hover:bg-primary hover:text-black transition-all">
                         <LayoutDashboard size={18} />
                     </Link>
                 </div>
