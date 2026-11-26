@@ -8,7 +8,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, matches, standings, bracketNodes, competitions, organizations } from '@/db/schema';
+import {
+    teams, matches, standings, bracketNodes, competitions, organizations,
+    basketballPlayerStats, footballPlayerStats, individualSportStats, playerStats, teamForm, headToHead,
+} from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
@@ -309,10 +312,20 @@ export async function DELETE(
             );
         }
 
-        // Delete competition
-        await db
-            .delete(competitions)
-            .where(eq(competitions.id, competitionId));
+        // With no matches left, the rows derived from them (standings, stats, form, head to
+        // head, bracket nodes) are orphans whose competition foreign key does not cascade;
+        // remove them and the competition together so the delete cannot fail halfway.
+        await db.transaction(async (tx) => {
+            await tx.delete(standings).where(eq(standings.competitionId, competitionId));
+            await tx.delete(bracketNodes).where(eq(bracketNodes.competitionId, competitionId));
+            await tx.delete(basketballPlayerStats).where(eq(basketballPlayerStats.competitionId, competitionId));
+            await tx.delete(footballPlayerStats).where(eq(footballPlayerStats.competitionId, competitionId));
+            await tx.delete(individualSportStats).where(eq(individualSportStats.competitionId, competitionId));
+            await tx.delete(playerStats).where(eq(playerStats.competitionId, competitionId));
+            await tx.delete(teamForm).where(eq(teamForm.competitionId, competitionId));
+            await tx.delete(headToHead).where(eq(headToHead.competitionId, competitionId));
+            await tx.delete(competitions).where(eq(competitions.id, competitionId));
+        });
 
         return NextResponse.json({
             success: true,
