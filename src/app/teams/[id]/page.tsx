@@ -24,14 +24,14 @@ async function getTeam(id: string) {
 
 // A dynamic segment with no generateStaticParams renders on every request
 // (private, no-store). The empty list opts this route into on-demand ISR: the
-// first visit to an id renders once, then the CDN serves it for 30s. Page data
+// first visit to an id renders once, then the CDN serves it for an hour. Page data
 // loads client-side in TeamDetailClient, so the cached HTML is the same for
 // every visitor.
 export async function generateStaticParams() {
     return [];
 }
 
-export const revalidate = 30;
+export const revalidate = 3600;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
     const { id } = await params;

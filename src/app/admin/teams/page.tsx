@@ -345,7 +345,7 @@ function TeamsPageContent() {
                                     {team.university}
                                 </div>
 
-                                <Link
+                                <Link prefetch={false}
                                     href={`/admin/teams/${team.id}`}
                                     className="flex items-center justify-center gap-2 w-full py-3 bg-primary/10 border border-primary/20 text-primary rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-primary hover:text-black transition-all group/btn"
                                 >

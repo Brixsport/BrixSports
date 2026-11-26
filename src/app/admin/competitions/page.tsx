@@ -897,7 +897,7 @@ function AdminCompetitionsPageContent() {
                                         )}
                                     </div>
                                     <div className="flex flex-col md:flex-row items-center gap-2">
-                                        <Link 
+                                        <Link prefetch={false} 
                                             href={`/admin/competitions/${competition.id}`}
                                             className="flex items-center gap-2 bg-white/5 hover:bg-primary hover:text-black px-4 py-2 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest border border-white/10"
                                         >
