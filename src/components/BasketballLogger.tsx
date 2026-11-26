@@ -1240,7 +1240,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
             if (response.ok) {
                 setMatchEnded(true);
-                alert('Match finalized successfully! All events have been saved.');
+                const unsettled = rejectedEventCount.current + failedQueuedCount + queuedOfflineCount;
+                alert(unsettled > 0
+                    ? `Match finalized, but ${unsettled} event${unsettled === 1 ? ' was' : 's were'} not saved to the server. Check the match history and ask an admin to correct it.`
+                    : 'Match finalized successfully! All events have been saved.');
             } else {
                 const refusal = await response.json().catch(() => null);
                 alert(response.status === 422 && refusal?.error ? refusal.error : 'Failed to finalize match. Please try again.');
