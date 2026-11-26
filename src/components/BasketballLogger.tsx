@@ -228,6 +228,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             if (counts) {
                 setQueuedOfflineCount(counts.pending);
                 setFailedQueuedCount(counts.failed);
+                if (counts.pending === 0 && counts.failed === 0) {
+                    setEventSaveError(prev => (prev && /queued, will save automatically/.test(prev) ? null : prev));
+                }
             } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
                 setQueuedAdminChangeCount(0);
             } else if (e.data?.type === 'SYNC_PARTIAL' && e.data?.tag === 'sync-admin-changes') {
@@ -1027,7 +1030,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 await queueOfflineEvent(match.id, eventPayload, token);
             } catch (queueErr) {
                 console.error('Failed to queue event:', queueErr);
-                setEventSaveError(`Failed to save "${type}" (${why}) and queueing also failed. Event kept locally only - re-log it once you are back online.`);
+                setEventSaveError(`Failed to save "${type}" (${why}) and queueing also failed. Event was not kept - re-log it once you are back online.`);
                 return false;
             }
             setQueuedOfflineCount(prev => prev + 1);
@@ -1044,6 +1047,21 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             }
             console.log('[BasketballLogger] Event queued for background sync');
             return true;
+        };
+        // An event that is neither saved nor queued must not keep counting towards the
+        // local score or the timeline, and Finalize must know something is unsettled.
+        const takeBackEvent = () => {
+            rejectedEventCount.current += 1;
+            setEvents(prev => prev.filter(e => e.id !== newEvent.id));
+            if (points) {
+                if (newEvent.teamId === match.homeTeamId) {
+                    setHomeScore(prev => Math.max(0, prev - points));
+                } else {
+                    setAwayScore(prev => Math.max(0, prev - points));
+                }
+            }
+            setPendingEvent(null);
+            setSelectedEventPlayer(null);
         };
         const postEvent = () => fetch(`/api/matches/${match.id}/events`, {
             method: 'POST',
@@ -1068,23 +1086,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             const action = classifyEventPostStatus(res.status);
             if (action === 'queue' || action === 'refresh-auth') {
                 console.error('[BasketballLogger] Event POST not saved, queueing:', res.status);
-                if (!(await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`))) return;
+                if (!(await queueForRetry(res.status === 401 ? 'session expired' : `server error ${res.status}`))) {
+                    takeBackEvent();
+                    return;
+                }
             } else if (action === 'rejected') {
                 const rejectedBody = await res.json().catch(() => null);
                 setEventSaveError(describeEventRejection(res.status, type, extractErrorCode(rejectedBody)));
-                // Take the refused event back out, by id: it is not saved, so it must
-                // not keep counting towards the local score or the timeline.
-                rejectedEventCount.current += 1;
-                setEvents(prev => prev.filter(e => e.id !== newEvent.id));
-                if (points) {
-                    if (newEvent.teamId === match.homeTeamId) {
-                        setHomeScore(prev => Math.max(0, prev - points));
-                    } else {
-                        setAwayScore(prev => Math.max(0, prev - points));
-                    }
-                }
-                setPendingEvent(null);
-                setSelectedEventPlayer(null);
+                takeBackEvent();
                 return;
             } else {
                 setEventSaveError(null);
@@ -1105,7 +1114,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             // background sync (BUG-142), mirroring FootballLogger's own mechanism
             // exactly rather than leaving this the silent-loss dead end it was.
             console.error('Failed to persist event:', error);
-            if (!(await queueForRetry('offline'))) return;
+            if (!(await queueForRetry('offline'))) {
+                takeBackEvent();
+                return;
+            }
         }
 
         // Dispatch WebSocket event for live updates
