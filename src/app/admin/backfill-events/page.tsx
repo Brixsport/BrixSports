@@ -244,7 +244,7 @@ export default function BackfillEventsPage() {
         try {
             const json = await send(false);
             if (json) {
-                success(`Saved ${json.eventsInserted} events. Final score ${json.score.home}-${json.score.away}.`);
+                success(`Saved ${json.eventsInserted} ${json.eventsInserted === 1 ? 'event' : 'events'}. Final score ${json.score.home}-${json.score.away}.`);
                 if (match) loadExisting(match.id);
                 setFollowUps(json.followUps ?? {});
                 setRows([]); setPreview(null); setScoreOverride(null); setAllowMismatch(false);
@@ -263,7 +263,7 @@ export default function BackfillEventsPage() {
             const res = await fetch(`/api/admin/matches/${match.id}/backfill-events`, { method: 'DELETE' });
             const json = await res.json().catch(() => ({}));
             if (!res.ok) { error(json.error ?? 'Reopen failed'); return; }
-            success(`Removed ${json.eventsRemoved} backfilled events and reversed their stats.`);
+            success(`Removed ${json.eventsRemoved} backfilled ${json.eventsRemoved === 1 ? 'event' : 'events'} and reversed ${json.eventsRemoved === 1 ? 'its' : 'their'} stats.`);
             setPreview(null); setFollowUps(null);
             if (match) loadExisting(match.id);
         } catch { error('Reopen failed. Reload the match and check its events before retrying.'); }
@@ -316,7 +316,7 @@ export default function BackfillEventsPage() {
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p className="text-lg font-black">{teamName(match, 'home')} vs {teamName(match, 'away')}</p>
-                            <p className="text-xs text-white/40">{match.status === 'UPCOMING' ? 'Upcoming 0-0: saving will mark it finished' : `Finished ${match.homeScore}-${match.awayScore}: the stored score is kept${existing ? `. ${existing.events.length} events already logged` : ''}`}</p>
+                            <p className="text-xs text-white/40">{match.status === 'UPCOMING' ? 'Upcoming 0-0: saving will mark it finished' : `Finished ${match.homeScore}-${match.awayScore}: the stored score is kept${existing ? `. ${existing.events.length} ${existing.events.length === 1 ? 'event' : 'events'} already logged` : ''}`}</p>
                         </div>
                         {!isUpcoming && (existing?.backfilledCount ?? 0) > 0 && (
                             <button disabled={busy !== null} onClick={() => setConfirm('reopen')} className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-red-400 hover:text-red-300 disabled:opacity-40"><RotateCcw size={14} /> Reopen (remove backfilled events)</button>
@@ -433,7 +433,7 @@ export default function BackfillEventsPage() {
                 onClose={() => setConfirm(null)}
                 onConfirm={runSave}
                 title="Save these events?"
-                message={`${rows.length} events will be saved${isUpcoming ? `, the match will be marked finished ${target.home}-${target.away}` : ''}, and player stats will be updated. You can undo this with Reopen.`}
+                message={`${rows.length} ${rows.length === 1 ? 'event' : 'events'} will be saved${isUpcoming ? `, the match will be marked finished ${target.home}-${target.away}` : ''}, and player stats will be updated. You can undo this with Reopen.`}
                 confirmText="Save events"
                 variant="warning"
             />
