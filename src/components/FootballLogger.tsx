@@ -1918,16 +1918,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                 {/* ===== LINEUP OVERLAY (shown on Start Match before kick-off) ===== */}
                 {showLineupOverlay && canEditLineup && (
-                    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-start md:items-center justify-center p-3 md:p-4 overflow-y-auto">
-                        <div className="bg-[#0a0a0a] border border-white/10 rounded-[32px] p-5 md:p-8 max-w-6xl w-full my-4 max-h-[92vh] overflow-y-auto">
+                    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-stretch md:items-center justify-center md:p-4 overflow-hidden">
+                        <div className="bg-[#0a0a0a] border-0 md:border border-white/10 md:rounded-[32px] p-4 md:p-8 max-w-6xl w-full h-full md:h-auto md:my-4 max-h-[100dvh] md:max-h-[92vh] overflow-y-auto overscroll-contain">
                             <div className="flex items-center justify-between mb-4 gap-3">
                                 <div>
                                     <h2 className="text-2xl font-display italic uppercase">Set Lineups</h2>
                                     <p className="text-xs text-white/50">Publish both lineups, then confirm to start the match.</p>
                                 </div>
-                                <button onClick={() => setShowLineupOverlay(false)} className="p-2 hover:bg-white/10 rounded-full" aria-label="Close lineup overlay"><X size={24} /></button>
+                                <button
+                                    onClick={() => {
+                                        if (lineupDirty && !window.confirm('Close without saving your lineup changes?')) return;
+                                        setShowLineupOverlay(false);
+                                    }}
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center hover:bg-white/10 rounded-full"
+                                    aria-label="Close lineup overlay"
+                                ><X size={24} /></button>
                             </div>
                             <MatchLineupEditor
+                                compact
                                 match={{
                                     id: match.id,
                                     homeTeamId: match.homeTeamId,
@@ -1940,20 +1948,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 role="logger"
                                 onPublished={fetchLineups}
                                 onDirtyChange={setLineupDirty}
+                                confirmBusy={isStartingMatch}
+                                onConfirm={() => { setLineupConfirmed(true); setShowLineupOverlay(false); void startMatch(); }}
                             />
-                            <div className="mt-6 flex flex-col items-center gap-2">
-                                <button
-                                    disabled={isStartingMatch || lineupDirty || lineups.home?.status !== 'published' || lineups.away?.status !== 'published'}
-                                    onClick={() => { setLineupConfirmed(true); setShowLineupOverlay(false); void startMatch(); }}
-                                    className="px-8 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl disabled:bg-white/10 disabled:text-white/40 disabled:cursor-not-allowed"
-                                >
-                                    {isStartingMatch ? 'Starting...' : 'Confirm & Start Match'}
-                                </button>
-                                {lineupDirty && <p className="text-xs text-amber-400">Publish your changes first (press Update Lineups).</p>}
-                                {!lineupDirty && (lineups.home?.status !== 'published' || lineups.away?.status !== 'published') && (
-                                    <p className="text-xs text-amber-400">Publish both lineups to enable start.</p>
-                                )}
-                            </div>
                         </div>
                     </div>
                 )}

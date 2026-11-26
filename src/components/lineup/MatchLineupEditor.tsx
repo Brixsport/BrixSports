@@ -66,6 +66,10 @@ export function MatchLineupEditor({
     role,
     onPublished,
     onDirtyChange,
+    compact = false,
+    onConfirm,
+    confirmLabel = 'Confirm & Start Match',
+    confirmBusy = false,
 }: {
     match: LineupEditorMatch;
     role: 'admin' | 'logger';
@@ -73,7 +77,14 @@ export function MatchLineupEditor({
     onPublished?: () => void;
     /** True while placements/formation differ from what is saved on the server. */
     onDirtyChange?: (dirty: boolean) => void;
+    /** Phone layout: one team at a time behind tabs, and a sticky action bar. Admin page leaves this off. */
+    compact?: boolean;
+    /** Adds a second primary action to the sticky bar (e.g. "Confirm & Start"), enabled once both lineups are published and saved. */
+    onConfirm?: () => void;
+    confirmLabel?: string;
+    confirmBusy?: boolean;
 }) {
+    const [activeSide, setActiveSide] = useState<'home' | 'away'>('home');
     const [homeRoster, setHomeRoster] = useState<Player[]>([]);
     const [awayRoster, setAwayRoster] = useState<Player[]>([]);
     const [saving, setSaving] = useState(false);
@@ -347,6 +358,19 @@ export function MatchLineupEditor({
     const bothPlaced = homePlacement.placements.length === playersPerSide && awayPlacement.placements.length === playersPerSide;
     const bothCaptains = homePlacement.placements.some((p) => p.isCaptain) && awayPlacement.placements.some((p) => p.isCaptain);
     const hasPublished = homeLineupStatus?.status === 'published' || awayLineupStatus?.status === 'published';
+    const bothPublished = homeLineupStatus?.status === 'published' && awayLineupStatus?.status === 'published';
+
+    // One plain-language reason why the main button is not available yet.
+    const blocker = (() => {
+        const need = (name: string, n: number) => `${name}: ${n} more starter${n === 1 ? '' : 's'} needed`;
+        if (homePlacement.placements.length < playersPerSide) return need(match.homeTeam.name, playersPerSide - homePlacement.placements.length);
+        if (awayPlacement.placements.length < playersPerSide) return need(match.awayTeam.name, playersPerSide - awayPlacement.placements.length);
+        if (!homePlacement.placements.some((p) => p.isCaptain)) return `Pick a captain for ${match.homeTeam.name}`;
+        if (!awayPlacement.placements.some((p) => p.isCaptain)) return `Pick a captain for ${match.awayTeam.name}`;
+        if (onConfirm && dirty) return 'Unsaved changes: press Update Lineups before starting';
+        if (onConfirm && !bothPublished) return 'Publish both lineups to enable Confirm & Start';
+        return null;
+    })();
 
     return (
         <div className="space-y-6">
@@ -357,7 +381,7 @@ export function MatchLineupEditor({
                 </div>
             )}
 
-            <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+            <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${compact ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-4 text-sm">
                     <div className={`flex items-center gap-2 ${homePlacement.placements.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
                         {homePlacement.placements.length === playersPerSide ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
@@ -377,9 +401,35 @@ export function MatchLineupEditor({
                 )}
             </div>
 
+            {compact && (
+                <div role="tablist" aria-label="Team" className="grid grid-cols-2 gap-2">
+                    {(['home', 'away'] as const).map((side) => {
+                        const placed = (side === 'home' ? homePlacement : awayPlacement).placements.length;
+                        const done = placed === playersPerSide;
+                        const published = (side === 'home' ? homeLineupStatus : awayLineupStatus)?.status === 'published';
+                        const name = side === 'home' ? match.homeTeam.name : match.awayTeam.name;
+                        return (
+                            <button
+                                key={side}
+                                role="tab"
+                                aria-selected={activeSide === side}
+                                onClick={() => setActiveSide(side)}
+                                className={`min-h-[56px] rounded-xl border px-3 py-2 text-left transition-colors ${activeSide === side ? 'border-primary bg-primary/10' : 'border-white/10 bg-white/5'}`}
+                            >
+                                <span className="block truncate text-sm font-bold text-white">{name}</span>
+                                <span className={`flex items-center gap-1 text-xs font-bold ${done ? 'text-green-400' : 'text-orange-400'}`}>
+                                    {done ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+                                    {placed}/{playersPerSide}{published ? ' · published' : ''}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {renderStatusBanner('Home', homeLineupStatus, 'home')}
-                {renderStatusBanner('Away', awayLineupStatus, 'away')}
+                <div className={compact && activeSide !== 'home' ? 'hidden' : ''}>{renderStatusBanner('Home', homeLineupStatus, 'home')}</div>
+                <div className={compact && activeSide !== 'away' ? 'hidden' : ''}>{renderStatusBanner('Away', awayLineupStatus, 'away')}</div>
             </div>
 
             {loadingData ? (
@@ -389,6 +439,7 @@ export function MatchLineupEditor({
                 </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className={compact && activeSide !== 'home' ? 'hidden' : ''}>
                     <AdminTeamLineupBuilder
                         teamName={match.homeTeam.name}
                         teamSide="home"
@@ -399,6 +450,8 @@ export function MatchLineupEditor({
                         maxStarters={playersPerSide}
                         isDisabled={homeDisabled}
                     />
+                    </div>
+                    <div className={compact && activeSide !== 'away' ? 'hidden' : ''}>
                     <AdminTeamLineupBuilder
                         teamName={match.awayTeam.name}
                         teamSide="away"
@@ -409,26 +462,40 @@ export function MatchLineupEditor({
                         maxStarters={playersPerSide}
                         isDisabled={awayDisabled}
                     />
+                    </div>
                 </div>
             )}
 
-            <div className="flex flex-col items-center gap-2">
-                {notice && (
-                    <p role={notice.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${notice.kind === 'error' ? 'text-red-400' : 'text-green-400'}`}>
-                        {notice.text}
-                    </p>
-                )}
-                <button
-                    onClick={publishLineups}
-                    disabled={saving || !bothPlaced || !bothCaptains || homeDisabled || awayDisabled}
-                    className="px-8 py-4 bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold text-lg flex items-center gap-3 transition-colors"
-                >
-                    <Save size={20} />
-                    {saving ? 'Publishing...' : hasPublished ? 'Update Lineups' : 'Publish Official Lineups'}
-                </button>
-                {!bothCaptains && (
-                    <p className="text-xs text-amber-400 mt-1">Set a captain for both teams before publishing.</p>
-                )}
+            <div className={compact ? 'sticky bottom-0 z-10 -mx-4 -mb-4 border-t border-white/10 bg-[#0a0a0a]/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur' : ''}>
+                <div className="flex flex-col items-center gap-2">
+                    {notice && (
+                        <p role={notice.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${notice.kind === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                            {notice.text}
+                        </p>
+                    )}
+                    {blocker && !homeDisabled && !awayDisabled && (
+                        <p className="text-center text-xs text-amber-400">{blocker}</p>
+                    )}
+                    <div className={`flex w-full gap-2 ${compact ? '' : 'justify-center'}`}>
+                        <button
+                            onClick={publishLineups}
+                            disabled={saving || !bothPlaced || !bothCaptains || homeDisabled || awayDisabled}
+                            className={`min-h-[52px] bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors ${compact ? 'flex-1 px-3 text-base' : 'px-8 py-4 text-lg gap-3'}`}
+                        >
+                            <Save size={20} />
+                            {saving ? 'Publishing...' : hasPublished ? 'Update Lineups' : compact ? 'Publish Lineups' : 'Publish Official Lineups'}
+                        </button>
+                        {onConfirm && (
+                            <button
+                                onClick={onConfirm}
+                                disabled={confirmBusy || dirty || !bothPublished}
+                                className="min-h-[52px] flex-1 rounded-xl bg-green-500 px-3 text-base font-black uppercase tracking-wide text-black disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                            >
+                                {confirmBusy ? 'Starting...' : confirmLabel}
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
