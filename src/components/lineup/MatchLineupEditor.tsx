@@ -68,7 +68,7 @@ export function MatchLineupEditor({
     onDirtyChange,
     compact = false,
     onConfirm,
-    confirmLabel = 'Confirm & Start Match',
+    confirmLabel = 'Confirm & Start',
     confirmBusy = false,
 }: {
     match: LineupEditorMatch;
@@ -402,7 +402,7 @@ export function MatchLineupEditor({
             </div>
 
             {compact && (
-                <div role="tablist" aria-label="Team" className="grid grid-cols-2 gap-2">
+                <div role="tablist" aria-label="Team" className="grid grid-cols-2 gap-2 lg:hidden">
                     {(['home', 'away'] as const).map((side) => {
                         const placed = (side === 'home' ? homePlacement : awayPlacement).placements.length;
                         const done = placed === playersPerSide;
@@ -428,8 +428,8 @@ export function MatchLineupEditor({
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className={compact && activeSide !== 'home' ? 'hidden' : ''}>{renderStatusBanner('Home', homeLineupStatus, 'home')}</div>
-                <div className={compact && activeSide !== 'away' ? 'hidden' : ''}>{renderStatusBanner('Away', awayLineupStatus, 'away')}</div>
+                <div className={compact && activeSide !== 'home' ? 'hidden lg:block' : ''}>{renderStatusBanner('Home', homeLineupStatus, 'home')}</div>
+                <div className={compact && activeSide !== 'away' ? 'hidden lg:block' : ''}>{renderStatusBanner('Away', awayLineupStatus, 'away')}</div>
             </div>
 
             {loadingData ? (
@@ -439,7 +439,7 @@ export function MatchLineupEditor({
                 </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className={compact && activeSide !== 'home' ? 'hidden' : ''}>
+                    <div className={compact && activeSide !== 'home' ? 'hidden lg:block' : ''}>
                     <AdminTeamLineupBuilder
                         teamName={match.homeTeam.name}
                         teamSide="home"
@@ -451,7 +451,7 @@ export function MatchLineupEditor({
                         isDisabled={homeDisabled}
                     />
                     </div>
-                    <div className={compact && activeSide !== 'away' ? 'hidden' : ''}>
+                    <div className={compact && activeSide !== 'away' ? 'hidden lg:block' : ''}>
                     <AdminTeamLineupBuilder
                         teamName={match.awayTeam.name}
                         teamSide="away"
@@ -480,16 +480,16 @@ export function MatchLineupEditor({
                         <button
                             onClick={publishLineups}
                             disabled={saving || !bothPlaced || !bothCaptains || homeDisabled || awayDisabled}
-                            className={`min-h-[52px] bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors ${compact ? 'flex-1 px-3 text-base' : 'px-8 py-4 text-lg gap-3'}`}
+                            className={`min-h-[52px] bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors ${compact ? 'flex-1 px-2 text-sm leading-tight' : 'px-8 py-4 text-lg gap-3'}`}
                         >
-                            <Save size={20} />
+                            {!compact && <Save size={20} />}
                             {saving ? 'Publishing...' : hasPublished ? 'Update Lineups' : compact ? 'Publish Lineups' : 'Publish Official Lineups'}
                         </button>
                         {onConfirm && (
                             <button
                                 onClick={onConfirm}
                                 disabled={confirmBusy || dirty || !bothPublished}
-                                className="min-h-[52px] flex-1 rounded-xl bg-green-500 px-3 text-base font-black uppercase tracking-wide text-black disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                                className="min-h-[52px] flex-1 rounded-xl bg-green-500 px-2 text-sm leading-tight font-black uppercase text-black disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
                             >
                                 {confirmBusy ? 'Starting...' : confirmLabel}
                             </button>

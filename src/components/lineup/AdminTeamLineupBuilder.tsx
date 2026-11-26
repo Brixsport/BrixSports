@@ -89,6 +89,20 @@ export function AdminTeamLineupBuilder({
                 </div>
             </div>
 
+            <div className="mb-3">
+                <label className="mb-1 block text-xs text-foreground/60">Formation</label>
+                <select
+                        value={placement.formationId}
+                        onChange={(e) => onRequestFormationChange(e.target.value)}
+                        disabled={isDisabled}
+                        className="min-h-[44px] w-full px-3 py-2 bg-card/50 rounded-lg border border-border text-sm font-display italic font-bold text-foreground uppercase tracking-wider focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                    >
+                        {formationOptions.map((f) => (
+                            <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
+                        ))}
+                    </select>
+            </div>
+
             <PlacementPitch
                 formationId={placement.formationId}
                 placements={placement.placements}
@@ -96,18 +110,7 @@ export function AdminTeamLineupBuilder({
                 mode="edit"
                 teamLabel={teamSide === 'home' ? 'Home' : 'Away'}
                 onSlotClick={(slotId) => setPopupSlotId(slotId)}
-                formationControl={
-                    <select
-                        value={placement.formationId}
-                        onChange={(e) => onRequestFormationChange(e.target.value)}
-                        disabled={isDisabled}
-                        className="min-h-[40px] px-3 py-2 bg-card/50 rounded-lg backdrop-blur-md border border-border text-sm font-display italic font-bold text-foreground uppercase tracking-wider focus:outline-none cursor-pointer disabled:cursor-not-allowed"
-                    >
-                        {formationOptions.map((f) => (
-                            <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
-                        ))}
-                    </select>
-                }
+                formationControl={<></>}
             />
 
             {/* Captain selection -- only currently-placed starters are eligible */}
