@@ -1722,7 +1722,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                     <td className="p-4">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-display text-sm group-hover:bg-primary group-hover:text-black transition-colors">
-                                                                {player.number}
+                                                                {player.number || '-'}
                                                             </div>
                                                             <div>
                                                                 <p className="text-xs font-black uppercase tracking-tight">{player.name}</p>
@@ -1830,7 +1830,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                         backgroundColor: selectedTeam === 'home' ? homeTeam?.color : awayTeam?.color,
                                                     }}
                                                 >
-                                                    {player.number}
+                                                    {player.number || '-'}
                                                 </div>
                                                 <div className="flex-1 min-w-0 text-left">
                                                     <div className="flex items-center justify-between gap-2 overflow-hidden">
@@ -1912,7 +1912,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                             backgroundColor: selectedTeam === 'home' ? homeTeam?.color : awayTeam?.color,
                                                         }}
                                                     >
-                                                        {player.number}
+                                                        {player.number || '-'}
                                                     </div>
                                                     <div className="flex-1 min-w-0 text-left">
                                                         <div className="flex items-center justify-between gap-2 overflow-hidden">
@@ -1981,7 +1981,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                         backgroundColor: selectedTeam === 'home' ? homeTeam?.color : awayTeam?.color,
                                                     }}
                                                 >
-                                                    {player.number}
+                                                    {player.number || '-'}
                                                 </div>
                                                 <div className="flex-1 min-w-0 text-left">
                                                     <div className="flex items-center justify-between gap-2 overflow-hidden">
@@ -2204,7 +2204,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                                     borderColor: isStarter ? 'var(--primary)' : 'rgba(255,255,255,0.3)',
                                                                 }}
                                                             >
-                                                                {player.number}
+                                                                {player.number || '-'}
                                                             </div>
                                                             <div>
                                                                 <p className="text-sm font-black uppercase">{player.name}</p>
@@ -2266,7 +2266,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                                     borderColor: isStarter ? 'var(--primary)' : 'rgba(255,255,255,0.3)',
                                                                 }}
                                                             >
-                                                                {player.number}
+                                                                {player.number || '-'}
                                                             </div>
                                                             <div>
                                                                 <p className="text-sm font-black uppercase">{player.name}</p>
