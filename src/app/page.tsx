@@ -612,9 +612,11 @@ export default function Home() {
           />
 
           {/* Live Now Section */}
-          <div className="mb-8">
-            <LiveNowSection />
-          </div>
+          {isFeatureEnabled('features.livestream.enabled') && (
+            <div className="mb-8">
+              <LiveNowSection />
+            </div>
+          )}
 
           {/* Live Center Button */}
           {matches.filter(m => m.status === 'LIVE').length > 0 && (

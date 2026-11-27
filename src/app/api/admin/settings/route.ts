@@ -51,6 +51,7 @@ const DEFAULT_SETTINGS = {
     'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'News Management' },
     'features.transfers.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Transfers admin panel (news/rumor announcements)' },
     'features.ratings.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Match ratings: admin rating pages, rating APIs and the automatic recalculation when a match finishes' },
+    'features.livestream.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Livestream: the Live Now section on the home page and the active-streams API (off while no streams are run)' },
 };
 
 // Initialize default settings in database if they don't exist
