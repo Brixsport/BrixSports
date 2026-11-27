@@ -11,6 +11,9 @@
  * Detail pages need real ids; they are discovered from the public list APIs.
  * A route whose id cannot be discovered is reported as SKIP, not as a pass.
  */
+import { config } from 'dotenv';
+config({ path: '.env.local', quiet: true });
+
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 const BYPASS = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 
@@ -18,9 +21,16 @@ const headers: Record<string, string> = BYPASS ? { 'x-vercel-protection-bypass':
 
 type Check = { name: string; path: string; kind: 'api' | 'page' };
 
+// A protected Vercel preview answers 200 with its HTML login page when the bypass
+// header is missing, and that page can itself be served from the CDN. Every check
+// below therefore also verifies it got the real content type, never just "200 + HIT".
+const LOGIN_WALL = /vercel\.com\/(sso-api|login)|Authentication Required|_vercel\/sso/i;
+
 async function getJson(path: string): Promise<any> {
     const res = await fetch(`${BASE_URL}${path}`, { headers });
     if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('json')) throw new Error(`${path} -> not JSON (content-type "${ct}"); protected preview without a bypass secret?`);
     return res.json();
 }
 
@@ -65,16 +75,24 @@ async function main() {
         const vc = res.headers.get('x-vercel-cache') || '(none)';
         const cc = res.headers.get('cache-control') || '(none)';
         const prerender = res.headers.get('x-nextjs-prerender');
+        const ct = res.headers.get('content-type') || '';
+        const body = await res.text();
         const cdnHit = vc === 'HIT' || vc === 'STALE' || vc === 'PRERENDER';
         const privateCache = /no-store|private/i.test(cc) && c.kind === 'page';
-        const ok = res.ok && cdnHit && !privateCache;
+        const rightType = c.kind === 'api' ? ct.includes('json') : ct.includes('html');
+        const behindWall = LOGIN_WALL.test(body.slice(0, 4000));
+        const ok = res.ok && cdnHit && !privateCache && rightType && !behindWall;
         if (!ok) failed++;
-        console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.name.padEnd(24)} ${c.path}  x-vercel-cache=${vc}${prerender ? ' prerender' : ''}`);
+        const why = !rightType ? ` (content-type "${ct}")` : behindWall ? ' (login wall, not the real page)' : '';
+        console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.name.padEnd(24)} ${c.path}  x-vercel-cache=${vc}${prerender ? ' prerender' : ''}${why}`);
     }
     for (const s of skipped) console.log(`SKIP  ${s}`);
+    // A check that could not run proves nothing: treat it as a failure unless the
+    // caller explicitly allows skips (for example a database with no news yet).
+    if (skipped.length > 0 && !process.env.ALLOW_SKIP) failed += skipped.length;
 
     if (failed > 0) {
-        console.error(`\n=== FAIL: ${failed} route(s) are no longer served from the CDN on the second request ===`);
+        console.error(`\n=== FAIL: ${failed} check(s) failed or could not run (set ALLOW_SKIP=1 to allow skips) ===`);
         process.exit(1);
     }
     console.log('\n=== PASS: every checked route is served from the CDN on the second request ===');
