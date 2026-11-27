@@ -49,6 +49,7 @@ function reconstructMatchEventFromSync(s: SyncEvent, matchId: string, manager: M
 }
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { MatchLineupEditor } from '@/components/lineup/MatchLineupEditor';
 
 import { Match, Logger, Player, Team } from '@/db/schema';
 
@@ -76,6 +77,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
     const [homeTeam, setHomeTeam] = useState<Team | null>(null);
     const [awayTeam, setAwayTeam] = useState<Team | null>(null);
+    const canEditLineup = match.status === 'UPCOMING' && !!homeTeam && !!awayTeam;
     const [homePlayers, setHomePlayers] = useState<Player[]>([]);
     const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -168,6 +170,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Pre-match States
     const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active' | 'load_error'>('loading');
     const [lineups, setLineups] = useState<any>({ home: null, away: null });
+    const [showLineupOverlay, setShowLineupOverlay] = useState(false);
+    const [lineupConfirmed, setLineupConfirmed] = useState(false);
+    const [lineupDirty, setLineupDirty] = useState(false);
     const [showCommsModal, setShowCommsModal] = useState(false);
     const [comms, setComms] = useState<any[]>([]);
     const [noteContent, setNoteContent] = useState('');
@@ -582,6 +587,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     if (lineupsData.success && lineupsData.lineups) {
                         setLineups(lineupsData.lineups);
                     }
+                    setViewState('active');
+                } else if (match.status === 'UPCOMING' && home && away) {
+                    // Pre-kick-off: lineups are set/confirmed in the overlay shown when the
+                    // logger presses Start Match, so go straight to the match screen.
+                    if (lineupsData.success && lineupsData.lineups) setLineups(lineupsData.lineups);
                     setViewState('active');
                 } else if (lineupsData.success && lineupsData.lineups && (lineupsData.lineups.home || lineupsData.lineups.away)) {
                     setLineups(lineupsData.lineups || { home: null, away: null });
@@ -1388,6 +1398,36 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         setIsLoading(false);
     };
 
+    // Starts the match (single atomic PATCH, see BUG-242 note inside).
+    const startMatch = async () => {
+        if (!stateManager.current || isStartingMatch) return;
+        setIsStartingMatch(true);
+        try {
+            // BUG-242: status and currentPeriod used to go out as two sequential
+            // PATCHes (status first, awaited; currentPeriod second, fire-and-forget).
+            // Each PATCH broadcasts independently via its own after() hook, so a
+            // viewer's page could receive status:'LIVE' before currentPeriod ever
+            // arrived -- rendering "Match is currently live!" next to a stale
+            // "NOT STARTED" period badge for however long the second broadcast/poll
+            // took to land. Single atomic PATCH closes that window entirely.
+            const res = await fetch(`/api/matches/${match.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'LIVE', currentPeriod: 'FIRST_HALF' }),
+            });
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            // PATCH confirmed — now transition local state and start the clock
+            stateManager.current.transitionStatus('FIRST_HALF');
+            // MATCH_START notification now sent server-side from matches/[id]/route.ts's
+            // PATCH handler when currentPeriod transitions to FIRST_HALF — this client
+            // fetch was double-sending it (BUG-204 sweep), removed.
+        } catch (e) {
+            console.error('Failed to start match:', e);
+            alert('Couldn\'t start match — check connection and try again.');
+            setIsStartingMatch(false);
+        }
+    };
+
     const handleConfirmLineup = () => {
         setViewState('active');
     };
@@ -1447,11 +1487,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
             const payload = { team: editingTeam, lineup: lineupPayload };
 
-            await fetch(`/api/matches/${match.id}/lineup`, {
+            const saveRes = await fetch(`/api/matches/${match.id}/lineup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+            if (!saveRes.ok) {
+                const err = await saveRes.json().catch(() => ({}));
+                throw new Error(err.message || err.error || `Server returned ${saveRes.status}`);
+            }
 
             // Refresh local
             setLineups((prev: any) => ({
@@ -1460,7 +1504,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }));
 
             // Broadcast update via socket
-            if (isSocketConnected) {
+            if (isSocketConnected && lineupPayload.status === 'published') {
                 emit('match:lineup:update', {
                     matchId: match.id,
                     lineups: {
@@ -1473,7 +1517,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             setShowLineupEditModal(false);
         } catch (e) {
             console.error("Failed to save lineup", e);
-            alert("Failed to save lineup changes");
+            alert(`Failed to save lineup changes: ${e instanceof Error ? e.message : 'unknown error'}`);
         }
     };
 
@@ -1533,7 +1577,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 </div>
                 <h2 className="text-2xl font-display italic uppercase">No Lineup Available</h2>
                 <p className="text-white/40 text-center max-w-sm">
-                    The admin has not set a lineup for this match yet. Please wait for the lineup to be published.
+                    No lineup has been published for this match yet. Check back once it is published.
                 </p>
                 <button
                     onClick={fetchLineups}
@@ -1872,38 +1916,63 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     </div>
                 </div>
 
+                {/* ===== LINEUP OVERLAY (shown on Start Match before kick-off) ===== */}
+                {showLineupOverlay && canEditLineup && (
+                    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-stretch md:items-center justify-center md:p-4 overflow-hidden">
+                        <div className="bg-[#0a0a0a] border-0 md:border border-white/10 md:rounded-[32px] p-4 md:p-8 max-w-6xl w-full h-full md:h-auto md:my-4 max-h-[100dvh] md:max-h-[92vh] overflow-y-auto overscroll-contain">
+                            <div className="flex items-center justify-between mb-4 gap-3">
+                                <div>
+                                    <h2 className="text-2xl font-display italic uppercase">Set Lineups</h2>
+                                    <p className="text-xs text-white/50">Publish both lineups, then confirm to start the match.</p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        if (lineupDirty && !window.confirm('Close without saving your lineup changes?')) return;
+                                        setShowLineupOverlay(false);
+                                    }}
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center hover:bg-white/10 rounded-full"
+                                    aria-label="Close lineup overlay"
+                                ><X size={24} /></button>
+                            </div>
+                            <MatchLineupEditor
+                                compact
+                                match={{
+                                    id: match.id,
+                                    homeTeamId: match.homeTeamId,
+                                    awayTeamId: match.awayTeamId,
+                                    homeTeam: { name: homeTeam!.name, shortName: (homeTeam as any).shortName },
+                                    awayTeam: { name: awayTeam!.name, shortName: (awayTeam as any).shortName },
+                                    competitionLevel: (match as any).competitionLevel,
+                                    status: match.status,
+                                }}
+                                role="logger"
+                                onPublished={fetchLineups}
+                                onDirtyChange={setLineupDirty}
+                                confirmBusy={isStartingMatch}
+                                onConfirm={() => { setLineupConfirmed(true); setShowLineupOverlay(false); void startMatch(); }}
+                            />
+                        </div>
+                    </div>
+                )}
+
                 {/* ===== PERIOD ACTION BUTTONS ===== */}
                 <div className="flex flex-wrap gap-2 mb-4">
                     {currentPeriod === 'NOT_STARTED' && (
                         <button
                             disabled={isStartingMatch}
-                            onClick={async () => {
-                                if (!stateManager.current || isStartingMatch) return;
-                                setIsStartingMatch(true);
-                                try {
-                                    // BUG-242: status and currentPeriod used to go out as two sequential
-                                    // PATCHes (status first, awaited; currentPeriod second, fire-and-forget).
-                                    // Each PATCH broadcasts independently via its own after() hook, so a
-                                    // viewer's page could receive status:'LIVE' before currentPeriod ever
-                                    // arrived -- rendering "Match is currently live!" next to a stale
-                                    // "NOT STARTED" period badge for however long the second broadcast/poll
-                                    // took to land. Single atomic PATCH closes that window entirely.
-                                    const res = await fetch(`/api/matches/${match.id}`, {
-                                        method: 'PATCH',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ status: 'LIVE', currentPeriod: 'FIRST_HALF' }),
-                                    });
-                                    if (!res.ok) throw new Error(`Server returned ${res.status}`);
-                                    // PATCH confirmed — now transition local state and start the clock
-                                    stateManager.current.transitionStatus('FIRST_HALF');
-                                    // MATCH_START notification now sent server-side from matches/[id]/route.ts's
-                                    // PATCH handler when currentPeriod transitions to FIRST_HALF — this client
-                                    // fetch was double-sending it (BUG-204 sweep), removed.
-                                } catch (e) {
-                                    console.error('Failed to start match:', e);
-                                    alert('Couldn\'t start match — check connection and try again.');
-                                    setIsStartingMatch(false);
+                            onClick={() => {
+                                if (isStartingMatch) return;
+                                // Before kick-off the logger confirms/edits the lineups in an overlay first.
+                                if (canEditLineup && !lineupConfirmed) {
+                                    setShowLineupOverlay(true);
+                                    return;
                                 }
+                                // Never start an upcoming match without both lineups published.
+                                if (match.status === 'UPCOMING' && (lineups.home?.status !== 'published' || lineups.away?.status !== 'published')) {
+                                    alert('Team details are still loading or missing. Reload this match and publish both lineups before starting.');
+                                    return;
+                                }
+                                void startMatch();
                             }}
                             className={`flex-1 py-3 font-black uppercase tracking-widest rounded-xl text-sm transition-all shadow-lg ${isStartingMatch ? 'bg-green-500/50 text-black/50 cursor-not-allowed' : 'bg-green-500 text-black hover:scale-[1.02] shadow-green-500/20 animate-pulse'}`}
                         >
@@ -2463,7 +2532,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             <div className="space-y-2">
                                 <button
                                     disabled={currentPeriod !== 'NOT_STARTED'}
-                                    onClick={() => { setViewState('confirm_lineup'); setShowSettingsModal(false); }}
+                                    onClick={() => {
+                                        if (canEditLineup) setShowLineupOverlay(true); else setViewState('confirm_lineup');
+                                        setShowSettingsModal(false);
+                                    }}
                                     className={`w-full px-4 py-3 border rounded-xl text-sm font-bold text-left transition-colors ${currentPeriod !== 'NOT_STARTED'
                                         ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
                                         : 'bg-white/5 hover:bg-white/10 border-white/10'

@@ -444,9 +444,11 @@ export default function LoggerPage() {
                       : 'Time TBC'}
                   </span>
                   {isLoggable ? (
-                    <div className="flex items-center gap-1 group-hover:text-primary transition-colors">
-                      Start Input
-                      <ChevronRight size={14} />
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1 group-hover:text-primary transition-colors">
+                        Start Input
+                        <ChevronRight size={14} />
+                      </div>
                     </div>
                   ) : isRateable ? (
                     <a

@@ -89,6 +89,20 @@ export function AdminTeamLineupBuilder({
                 </div>
             </div>
 
+            <div className="mb-3">
+                <label className="mb-1 block text-xs text-foreground/60">Formation</label>
+                <select
+                        value={placement.formationId}
+                        onChange={(e) => onRequestFormationChange(e.target.value)}
+                        disabled={isDisabled}
+                        className="min-h-[44px] w-full px-3 py-2 bg-card/50 rounded-lg border border-border text-sm font-display italic font-bold text-foreground uppercase tracking-wider focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                    >
+                        {formationOptions.map((f) => (
+                            <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
+                        ))}
+                    </select>
+            </div>
+
             <PlacementPitch
                 formationId={placement.formationId}
                 placements={placement.placements}
@@ -96,18 +110,7 @@ export function AdminTeamLineupBuilder({
                 mode="edit"
                 teamLabel={teamSide === 'home' ? 'Home' : 'Away'}
                 onSlotClick={(slotId) => setPopupSlotId(slotId)}
-                formationControl={
-                    <select
-                        value={placement.formationId}
-                        onChange={(e) => onRequestFormationChange(e.target.value)}
-                        disabled={isDisabled}
-                        className="px-3 py-1 bg-card/50 rounded-lg backdrop-blur-md border border-border text-xs font-display italic font-bold text-foreground uppercase tracking-wider focus:outline-none cursor-pointer disabled:cursor-not-allowed"
-                    >
-                        {formationOptions.map((f) => (
-                            <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
-                        ))}
-                    </select>
-                }
+                formationControl={<></>}
             />
 
             {/* Captain selection -- only currently-placed starters are eligible */}
@@ -125,12 +128,12 @@ export function AdminTeamLineupBuilder({
                                 <button
                                     key={p.playerId}
                                     onClick={() => placement.setCaptain(p.playerId)}
-                                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors ${isCaptain
+                                    className={`flex min-h-[44px] items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors ${isCaptain
                                         ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
                                         : 'bg-muted text-foreground/60 hover:bg-muted/70 border border-transparent'
                                         }`}
                                 >
-                                    <Star size={12} className={isCaptain ? 'fill-yellow-400' : ''} />
+                                    <Star size={14} className={isCaptain ? 'fill-yellow-400' : ''} />
                                     {player.jerseyName || player.name}
                                 </button>
                             );
@@ -151,7 +154,7 @@ export function AdminTeamLineupBuilder({
                     {benchPlayers.map((p) => (
                         <span
                             key={p.id}
-                            className="px-2 py-1 rounded-lg bg-muted border border-border text-[10px] text-foreground/60"
+                            className="px-2 py-1 rounded-lg bg-muted border border-border text-xs text-foreground/60"
                         >
                             #{p.number} {p.jerseyName || p.name}
                         </span>
