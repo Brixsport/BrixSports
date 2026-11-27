@@ -34,6 +34,11 @@ export async function isFeatureEnabled(key: string, fallback = true): Promise<bo
     }
 }
 
+// Livestream is not in use right now. Closed by default: the active-streams API
+// answers an empty list without touching the matches table until an admin turns
+// the flag on, and the home page does not mount the Live Now section.
+export const LIVESTREAM_FLAG = 'features.livestream.enabled';
+
 // Ratings are not ready for production (semi-automated, cannot be edited
 // reliably, auto-recalculates on FINISHED). Closed by default: a missing row
 // or a DB error reads as DISABLED, so it stays hidden without anyone having

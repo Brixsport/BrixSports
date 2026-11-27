@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { isFeatureEnabled, LIVESTREAM_FLAG } from '@/lib/featureFlags';
 
 // Fully public, identity-independent response -- safe to share at the edge.
 // 15s fresh + 30s stale-while-revalidate: a stream going live/ending shows up
@@ -19,6 +20,15 @@ export async function GET(request: NextRequest) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
                 { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds), ...NO_STORE_HEADERS } }
+            );
+        }
+
+        // Feature is closed by default (not in use): answer an empty, edge-cached
+        // list without querying the matches table.
+        if (!(await isFeatureEnabled(LIVESTREAM_FLAG, false))) {
+            return NextResponse.json(
+                { streams: [], count: 0, liveCount: 0 },
+                { headers: PUBLIC_CACHE_HEADERS }
             );
         }
 
