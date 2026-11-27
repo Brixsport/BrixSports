@@ -5,7 +5,7 @@
 // content -- one fetch, one fail-open policy, instead of duplicating the
 // fetch/state boilerplate at every nav call site.
 import { useEffect, useState } from 'react';
-import { fetchFeatureFlags } from '@/lib/feature-flags-client';
+import { fetchFeatureFlags, resolveFlag } from '@/lib/feature-flags-client';
 
 export function useFeatureFlags() {
     const [flags, setFlags] = useState<Record<string, boolean>>({});
@@ -30,6 +30,5 @@ export function useFeatureFlags() {
     // explicit `false` hides anything.
     // Closed-by-default keys (ratings) are the exception: hidden until the API
     // says they are on, so a slow or failed fetch never flashes them open.
-    return (flagKey: string) =>
-        flagKey === 'features.ratings.enabled' ? flags[flagKey] === true : flags[flagKey] !== false;
+    return (flagKey: string) => resolveFlag(flags, flagKey);
 }

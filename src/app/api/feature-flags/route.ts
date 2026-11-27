@@ -11,7 +11,7 @@ import { db } from '@/db';
 import { systemSettings } from '@/db/schema';
 
 // Keys that read as DISABLED when no row exists (and when the read fails).
-const CLOSED_BY_DEFAULT = new Set(['features.ratings.enabled']);
+const CLOSED_BY_DEFAULT = new Set(['features.ratings.enabled', 'features.livestream.enabled']);
 
 const GATED_KEYS = [
     'features.ads.enabled',
@@ -20,6 +20,7 @@ const GATED_KEYS = [
     'features.news.enabled',
     'features.transfers.enabled',
     'features.ratings.enabled',
+    'features.livestream.enabled',
     // Fan Account Blueprint Phase 3 -- kill switch for the /favourites
     // first-run coachmark tour. Same fail-open default as every other key
     // here: unconfigured reads as enabled, never silently hides the tour.
