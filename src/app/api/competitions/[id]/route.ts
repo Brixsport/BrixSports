@@ -8,8 +8,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, matches, standings, bracketNodes, competitions, organizations } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import {
+    teams, matches, standings, bracketNodes, competitions, organizations,
+    basketballPlayerStats, footballPlayerStats, individualSportStats, playerStats, teamForm, headToHead,
+} from '@/db/schema';
+import { eq, sql, count } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
 interface RouteParams {
@@ -309,10 +312,47 @@ export async function DELETE(
             );
         }
 
-        // Delete competition
-        await db
-            .delete(competitions)
-            .where(eq(competitions.id, competitionId));
+        // Player stat rows are players' career history and could have been written by an
+        // import for a competition whose matches live elsewhere, so they are only removed
+        // when the admin explicitly asks (?force=true); otherwise the delete is refused with
+        // a count per table.
+        const statTables = [
+            { label: 'basketball player stats', table: basketballPlayerStats, col: basketballPlayerStats.competitionId },
+            { label: 'football player stats', table: footballPlayerStats, col: footballPlayerStats.competitionId },
+            { label: 'individual sport stats', table: individualSportStats, col: individualSportStats.competitionId },
+            { label: 'player stats', table: playerStats, col: playerStats.competitionId },
+        ];
+        const forceDelete = request.nextUrl.searchParams.get('force') === 'true';
+        if (!forceDelete) {
+            const blocking: Record<string, number> = {};
+            for (const t of statTables) {
+                const [row] = await db.select({ n: count() }).from(t.table).where(eq(t.col, competitionId));
+                if (row && row.n > 0) blocking[t.label] = row.n;
+            }
+            if (Object.keys(blocking).length > 0) {
+                return NextResponse.json({
+                    error: 'Competition still has player stat rows; delete them too with ?force=true',
+                    code: 'COMPETITION_HAS_STATS',
+                    rows: blocking,
+                }, { status: 409 });
+            }
+        }
+
+        // Rows derived from the (now absent) matches: standings, form, head to head and bracket
+        // nodes. Their competition foreign key does not cascade; remove them together with the
+        // competition so the delete cannot fail halfway.
+        await db.transaction(async (tx) => {
+            await tx.delete(standings).where(eq(standings.competitionId, competitionId));
+            await tx.delete(bracketNodes).where(eq(bracketNodes.competitionId, competitionId));
+            await tx.delete(teamForm).where(eq(teamForm.competitionId, competitionId));
+            await tx.delete(headToHead).where(eq(headToHead.competitionId, competitionId));
+            if (forceDelete) {
+                for (const t of statTables) {
+                    await tx.delete(t.table).where(eq(t.col, competitionId));
+                }
+            }
+            await tx.delete(competitions).where(eq(competitions.id, competitionId));
+        });
 
         return NextResponse.json({
             success: true,
