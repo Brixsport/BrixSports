@@ -6,6 +6,7 @@ import { notInArray, eq, and, inArray } from 'drizzle-orm';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { parseListPaging } from '@/lib/list-paging';
 import { parseMatchRange, matchRangeOrder } from '@/lib/match-range';
+import { matchListCacheControl } from '@/lib/public-list-cache';
 
 // Public DTO -- must never include CLAUDE.md's banned fields (loggerId,
 // approvalStatus, managerNotes, approvedBy, approvedAt) or anything else not
@@ -31,10 +32,10 @@ const PUBLIC_MATCH_FIELDS = {
 };
 
 // BACKLOG-465: fully public, identity-independent response -- safe to cache at
-// the edge. 2s fresh + 3s stale-while-revalidate keeps live scores within the
-// <=5s Flow C target's spirit while collapsing a burst of identical polls into
-// ~1 origin hit per 2s per distinct query string. Errors are never cached.
-const PUBLIC_CACHE_HEADERS = { 'Cache-Control': 'public, s-maxage=2, stale-while-revalidate=3' };
+// the edge. The window is time-aware (src/lib/public-list-cache.ts): 5s fresh +
+// 10s stale-while-revalidate while a match is live or about to start, 60s + 120s
+// when nothing is happening, so a burst of polls collapses into ~1 origin hit
+// per window per distinct query string. Errors are never cached.
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 // Generous on purpose: campus users share NAT egress IPs (many viewers, one IP).
 const RATE_LIMIT_MAX_PER_MINUTE = 600;
@@ -112,7 +113,7 @@ export async function GET(request: Request) {
             success: true,
             matches: transformed,
             count: transformed.length
-        }, { headers: { ...PUBLIC_CACHE_HEADERS, 'X-Limit': String(limit), 'X-Offset': String(offset) } });
+        }, { headers: { 'Cache-Control': matchListCacheControl(otherMatches), 'X-Limit': String(limit), 'X-Offset': String(offset) } });
     } catch (error) {
         console.error('Error fetching other matches:', error);
         return NextResponse.json({ success: false, error: 'Failed to fetch matches' }, { status: 500, headers: NO_STORE_HEADERS });
