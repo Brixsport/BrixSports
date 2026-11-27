@@ -9,6 +9,7 @@ import { db } from '@/db';
 import { pushSubscriptions, pushSubscriptionMatches, users, matches } from '@/db/schema';
 import { eq, and, count } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { incrMetric } from '@/lib/metrics';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { ANONYMOUS_PUSH_USER_ID, ensureAnonymousPushUser } from '@/lib/notifications/anonymous-subscriber';
 import {
@@ -162,6 +163,7 @@ export async function POST(request: NextRequest) {
                 auth: subscription.keys.auth,
                 userAgent: request.headers.get('user-agent') || undefined,
             });
+            await incrMetric('push_subscribe', isAnonymous ? 'anonymous' : 'user');
         }
 
         // Keyed on matchId being present, not on isAnonymous -- an authenticated

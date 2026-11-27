@@ -8,6 +8,7 @@ import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
 import { sendWelcomeEmail } from '@/lib/email';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { incrMetric } from '@/lib/metrics';
 import { setAuthCookie } from '@/lib/auth-cookie';
 
 // POST /api/auth/register - Register new user
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
         }, { status: 201 });
 
         setAuthCookie(response, request, token);
+        await incrMetric('signup');
 
         return response;
     } catch (error) {

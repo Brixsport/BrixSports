@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
+import { incrAbuseMetric } from '@/lib/metrics';
 
 /**
  * Per-IP rate limiter. Upstash-backed (shared across all instances) ONLY when
@@ -101,6 +102,15 @@ function checkInMemory(bucketKey: string, max: number, windowMs: number): RateLi
 }
 
 export async function checkRateLimit(
+    request: NextRequest | Request,
+    opts?: { max?: number; windowMs?: number; distributed?: boolean }
+): Promise<RateLimitResult> {
+    const result = await checkRateLimitInner(request, opts);
+    if (result.limited) await incrAbuseMetric('ratelimit_trip', getPathname(request));
+    return result;
+}
+
+async function checkRateLimitInner(
     request: NextRequest | Request,
     opts?: { max?: number; windowMs?: number; distributed?: boolean }
 ): Promise<RateLimitResult> {
