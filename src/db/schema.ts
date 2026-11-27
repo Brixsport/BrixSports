@@ -417,6 +417,20 @@ export const matchEvents = sqliteTable('match_events', {
     matchPlayerTypeIdx: index('idx_match_events_match_player_type').on(table.matchId, table.playerId, table.type, table.createdAt),
 }));
 
+// Append-only record of admin actions that change data without a per-row owner (e.g. event backfill).
+// Written in the same transaction as the change. Created by dev/migrate-add-admin-audit-log.mjs.
+export const adminAuditLog = sqliteTable('admin_audit_log', {
+    id: text('id').primaryKey(),
+    adminUserId: text('admin_user_id').notNull().references(() => users.id),
+    action: text('action').notNull(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    details: text('details'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+}, (table) => ({
+    entityIdx: index('idx_admin_audit_entity').on(table.entityType, table.entityId, table.createdAt),
+}));
+
 // Loggers table
 export const loggers = sqliteTable('loggers', {
     id: text('id').primaryKey(),

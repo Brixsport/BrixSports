@@ -468,7 +468,7 @@ function AdminPlayersPageContent() {
                                                 </td>
                                                 <td className="px-1 md:px-4 lg:px-8 py-3 md:py-4 lg:py-6 text-right">
                                                     <div className="flex items-center justify-end gap-0.5 md:gap-1 lg:gap-2">
-                                                        <Link
+                                                        <Link prefetch={false}
                                                             href={`/admin/players/${player.id}`}
                                                             className="p-1 md:p-1.5 lg:p-2 hover:bg-white/5 rounded-lg lg:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
                                                             title="View profile"
