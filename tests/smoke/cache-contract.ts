@@ -1,0 +1,86 @@
+/**
+ * Cache contract smoke test (read-only, no writes).
+ *
+ * Asserts that the routes the CDN is relied on for stay cacheable, so a change
+ * that silently turns one back into a per-request function call fails loudly.
+ * Each route is requested twice; the second response must be served by the CDN.
+ *
+ * Usage:  BASE_URL=https://<preview-or-prod-host> npx tsx tests/smoke/cache-contract.ts
+ * Env:    VERCEL_AUTOMATION_BYPASS_SECRET (optional) for protected previews.
+ *
+ * Detail pages need real ids; they are discovered from the public list APIs.
+ * A route whose id cannot be discovered is reported as SKIP, not as a pass.
+ */
+const BASE_URL = (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+const BYPASS = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+
+const headers: Record<string, string> = BYPASS ? { 'x-vercel-protection-bypass': BYPASS } : {};
+
+type Check = { name: string; path: string; kind: 'api' | 'page' };
+
+async function getJson(path: string): Promise<any> {
+    const res = await fetch(`${BASE_URL}${path}`, { headers });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+    return res.json();
+}
+
+function firstId(payload: any, keys: string[]): string | null {
+    const list = Array.isArray(payload) ? payload : keys.map((k) => payload?.[k]).find(Array.isArray);
+    const item = list?.[0];
+    return item?.id ?? item?.slug ?? null;
+}
+
+async function main() {
+    const checks: Check[] = [
+        { name: 'feature flags', path: '/api/feature-flags', kind: 'api' },
+        { name: 'football match list', path: '/api/football/matches?limit=20', kind: 'api' },
+        { name: 'basketball match list', path: '/api/basketball/matches?limit=20', kind: 'api' },
+        { name: 'other match list', path: '/api/other/matches?limit=20', kind: 'api' },
+        { name: 'competitions list', path: '/api/competitions', kind: 'api' },
+        { name: 'active livestreams', path: '/api/livestreams/active', kind: 'api' },
+    ];
+    const skipped: string[] = [];
+
+    const discover = async (label: string, listPath: string, keys: string[], pageBase: string) => {
+        try {
+            const id = firstId(await getJson(listPath), keys);
+            if (id) checks.push({ name: label, path: `${pageBase}/${encodeURIComponent(id)}`, kind: 'page' });
+            else skipped.push(`${label} (no id found)`);
+        } catch (e) {
+            skipped.push(`${label} (${(e as Error).message})`);
+        }
+    };
+    await discover('match page', '/api/football/matches?limit=1', ['matches'], '/matches');
+    await discover('competition page', '/api/competitions', ['competitions', 'groups', 'data'], '/competitions');
+    await discover('team page', '/api/teams?limit=1', ['teams', 'data'], '/teams');
+    await discover('player page', '/api/players?limit=1', ['players', 'data'], '/players');
+    await discover('news page', '/api/news?limit=1', ['articles', 'news', 'data'], '/news');
+
+    console.log(`=== Cache contract -- target: ${BASE_URL} ===\n`);
+    let failed = 0;
+    for (const c of checks) {
+        await fetch(`${BASE_URL}${c.path}`, { headers }); // prime
+        await new Promise((r) => setTimeout(r, 700));
+        const res = await fetch(`${BASE_URL}${c.path}`, { headers });
+        const vc = res.headers.get('x-vercel-cache') || '(none)';
+        const cc = res.headers.get('cache-control') || '(none)';
+        const prerender = res.headers.get('x-nextjs-prerender');
+        const cdnHit = vc === 'HIT' || vc === 'STALE' || vc === 'PRERENDER';
+        const privateCache = /no-store|private/i.test(cc) && c.kind === 'page';
+        const ok = res.ok && cdnHit && !privateCache;
+        if (!ok) failed++;
+        console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.name.padEnd(24)} ${c.path}  x-vercel-cache=${vc}${prerender ? ' prerender' : ''}`);
+    }
+    for (const s of skipped) console.log(`SKIP  ${s}`);
+
+    if (failed > 0) {
+        console.error(`\n=== FAIL: ${failed} route(s) are no longer served from the CDN on the second request ===`);
+        process.exit(1);
+    }
+    console.log('\n=== PASS: every checked route is served from the CDN on the second request ===');
+}
+
+main().catch((e) => {
+    console.error('FAIL:', e);
+    process.exit(1);
+});
